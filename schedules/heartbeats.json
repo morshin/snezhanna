@@ -1,0 +1,59 @@
+{
+  "timezone": "Europe/Madrid",
+  "schedules": [
+    {
+      "id": "morning_briefing",
+      "name": "Утренний брифинг",
+      "cron": "0 8 * * *",
+      "description": "Доброе утро + события на день + топ-3 задачи + почта",
+      "enabled": true
+    },
+    {
+      "id": "evening_checkin",
+      "name": "Вечерний чек-ин",
+      "cron": "0 19 * * *",
+      "description": "Как прошёл день + события на завтра",
+      "enabled": true
+    },
+    {
+      "id": "weekly_digest",
+      "name": "Воскресный дайджест",
+      "cron": "0 10 * * 0",
+      "description": "Итоги недели + прогноз + фитнес + бюрократические дедлайны",
+      "enabled": true
+    },
+    {
+      "id": "calendar_reminder",
+      "name": "Напоминание о встречах",
+      "cron": "*/10 * * * *",
+      "description": "Проверять события за 30 минут и отправлять напоминание",
+      "enabled": true
+    },
+    {
+      "id": "index_incremental",
+      "name": "Инкрементальный индекс",
+      "cron": "0 2 * * *",
+      "description": "Обновить индекс файлов Яндекс.Диска (изменения за сутки)",
+      "enabled": true,
+      "type": "cron_job",
+      "command": "node /opt/snezhanna/lib/indexer.js --incremental"
+    },
+    {
+      "id": "index_full",
+      "name": "Полный реиндекс",
+      "cron": "0 3 * * 0",
+      "description": "Полный реиндекс всего Яндекс.Диска каждое воскресенье",
+      "enabled": true,
+      "type": "cron_job",
+      "command": "node /opt/snezhanna/lib/indexer.js --full"
+    },
+    {
+      "id": "zhora_morning",
+      "name": "Утренний рапорт Жоры",
+      "cron": "55 7 * * *",
+      "description": "Жора докладывает: все системы в норме",
+      "enabled": true,
+      "service": "zhora"
+    }
+  ]
+}

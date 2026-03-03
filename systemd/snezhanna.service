@@ -1,0 +1,19 @@
+[Unit]
+Description=Snezhanna Personal AI Assistant
+After=network.target network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=snezhanna
+WorkingDirectory=/opt/snezhanna
+EnvironmentFile=/opt/snezhanna/.env
+ExecStart=/usr/bin/node /opt/snezhanna/index.js
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=snezhanna
+
+[Install]
+WantedBy=multi-user.target

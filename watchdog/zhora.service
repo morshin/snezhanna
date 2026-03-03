@@ -1,0 +1,19 @@
+[Unit]
+Description=Zhora Watchdog for Snezhanna
+After=network.target network-online.target snezhanna.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=snezhanna
+WorkingDirectory=/opt/snezhanna
+EnvironmentFile=/opt/snezhanna/.env
+ExecStart=/usr/bin/node /opt/snezhanna/watchdog/zhora.js
+Restart=always
+RestartSec=30
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=zhora
+
+[Install]
+WantedBy=multi-user.target
