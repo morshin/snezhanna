@@ -12,6 +12,7 @@ const axios = require('axios');
 const state = require('./lib/state');
 const google = require('./lib/google');
 const whisper = require('./lib/whisper');
+const { getAvailableTools, executeTool } = require('./lib/tools');
 
 // ── Config & Identity ─────────────────────────────────────────────────────────
 
@@ -23,26 +24,76 @@ const identity = fs.readFileSync(path.join(__dirname, 'identity/IDENTITY.md'), '
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 let history = [];
 
-async function askClaude(userMessage, extraContext = '') {
+async function askClaude(userMessage) {
   history.push({ role: 'user', content: userMessage });
+
+  // Trim history, but never orphan a tool_result
   if (history.length > config.history.max_messages) {
-    history = history.slice(-config.history.keep_last);
+    let sliceAt = history.length - config.history.keep_last;
+    // If we'd start on a tool_result, back up to include the preceding assistant message
+    while (sliceAt > 0 && sliceAt < history.length && history[sliceAt].role === 'user' &&
+           Array.isArray(history[sliceAt].content) &&
+           history[sliceAt].content.some(b => b.type === 'tool_result')) {
+      sliceAt--;
+    }
+    history = history.slice(sliceAt);
   }
 
-  const systemPrompt = extraContext
-    ? `${identity}\n\n## Текущий контекст\n${extraContext}`
-    : identity;
+  const tools = getAvailableTools();
+  const MAX_TOOL_ROUNDS = 10;
 
-  const response = await anthropic.messages.create({
-    model: config.model,
-    max_tokens: config.max_tokens,
-    system: systemPrompt,
-    messages: history
-  });
+  for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+    const response = await anthropic.messages.create({
+      model: config.model,
+      max_tokens: config.max_tokens,
+      system: identity,
+      messages: history,
+      tools
+    });
 
-  const reply = response.content[0].text;
-  history.push({ role: 'assistant', content: reply });
-  return reply;
+    // If Claude wants to use tools
+    if (response.stop_reason === 'tool_use') {
+      // Add assistant's full response (text + tool_use blocks) to history
+      history.push({ role: 'assistant', content: response.content });
+
+      // Execute each tool call and collect results
+      const toolResults = [];
+      for (const block of response.content) {
+        if (block.type === 'tool_use') {
+          console.log(`[Tools] Calling ${block.name}:`, JSON.stringify(block.input));
+          try {
+            const result = await executeTool(block.name, block.input);
+            toolResults.push({
+              type: 'tool_result',
+              tool_use_id: block.id,
+              content: JSON.stringify(result)
+            });
+          } catch (err) {
+            console.error(`[Tools] Error in ${block.name}:`, err.message);
+            toolResults.push({
+              type: 'tool_result',
+              tool_use_id: block.id,
+              content: JSON.stringify({ error: err.message }),
+              is_error: true
+            });
+          }
+        }
+      }
+
+      // Add tool results as user message
+      history.push({ role: 'user', content: toolResults });
+      continue;
+    }
+
+    // End turn — extract text reply
+    const textBlocks = response.content.filter(b => b.type === 'text');
+    const reply = textBlocks.map(b => b.text).join('\n') || '';
+    history.push({ role: 'assistant', content: reply });
+    return reply;
+  }
+
+  // Safety: if we hit max rounds, return whatever we have
+  return 'Извини, Вовик, я слишком долго думала. Попробуй переформулировать вопрос.';
 }
 
 // ── Telegram ──────────────────────────────────────────────────────────────────
@@ -62,7 +113,11 @@ async function sendToVova(text, options = {}) {
     console.log('[Snezhanna] chatId unknown, queuing startup message');
     return false;
   }
-  await bot.sendMessage(appState.chatId, text, options);
+  if (Object.keys(options).length > 0 || text.length <= 4096) {
+    await bot.sendMessage(appState.chatId, text, options);
+  } else {
+    await sendLongMessage(appState.chatId, text);
+  }
   return true;
 }
 
@@ -83,7 +138,7 @@ bot.on('message', async (msg) => {
   // Send delayed startup message
   if (pendingStartup) {
     pendingStartup = false;
-    await bot.sendMessage(msg.chat.id, 'Вовочка, я онлайн! 🦞');
+    await bot.sendMessage(msg.chat.id, 'Вов, я онлайн! 🦞');
     // Prompt Google auth if needed
     if (!google.isAuthorized()) {
       setTimeout(() => offerGoogleAuth(msg.chat.id), 1500);
@@ -133,41 +188,25 @@ bot.on('message', async (msg) => {
 
     await bot.sendChatAction(chatId, 'typing');
 
-    // Build context from Google if authorized
-    let context = '';
-    if (google.isAuthorized()) {
-      const lowerText = userText.toLowerCase();
-      if (lowerText.includes('календар') || lowerText.includes('встреч') ||
-          lowerText.includes('сегодня') || lowerText.includes('завтра')) {
-        try {
-          const events = await google.getCalendarEvents(2);
-          if (events.length > 0) {
-            context = 'События в календаре:\n' +
-              events.map(e => `• ${e.summary} — ${formatEventTime(e)}`).join('\n');
-          }
-        } catch (e) {
-          console.error('[Calendar] context fetch error:', e.message);
-        }
-      }
-      if (lowerText.includes('почт') || lowerText.includes('письм') || lowerText.includes('email')) {
-        try {
-          const msgs = await google.getGmailMessages(10);
-          if (msgs.length > 0) {
-            context += '\nПоследние письма в почте:\n' +
-              msgs.slice(0, 5).map(m => `• ${m.unread ? '📬' : '📭'} От: ${m.from} | Тема: ${m.subject}`).join('\n');
-          }
-        } catch (e) {
-          console.error('[Gmail] context fetch error:', e.message);
-        }
+    const reply = await askClaude(userText);
+
+    // If original message was voice and reply is short, respond with voice
+    if (msg.voice && reply.length < 500) {
+      try {
+        const audio = await whisper.tts(reply);
+        await bot.sendVoice(chatId, audio);
+        return;
+      } catch (ttsErr) {
+        console.error('[TTS] Error, falling back to text:', ttsErr.message);
       }
     }
 
-    const reply = await askClaude(userText, context);
-    await bot.sendMessage(chatId, reply);
+    // Split long messages at Telegram's 4096 char limit
+    await sendLongMessage(chatId, reply);
 
   } catch (err) {
     console.error('[Snezhanna] Error:', err.message);
-    await bot.sendMessage(chatId, `Вовочка, что-то пошло не так: ${err.message}`).catch(() => {});
+    await bot.sendMessage(chatId, `Вовик, что-то пошло не так: ${err.message}`).catch(() => {});
   }
 });
 
@@ -189,7 +228,27 @@ async function handleGoogleAuthCode(code, chatId) {
   }
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────
+
+async function sendLongMessage(chatId, text) {
+  const MAX = 4096;
+  if (text.length <= MAX) {
+    await bot.sendMessage(chatId, text);
+    return;
+  }
+  // Split at paragraph boundaries
+  const paragraphs = text.split(/\n\n/);
+  let chunk = '';
+  for (const para of paragraphs) {
+    if (chunk.length + para.length + 2 > MAX) {
+      if (chunk) await bot.sendMessage(chatId, chunk.trim());
+      chunk = para;
+    } else {
+      chunk += (chunk ? '\n\n' : '') + para;
+    }
+  }
+  if (chunk.trim()) await bot.sendMessage(chatId, chunk.trim());
+}
 
 function formatEventTime(event) {
   if (event.start.dateTime) {
@@ -313,7 +372,7 @@ async function main() {
 
   if (appState.chatId) {
     try {
-      await sendToVova('Вовочка, я онлайн! 🦞');
+      await sendToVova('Вов, я онлайн! 🦞');
       console.log('[Snezhanna] Startup message sent to chatId:', appState.chatId);
     } catch (e) {
       console.error('[Snezhanna] Failed to send startup message:', e.message);
