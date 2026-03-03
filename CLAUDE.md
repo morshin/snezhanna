@@ -48,7 +48,9 @@ node lib/indexer.js --incremental # incremental update
 - Telegram polling with single-user access control (by numeric ID or username from `TELEGRAM_ALLOWED_USER_ID`)
 - Sends all messages to Claude via `@anthropic-ai/sdk` with a rolling conversation history (window: 40 messages, keep 30)
 - Auto-fetches Google Calendar / Gmail context when keywords are detected in user messages (Russian keywords: "календар", "встреч", "сегодня", "почт", etc.)
+- On startup: calls `yadiskDirs.ensureDirs()` to create any missing agent subdirs (`index/`, `memory/`, `projects/`, `fitness/`, `drafts/`, `digests/`)
 - Scheduled tasks via `node-cron`: morning briefing (08:00), evening check-in (19:00), weekly digest (Sunday 10:00), calendar reminders every 10 min (fires at 30-min mark)
+- Evening check-in includes a summary of all Yandex Disk write operations logged during the day (via `lib/disk-log.js`); log is cleared after sending
 - Bot commands: `/reset` (clear history), `/status`, `/auth <code>` (Google OAuth callback)
 - Voice messages: downloaded from Telegram → transcribed via OpenAI Whisper → sent to Claude
 
@@ -67,6 +69,8 @@ node lib/indexer.js --incremental # incremental update
 | `lib/whisper.js` | OpenAI Whisper transcription + TTS |
 | `lib/state.js` | Persist chatId to `.nanobot/state.json` |
 | `lib/indexer.js` | Walk Yandex Disk and build JSON file index |
+| `lib/yadisk-dirs.js` | Ensure agent subdirs exist; project CRUD (`create_project`, `list_projects`, `read_project_file`, `write_project_file`) |
+| `lib/disk-log.js` | In-memory log of Yandex Disk write operations; flushed after evening check-in |
 | `identity/IDENTITY.md` | Snezhanna's system prompt (personality, capabilities, prompt injection defense) |
 | `config/nanobot.json` | Model, token limits, timezone, history window, Yandex Disk mount paths and indexer rules |
 | `schedules/heartbeats.json` | Documentation of all scheduled tasks (not loaded at runtime) |
