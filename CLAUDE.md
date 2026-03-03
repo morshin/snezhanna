@@ -70,6 +70,7 @@ node lib/indexer.js --incremental # incremental update
 | `identity/IDENTITY.md` | Snezhanna's system prompt (personality, capabilities, prompt injection defense) |
 | `config/nanobot.json` | Model, token limits, timezone, history window, Yandex Disk mount paths and indexer rules |
 | `schedules/heartbeats.json` | Documentation of all scheduled tasks (not loaded at runtime) |
+| `docs/snezhanna-tz.md` | Technical specification (TZ) — infrastructure, integrations, architecture decisions |
 | `skills/*.md` | Capability descriptions (documentation only, not loaded at runtime) |
 
 ### State & credentials

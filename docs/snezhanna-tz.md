@@ -88,6 +88,8 @@ snezhanna/
   │   └── nanobot.json
   ├── identity/
   │   └── IDENTITY.md
+  ├── docs/
+  │   └── snezhanna-tz.md
   ├── skills/
   │   ├── google-calendar.md
   │   ├── gmail.md
