@@ -96,6 +96,50 @@ async function askClaude(userMessage) {
   return 'Извини, Вовик, я слишком долго думала. Попробуй переформулировать вопрос.';
 }
 
+// ── Error formatting ─────────────────────────────────────────────────────────
+
+// Превращает технические ошибки в понятные сообщения для Вовы
+function formatErrorForUser(err) {
+  const raw = err.message || '';
+
+  // Anthropic SDK бросает ошибки с числовым status и телом ответа в message
+  // Например: "529 {"type":"error","error":{"type":"overloaded_error",...}}"
+  const statusMatch = raw.match(/^(\d{3})\s+(\{.*\})$/s);
+  if (statusMatch) {
+    const status = parseInt(statusMatch[1], 10);
+    let body = {};
+    try { body = JSON.parse(statusMatch[2]); } catch (_) {}
+    const errorType = body?.error?.type || '';
+
+    if (status === 529 || errorType === 'overloaded_error') {
+      return 'Снежанна временно перегружена — у Anthropic сейчас много запросов. Попробуй через минуту 🙏';
+    }
+    if (status === 429 || errorType === 'rate_limit_error') {
+      return 'Превышен лимит запросов к Claude. Подожди немного и повтори 🕐';
+    }
+    if (status === 401 || errorType === 'authentication_error') {
+      return 'Ошибка авторизации API — проверь ключ ANTHROPIC_API_KEY 🔑';
+    }
+    if (status === 400 || errorType === 'invalid_request_error') {
+      return `Неверный запрос к Claude: ${body?.error?.message || 'неизвестная причина'}`;
+    }
+    if (status >= 500 || errorType === 'api_error') {
+      return 'На стороне Anthropic что-то сломалось. Попробуй чуть позже 🛠';
+    }
+    // Другой HTTP-статус — показываем только код без JSON-мусора
+    return `Ошибка API (HTTP ${status}): ${body?.error?.message || errorType || 'неизвестная ошибка'}`;
+  }
+
+  // Сетевые ошибки
+  if (raw.includes('ECONNREFUSED') || raw.includes('ENOTFOUND') || raw.includes('ETIMEDOUT')) {
+    return 'Не могу подключиться к серверу — проблема с сетью 📡';
+  }
+
+  // Всё остальное — показываем коротко, без JSON-мусора
+  const clean = raw.replace(/\{.*\}/s, '').trim().slice(0, 120);
+  return `Что-то пошло не так${clean ? ': ' + clean : ''}`;
+}
+
 // ── Telegram ──────────────────────────────────────────────────────────────────
 
 const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, { polling: true });
@@ -206,7 +250,7 @@ bot.on('message', async (msg) => {
 
   } catch (err) {
     console.error('[Snezhanna] Error:', err.message);
-    await bot.sendMessage(chatId, `Вовик, что-то пошло не так: ${err.message}`).catch(() => {});
+    await bot.sendMessage(chatId, `Вовик, ${formatErrorForUser(err)}`).catch(() => {});
   }
 });
 
