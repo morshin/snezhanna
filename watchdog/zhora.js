@@ -166,6 +166,121 @@ async function checkLogs() {
   return true;
 }
 
+// ── Telegram polling (no deps) ───────────────────────────────────────────────
+
+let pollOffset = 0;
+
+function tgApi(method, body) {
+  return new Promise((resolve, reject) => {
+    const payload = body ? JSON.stringify(body) : '';
+    const options = {
+      hostname: 'api.telegram.org',
+      path: `/bot${BOT_TOKEN}/${method}`,
+      method: body ? 'POST' : 'GET',
+      headers: body ? {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(payload)
+      } : {}
+    };
+    const req = https.request(options, (res) => {
+      let data = '';
+      res.on('data', (chunk) => (data += chunk));
+      res.on('end', () => {
+        try {
+          const parsed = JSON.parse(data);
+          if (parsed.ok) resolve(parsed.result);
+          else reject(new Error(parsed.description || 'Telegram API error'));
+        } catch (e) { reject(e); }
+      });
+    });
+    req.on('error', reject);
+    req.setTimeout(35000, () => { req.destroy(); reject(new Error('poll timeout')); });
+    if (payload) req.write(payload);
+    req.end();
+  });
+}
+
+function isAllowed(msg) {
+  if (!msg || !msg.from) return false;
+  const { id, username } = msg.from;
+  return String(id) === OWNER_ID || (username && username === OWNER_ID);
+}
+
+async function handleStatusCommand(chatId) {
+  try {
+    const snezhannaStatus = (await sh('systemctl is-active snezhanna')).stdout;
+    const snezhannaOk = snezhannaStatus === 'active';
+
+    // Get uptime if active
+    let uptimeStr = '';
+    if (snezhannaOk) {
+      const { stdout } = await sh("systemctl show snezhanna --property=ActiveEnterTimestamp --value");
+      if (stdout) {
+        const started = new Date(stdout);
+        const diff = Date.now() - started.getTime();
+        if (!isNaN(diff) && diff > 0) {
+          const days = Math.floor(diff / 86400000);
+          const hours = Math.floor((diff % 86400000) / 3600000);
+          uptimeStr = days > 0 ? ` (uptime ${days}d ${hours}h)` : ` (uptime ${hours}h)`;
+        }
+      }
+    }
+
+    const telegramOk = await checkTelegramApi();
+    const mountRo = (await sh('mountpoint -q /mnt/yadisk-readonly')).code === 0;
+    const mountRw = (await sh('mountpoint -q /mnt/yadisk-agent')).code === 0;
+    const disk = (await sh("df / --output=pcent | tail -1 | tr -d ' %'")).stdout;
+
+    const { stdout: logErrors } = await sh(
+      'journalctl -u snezhanna --since "10 min ago" --no-pager -q 2>/dev/null | grep -ic "error\\|fatal\\|uncaught"'
+    );
+    const errorCount = parseInt(logErrors, 10) || 0;
+
+    const report =
+      `🤖 *Жора рапортует:*\n\n` +
+      `Снежанна: ${snezhannaOk ? '✅ active' + uptimeStr : '❌ ' + snezhannaStatus}\n` +
+      `Telegram API: ${telegramOk ? '✅' : '❌'}\n` +
+      `Диск readonly: ${mountRo ? '✅' : '❌'}\n` +
+      `Диск агент: ${mountRw ? '✅' : '❌'}\n` +
+      `Место на сервере: ${disk}%\n` +
+      `Ошибки в логах: ${errorCount > 0 ? '⚠️ ' + errorCount + ' за 10 мин' : 'нет'}`;
+
+    await sendRaw(chatId, report);
+  } catch (e) {
+    console.error('[Zhora] /status error:', e.message);
+    await sendRaw(chatId, '❌ Ошибка при сборе статуса: ' + e.message).catch(() => {});
+  }
+}
+
+async function pollLoop() {
+  while (true) {
+    try {
+      const updates = await tgApi('getUpdates', {
+        offset: pollOffset,
+        timeout: 30,
+        allowed_updates: ['message']
+      });
+
+      for (const update of updates) {
+        pollOffset = update.update_id + 1;
+        const msg = update.message;
+        if (!msg || !msg.text || !isAllowed(msg)) continue;
+
+        if (msg.text === '/status') {
+          console.log('[Zhora] /status command from', msg.from.id);
+          handleStatusCommand(msg.chat.id).catch(e =>
+            console.error('[Zhora] handleStatusCommand error:', e.message)
+          );
+        }
+      }
+    } catch (e) {
+      // Network hiccup — wait a bit and retry
+      console.error('[Zhora] Poll error:', e.message);
+      await new Promise(r => setTimeout(r, 5000));
+    }
+  }
+}
+
 // ── Main check cycle ──────────────────────────────────────────────────────────
 
 let telegramWasDown = false;
@@ -232,6 +347,9 @@ async function main() {
   } catch (e) {
     console.error('[Zhora] Failed to send startup message:', e.message);
   }
+
+  // Start polling for /status commands
+  pollLoop();
 
   // Initial check after 30s
   setTimeout(() => {

@@ -388,6 +388,23 @@ Disk > 85% → warn Vova
 Telegram API down → report when restored
 All good → silent
 
+### `/status` command
+
+Zhora listens for incoming Telegram messages via long polling. When Vova sends `/status`, Zhora runs all checks and replies with a full status report:
+
+```
+🤖 Жора рапортует:
+
+Снежанна: ✅ active (uptime 3d 14h)
+Telegram API: ✅
+Диск readonly: ✅
+Диск агент: ✅
+Место на сервере: 42%
+Ошибки в логах: нет
+```
+
+Only responds to `TELEGRAM_ALLOWED_USER_ID`. All other users are ignored.
+
 ### Morning report at 07:55
 
 ```
