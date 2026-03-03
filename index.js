@@ -13,6 +13,8 @@ const state = require('./lib/state');
 const google = require('./lib/google');
 const whisper = require('./lib/whisper');
 const { getAvailableTools, executeTool } = require('./lib/tools');
+const yadiskDirs = require('./lib/yadisk-dirs');
+const diskLog = require('./lib/disk-log');
 
 // ── Config & Identity ─────────────────────────────────────────────────────────
 
@@ -357,11 +359,19 @@ ${eventsText}
           eventsText = tomorrowEvents.map(e => `• ${e.summary} (${formatEventTime(e)})`).join('\n');
         }
       }
+
+      const diskSummary = diskLog.getSummary();
+      const diskSection = diskSummary
+        ? `\nДействия с Яндекс.Диском за сегодня (${diskLog.getCount()} операций):\n${diskSummary}`
+        : '\nДействий с Яндекс.Диском сегодня не было.';
+
       const prompt = `Сделай вечерний чек-ин для Вовочки. Спроси как прошёл день.
 Завтра в Calendar:
-${eventsText}`;
+${eventsText}
+${diskSection}`;
       const reply = await askClaude(prompt);
       await sendToVova(reply);
+      diskLog.clear();
     } catch (e) {
       console.error('[Schedule] evening_checkin error:', e.message);
     }
@@ -412,6 +422,7 @@ ${eventsText}`;
 async function main() {
   console.log('[Snezhanna] Starting...');
 
+  yadiskDirs.ensureDirs();
   setupSchedules();
 
   if (appState.chatId) {
