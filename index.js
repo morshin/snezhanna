@@ -15,6 +15,7 @@ const whisper = require('./lib/whisper');
 const { getAvailableTools, executeTool } = require('./lib/tools');
 const yadiskDirs = require('./lib/yadisk-dirs');
 const diskLog = require('./lib/disk-log');
+const tasks = require('./lib/tasks');
 
 // ── Config & Identity ─────────────────────────────────────────────────────────
 
@@ -256,6 +257,40 @@ bot.on('message', async (msg) => {
   }
 });
 
+// ── Business connection & checklist ───────────────────────────────────────────
+
+bot.on('business_connection', (connection) => {
+  if (connection.user && String(connection.user.id) === ALLOWED) {
+    appState.businessConnectionId = connection.id;
+    state.save(appState);
+    console.log('[Snezhanna] Saved businessConnectionId:', connection.id);
+  }
+});
+
+bot.on('message', async (msg) => {
+  if (!isAllowed(msg)) return;
+  if (!msg.checklist_tasks_done) return;
+
+  try {
+    const todayTasks = tasks.getTodayTasks();
+    const doneIds = msg.checklist_tasks_done;
+    let completed = 0;
+    for (const doneId of doneIds) {
+      // Map checklist position back to task
+      const idx = doneId - 1;
+      if (idx >= 0 && idx < todayTasks.length) {
+        tasks.completeTask({ id: todayTasks[idx].id, project: todayTasks[idx].project });
+        completed++;
+      }
+    }
+    if (completed > 0) {
+      console.log(`[Snezhanna] Completed ${completed} tasks via checklist`);
+    }
+  } catch (e) {
+    console.error('[Snezhanna] checklist_tasks_done error:', e.message);
+  }
+});
+
 // ── Google OAuth ──────────────────────────────────────────────────────────────
 
 async function offerGoogleAuth(chatId) {
@@ -317,6 +352,36 @@ function todayStr() {
   });
 }
 
+// ── Task formatting ──────────────────────────────────────────────────────────
+
+function formatTasksForBriefing(taskList) {
+  if (!taskList || taskList.length === 0) return '• Задач нет';
+
+  const quadrants = {
+    'Q1 (срочно + важно)': [],
+    'Q3 (срочно)': [],
+    'Q2 (важно)': [],
+    'Q4 (прочее)': []
+  };
+
+  for (const t of taskList) {
+    const due = t.due_date ? ` [до ${t.due_date}]` : '';
+    const line = `• ${t.title}${due}`;
+    if (t.urgent && t.important) quadrants['Q1 (срочно + важно)'].push(line);
+    else if (t.urgent) quadrants['Q3 (срочно)'].push(line);
+    else if (t.important) quadrants['Q2 (важно)'].push(line);
+    else quadrants['Q4 (прочее)'].push(line);
+  }
+
+  const sections = [];
+  for (const [label, items] of Object.entries(quadrants)) {
+    if (items.length > 0) {
+      sections.push(`${label}:\n${items.join('\n')}`);
+    }
+  }
+  return sections.join('\n\n');
+}
+
 // ── Scheduled tasks ───────────────────────────────────────────────────────────
 
 function setupSchedules() {
@@ -331,9 +396,21 @@ function setupSchedules() {
           eventsText = events.map(e => `• ${e.summary} (${formatEventTime(e)})`).join('\n');
         }
       }
+      let tasksText = '• Задач нет';
+      try {
+        const todayTasks = tasks.getTodayTasks();
+        tasksText = formatTasksForBriefing(todayTasks);
+      } catch (e) {
+        console.error('[Schedule] Failed to load tasks for briefing:', e.message);
+      }
+
       const prompt = `Составь утренний брифинг для Вовочки. Сегодня ${todayStr()}.
 События в Calendar:
 ${eventsText}
+
+Задачи на сегодня:
+${tasksText}
+
 Напомни о топ-3 вещах, которые стоит сделать сегодня. Будь живым и тёплым.`;
       const reply = await askClaude(prompt);
       await sendToVova(reply);
@@ -372,6 +449,19 @@ ${diskSection}`;
       const reply = await askClaude(prompt);
       await sendToVova(reply);
       diskLog.clear();
+
+      // Send native Telegram checklist if business connection is active
+      try {
+        const todayTasks = tasks.getTodayTasks();
+        if (todayTasks.length > 0 && appState.businessConnectionId) {
+          await bot.sendChecklist(appState.businessConnectionId, appState.chatId, {
+            title: 'Задачи на сегодня',
+            tasks: todayTasks.map((t, i) => ({ id: i + 1, text: t.title }))
+          });
+        }
+      } catch (checklistErr) {
+        console.error('[Schedule] checklist send error:', checklistErr.message);
+      }
     } catch (e) {
       console.error('[Schedule] evening_checkin error:', e.message);
     }
