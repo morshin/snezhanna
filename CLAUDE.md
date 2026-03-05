@@ -69,7 +69,7 @@ node lib/indexer.js --incremental # incremental update
 | `lib/whisper.js` | OpenAI Whisper transcription + TTS |
 | `lib/state.js` | Persist chatId to `.nanobot/state.json` |
 | `lib/indexer.js` | Walk Yandex Disk and build JSON file index |
-| `lib/yadisk-dirs.js` | Ensure agent subdirs exist; project CRUD (`create_project`, `list_projects`, `read_project_file`, `write_project_file`) |
+| `lib/yadisk-dirs.js` | Ensure agent subdirs exist; project CRUD (`create_project`, `list_projects`, `read_project_file`, `write_project_file`) and project docs (`list_project_docs`, `read_project_doc`, `write_project_doc`) |
 | `lib/disk-log.js` | In-memory log of Yandex Disk write operations; flushed after evening check-in |
 | `identity/IDENTITY.md` | Snezhanna's system prompt (personality, capabilities, prompt injection defense) |
 | `config/nanobot.json` | Model, token limits, timezone, history window, Yandex Disk mount paths and indexer rules |

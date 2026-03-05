@@ -46,15 +46,19 @@ projects/
 │   ├── README.md    — описание: клиент, тип, платформа, статус, контакты
 │   ├── tasks.md     — текущие задачи (в работе / ожидает / завершено)
 │   ├── log.md       — журнал выполненных работ (с датами)
-│   └── notes.md     — произвольные заметки
-├── Сопровождение-Бета/
-│   ├── README.md
-│   ├── tasks.md
-│   ├── log.md
-│   └── notes.md
+│   ├── notes.md     — произвольные заметки
+│   └── docs/        — детальная документация (ТЗ, архитектура, решения, контакты)
+│       ├── index.md          — создаётся автоматически
+│       ├── requirements.md   — требования и ТЗ
+│       ├── architecture.md   — архитектурные решения
+│       ├── decisions.md      — принятые решения (ADR)
+│       ├── contacts.md       — контакты, реквизиты
+│       └── meeting_*.md      — протоколы встреч
 ```
 
-Инструменты: `create_project`, `list_projects`, `read_project_file`, `write_project_file`.
+Основные файлы (README, tasks, log, notes) содержат краткие сводки. Детальные материалы выносятся в `docs/`.
+
+Инструменты: `create_project`, `list_projects`, `read_project_file`, `write_project_file`, `list_project_docs`, `read_project_doc`, `write_project_doc`.
 
 ## Логирование действий
 
