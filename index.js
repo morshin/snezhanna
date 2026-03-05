@@ -16,6 +16,7 @@ const { getAvailableTools, executeTool } = require('./lib/tools');
 const yadiskDirs = require('./lib/yadisk-dirs');
 const diskLog = require('./lib/disk-log');
 const tasks = require('./lib/tasks');
+const chatMonitor = require('./lib/chat-monitor');
 
 // ── Config & Identity ─────────────────────────────────────────────────────────
 
@@ -294,6 +295,25 @@ bot.on('message', async (msg) => {
   }
 });
 
+// ── Chat Monitor handlers ─────────────────────────────────────────────────────
+
+bot.on('message', (msg) => {
+  if (msg.chat.type !== 'group' && msg.chat.type !== 'supergroup') return;
+  if (!chatMonitor.isMonitored(msg.chat.id)) return;
+  if (!msg.text) return;
+
+  const from = msg.from?.first_name || msg.from?.username || 'Unknown';
+  chatMonitor.addMessage(msg.chat.id, from, msg.text, msg.date);
+});
+
+bot.on('business_message', (msg) => {
+  if (!chatMonitor.isMonitored(msg.chat.id)) return;
+  if (!msg.text) return;
+
+  const from = msg.from?.first_name || msg.from?.username || 'Unknown';
+  chatMonitor.addMessage(msg.chat.id, from, msg.text, msg.date);
+});
+
 // ── Google OAuth ──────────────────────────────────────────────────────────────
 
 async function offerGoogleAuth(chatId) {
@@ -445,13 +465,20 @@ ${tasksText}
         ? `\nДействия с Яндекс.Диском за сегодня (${diskLog.getCount()} операций):\n${diskSummary}`
         : '\nДействий с Яндекс.Диском сегодня не было.';
 
+      const chatDigest = chatMonitor.getDigest();
+      const chatSection = chatDigest
+        ? `\nСообщения из чатов за сегодня:\n${chatDigest}\n\nПроанализируй дайджест чатов: для рабочих — выдели задачи, решения, вопросы требующие внимания; для личных — важные моменты и планы.`
+        : '\nНовых сообщений в отслеживаемых чатах не было.';
+
       const prompt = `Сделай вечерний чек-ин для Вовочки. Спроси как прошёл день.
 Завтра в Calendar:
 ${eventsText}
-${diskSection}`;
+${diskSection}
+${chatSection}`;
       const reply = await askClaude(prompt);
       await sendToVova(reply);
       diskLog.clear();
+      chatMonitor.clear();
 
       // Send native Telegram checklist if business connection is active
       try {
