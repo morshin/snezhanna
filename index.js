@@ -237,9 +237,12 @@ bot.on('message', async (msg) => {
 
     const reply = await askClaude(userText);
 
-    // If original message was voice and reply is short, respond with voice
-    if (msg.voice && reply.length < 500) {
+    // Send voice if: user sent voice and reply is short, OR user explicitly asked for voice
+    const wantsVoice = msg.voice && reply.length < 500
+      || /ответь голосовым|ответь голосом|скажи голосом/i.test(userText);
+    if (wantsVoice) {
       try {
+        await bot.sendChatAction(chatId, 'record_voice');
         const audio = await whisper.tts(reply);
         await bot.sendVoice(chatId, audio);
         return;
