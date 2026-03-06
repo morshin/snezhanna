@@ -102,6 +102,17 @@ async function askClaude(userMessage) {
 
 // ── Error formatting ─────────────────────────────────────────────────────────
 
+// Проверяет, является ли ошибка превышением лимита запросов (HTTP 429)
+function isRateLimitError(err) {
+  const raw = err.message || '';
+  const statusMatch = raw.match(/^(\d{3})\s+(\{.*\})$/s);
+  if (!statusMatch) return false;
+  const status = parseInt(statusMatch[1], 10);
+  let body = {};
+  try { body = JSON.parse(statusMatch[2]); } catch (_) {}
+  return status === 429 || body?.error?.type === 'rate_limit_error';
+}
+
 // Превращает технические ошибки в понятные сообщения для Вовы
 function formatErrorForUser(err) {
   const raw = err.message || '';
@@ -176,6 +187,15 @@ let pendingStartup = false;
 bot.on('message', async (msg) => {
   if (!isAllowed(msg)) return;
 
+  // Monitored chats — collect only, NEVER respond
+  if (chatMonitor.isMonitored(msg.chat.id)) return;
+
+  // Hard block: never respond outside Vova's personal chat
+  if (appState.chatId && String(msg.chat.id) !== String(appState.chatId)) {
+    console.warn(`[SECURITY] Blocked response to chat ${msg.chat.id} — not Vova's chat`);
+    return;
+  }
+
   // Persist chatId on first contact
   if (!appState.chatId) {
     appState.chatId = msg.chat.id;
@@ -195,9 +215,9 @@ bot.on('message', async (msg) => {
   }
 
   const chatId = msg.chat.id;
+  let userText = '';
 
   try {
-    let userText = '';
 
     if (msg.text) {
       userText = msg.text;
@@ -257,7 +277,32 @@ bot.on('message', async (msg) => {
 
   } catch (err) {
     console.error('[Snezhanna] Error:', err.message);
-    await bot.sendMessage(chatId, `Вовик, ${formatErrorForUser(err)}`).catch(() => {});
+
+    if (isRateLimitError(err) && userText) {
+      // Сообщаем, что попробуем позже
+      await bot.sendMessage(chatId,
+        'Вов, сейчас небольшой перелимит запросов к Claude — подожди 2 минуты, попробую ещё раз и сразу вернусь к тебе 🕐'
+      ).catch(() => {});
+
+      // Убираем из истории сообщение, которое не дошло до Claude —
+      // иначе при повторном вызове askClaude оно задвоится
+      if (history.length > 0 && history[history.length - 1].role === 'user') {
+        history.pop();
+      }
+
+      await new Promise(resolve => setTimeout(resolve, 2 * 60 * 1000));
+
+      try {
+        console.log('[Snezhanna] Retrying after rate limit...');
+        const retryReply = await askClaude(userText);
+        await sendLongMessage(chatId, retryReply);
+      } catch (retryErr) {
+        console.error('[Snezhanna] Retry failed:', retryErr.message);
+        await bot.sendMessage(chatId, `Вов, ${formatErrorForUser(retryErr)}`).catch(() => {});
+      }
+    } else {
+      await bot.sendMessage(chatId, `Вов, ${formatErrorForUser(err)}`).catch(() => {});
+    }
   }
 });
 
@@ -335,6 +380,11 @@ async function handleGoogleAuthCode(code, chatId) {
 // ── Helpers ───────────────────────────────────────────────────────────────
 
 async function sendLongMessage(chatId, text) {
+  // Hard block: never write to any chat except Vova's
+  if (appState.chatId && String(chatId) !== String(appState.chatId)) {
+    console.error(`[SECURITY] sendLongMessage blocked for chat ${chatId}`);
+    return;
+  }
   const MAX = 4096;
   if (text.length <= MAX) {
     await bot.sendMessage(chatId, text);
