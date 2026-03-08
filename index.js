@@ -269,23 +269,44 @@ bot.on('message', async (msg) => {
       const doc = msg.document;
       const mimeType = doc.mime_type || 'application/octet-stream';
       const filename = doc.file_name || 'file';
+      const sizeKb = doc.file_size ? (doc.file_size / 1024).toFixed(1) : '?';
 
       const file = await bot.getFile(doc.file_id);
       const fileUrl = `https://api.telegram.org/file/bot${process.env.TELEGRAM_BOT_TOKEN}/${file.file_path}`;
       const fileRes = await axios.get(fileUrl, { responseType: 'arraybuffer' });
       const buffer = Buffer.from(fileRes.data);
 
-      const { parseAttachment } = require('./lib/attachments');
-      const parsedText = await parseAttachment(buffer, mimeType, filename);
+      // Кладём буфер в кэш — Claude может сохранить файл на диск через инструмент save_file
+      const fileCache = require('./lib/file-cache');
+      const cacheKey = doc.file_id;
+      fileCache.set(cacheKey, buffer, filename, mimeType);
 
-      // Если парсер вернул ошибку — сразу сообщим, не идём в Claude
-      if (parsedText.startsWith('[Ошибка') || parsedText.startsWith('[Неподдерживаемый')) {
-        await bot.sendMessage(chatId, parsedText);
+      // Прямое сохранение: если подпись начинается с "сохрани" / "положи" и т.п. —
+      // сохраняем файл как есть, без парсинга и без вызова Claude
+      const rawCaption = msg.caption || '';
+      if (DIRECT_SAVE_RE.test(rawCaption)) {
+        const destPath = parseDirectSavePath(rawCaption, filename);
+        const result = yadiskDirs.saveFile(cacheKey, destPath);
+        if (result.error) {
+          await bot.sendMessage(chatId, `❌ Не удалось сохранить: ${result.error}`);
+        } else {
+          await bot.sendMessage(chatId, `✅ Сохранено: ${result.path} (${sizeKb} КБ)`);
+        }
         return;
       }
 
-      const caption = msg.caption ? `\n\nКомментарий к файлу: ${msg.caption}` : '';
-      userText = `Вот содержимое файла «${filename}»:${caption}\n\n${parsedText}`;
+      const { parseAttachment } = require('./lib/attachments');
+      const parsedText = await parseAttachment(buffer, mimeType, filename);
+      const captionNote = rawCaption ? `\nКомментарий к файлу: ${rawCaption}` : '';
+
+      const fileHeader = `Получен файл «${filename}» (${mimeType}, ${sizeKb} КБ).${captionNote}\n[file_cache_key: ${cacheKey}]\n`;
+
+      if (parsedText.startsWith('[Ошибка') || parsedText.startsWith('[Неподдерживаемый')) {
+        // Файл нельзя прочитать как текст, но Claude может его сохранить на диск
+        userText = `${fileHeader}\nСодержимое файла недоступно: ${parsedText}\nЕсли нужно — можешь сохранить файл на Яндекс.Диск через инструмент save_file.`;
+      } else {
+        userText = `${fileHeader}\nСодержимое файла:\n\n${parsedText}`;
+      }
     } else {
       return; // Ignore unsupported message types
     }
@@ -411,6 +432,30 @@ async function handleGoogleAuthCode(code, chatId) {
   } catch (err) {
     await bot.sendMessage(chatId, `❌ Ошибка авторизации: ${err.message}`);
   }
+}
+
+// ── File helpers ──────────────────────────────────────────────────────────
+
+// Ключевые слова, которые означают "сохрани файл как есть, без парсинга"
+const DIRECT_SAVE_RE = /^(сохрани|положи|скинь|save)\b/i;
+
+// Вытаскивает путь назначения из подписи к файлу.
+// "сохрани в drafts/план.pdf" → "drafts/план.pdf"
+// "положи в projects/X/docs" → "projects/X/docs/<filename>"
+// "сохрани" → "inbox/<filename>"
+function parseDirectSavePath(caption, filename) {
+  const withoutKeyword = caption.replace(DIRECT_SAVE_RE, '').trim();
+  // Убираем предлог "в" / "в папку" / "to"
+  const pathPart = withoutKeyword.replace(/^(в папку|в|to)\s+/i, '').trim();
+  if (!pathPart) {
+    return `inbox/${filename}`;
+  }
+  // Если путь заканчивается на имя файла с расширением — используем как есть
+  if (/\.\w{1,10}$/.test(pathPart)) {
+    return pathPart;
+  }
+  // Иначе — это папка, добавляем имя файла
+  return `${pathPart}/${filename}`;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────

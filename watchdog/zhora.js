@@ -252,6 +252,55 @@ async function handleStatusCommand(chatId) {
   }
 }
 
+async function handleLogsCommand(chatId, rawArg) {
+  try {
+    // Количество строк: /logs или /logs 50
+    const n = Math.min(Math.max(parseInt(rawArg, 10) || 30, 5), 100);
+
+    // --output=cat даёт чистый текст сообщений без метаданных systemd
+    const { stdout } = await sh(
+      `journalctl -u snezhanna -n ${n} --no-pager --output=cat 2>/dev/null`
+    );
+
+    if (!stdout || stdout.trim() === '') {
+      await sendRaw(chatId, '📋 *Логи Снежанны*\n\nЛоги пусты или сервис ещё не запускался.');
+      return;
+    }
+
+    // Обрезаем слишком длинные строки (например, дамп инструментов)
+    const lines = stdout.trim().split('\n').map(line =>
+      line.length > 180 ? line.slice(0, 177) + '…' : line
+    );
+
+    // Считаем ошибки за последний час
+    const { stdout: errOut } = await sh(
+      'journalctl -u snezhanna --since "1 hour ago" --no-pager -q 2>/dev/null' +
+      ' | grep -ic "error\\|fatal\\|uncaught" || echo 0'
+    );
+    const errorCount = parseInt(errOut, 10) || 0;
+
+    const header = `📋 *Логи Снежанны* — последние ${lines.length} строк\n`;
+    const footer = errorCount > 0
+      ? `\n⚠️ Ошибок за последний час: *${errorCount}*`
+      : '\n✅ Ошибок за последний час нет';
+
+    // Telegram ограничение: 4096 символов на сообщение
+    // Резервируем место под header, code-fence и footer
+    const maxBody = 4096 - header.length - footer.length - 10;
+    let body = lines.join('\n');
+    if (body.length > maxBody) {
+      // Отрезаем начало, оставляем хвост (самые свежие строки)
+      body = '…\n' + body.slice(body.length - maxBody + 2);
+    }
+
+    const message = header + '```\n' + body + '\n```' + footer;
+    await sendRaw(chatId, message);
+  } catch (e) {
+    console.error('[Zhora] /logs error:', e.message);
+    await sendRaw(chatId, '❌ Ошибка при получении логов: ' + e.message).catch(() => {});
+  }
+}
+
 async function pollLoop() {
   while (true) {
     try {
@@ -270,6 +319,13 @@ async function pollLoop() {
           console.log('[Zhora] /status command from', msg.from.id);
           handleStatusCommand(msg.chat.id).catch(e =>
             console.error('[Zhora] handleStatusCommand error:', e.message)
+          );
+        } else if (msg.text.startsWith('/logs')) {
+          // /logs или /logs 50 — показать N последних строк лога
+          const arg = msg.text.split(' ')[1];
+          console.log('[Zhora] /logs command from', msg.from.id, 'arg:', arg || '(default 30)');
+          handleLogsCommand(msg.chat.id, arg).catch(e =>
+            console.error('[Zhora] handleLogsCommand error:', e.message)
           );
         }
       }
