@@ -46,11 +46,18 @@ async function askClaude(userMessage) {
   const tools = getAvailableTools();
   const MAX_TOOL_ROUNDS = 10;
 
+  const nowStr = new Date().toLocaleString('ru-RU', {
+    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
+    hour: '2-digit', minute: '2-digit',
+    timeZone: config.timezone
+  });
+  const systemWithTime = `Сейчас: ${nowStr} (${config.timezone}).\n\n${identity}`;
+
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
     const response = await anthropic.messages.create({
       model: config.model,
       max_tokens: config.max_tokens,
-      system: identity,
+      system: systemWithTime,
       messages: history,
       tools
     });
@@ -430,29 +437,37 @@ function todayStr() {
 function formatTasksForBriefing(taskList) {
   if (!taskList || taskList.length === 0) return '• Задач нет';
 
-  const quadrants = {
-    'Q1 (срочно + важно)': [],
-    'Q3 (срочно)': [],
-    'Q2 (важно)': [],
-    'Q4 (прочее)': []
-  };
+  const today = new Date().toLocaleDateString('sv-SE', { timeZone: config.timezone });
+
+  const quadrants = [
+    { emoji: '🔴', label: 'Срочные + важные', items: [] },
+    { emoji: '🟡', label: 'Срочные',           items: [] },
+    { emoji: '🔵', label: 'Важные',             items: [] },
+    { emoji: '⚪', label: 'Бэклог',             items: [] },
+  ];
 
   for (const t of taskList) {
-    const due = t.due_date ? ` [до ${t.due_date}]` : '';
-    const line = `• ${t.title}${due}`;
-    if (t.urgent && t.important) quadrants['Q1 (срочно + важно)'].push(line);
-    else if (t.urgent) quadrants['Q3 (срочно)'].push(line);
-    else if (t.important) quadrants['Q2 (важно)'].push(line);
-    else quadrants['Q4 (прочее)'].push(line);
+    const proj = t.project ? ` [${t.project}]` : '';
+    let dateStr = '';
+    if (t.due_date) {
+      if (t.due_date < today)       dateStr = ' ⚠️ просрочено';
+      else if (t.due_date === today) dateStr = ' — сегодня';
+      else {
+        const [, mm, dd] = t.due_date.split('-');
+        dateStr = ` — ${dd}.${mm}`;
+      }
+    }
+    const line = `• ${t.title}${proj}${dateStr}`;
+    if      (t.urgent && t.important)  quadrants[0].items.push(line);
+    else if (t.urgent)                 quadrants[1].items.push(line);
+    else if (t.important)              quadrants[2].items.push(line);
+    else                               quadrants[3].items.push(line);
   }
 
-  const sections = [];
-  for (const [label, items] of Object.entries(quadrants)) {
-    if (items.length > 0) {
-      sections.push(`${label}:\n${items.join('\n')}`);
-    }
-  }
-  return sections.join('\n\n');
+  return quadrants
+    .filter(q => q.items.length > 0)
+    .map(q => `${q.emoji} ${q.label}:\n${q.items.join('\n')}`)
+    .join('\n\n');
 }
 
 // ── Scheduled tasks ───────────────────────────────────────────────────────────
@@ -481,10 +496,10 @@ function setupSchedules() {
 События в Calendar:
 ${eventsText}
 
-Задачи на сегодня:
+Задачи на ближайшие дни (уже отсортированы по приоритету — вставь их точно в таком виде, без таблиц и переформатирования):
 ${tasksText}
 
-Напомни о топ-3 вещах, которые стоит сделать сегодня. Будь живым и тёплым.`;
+Кратко прокомментируй день и выдели 1-2 самые важные вещи. Будь живым и тёплым.`;
       const reply = await askClaude(prompt);
       await sendToVova(reply);
     } catch (e) {
