@@ -92,7 +92,7 @@ async function checkSnezhanna() {
   const { code } = await sh('systemctl is-active snezhanna');
   if (code !== 0) {
     console.log('[Zhora] Snezhanna is DOWN. Restarting...');
-    const restart = await sh('systemctl restart snezhanna');
+    const restart = await sh('sudo systemctl restart snezhanna');
     const status = await sh('systemctl is-active snezhanna');
     if (status.code === 0) {
       await send('⚠️ *Жора:* Снежанна упала, перезапустил — теперь OK ✅');
@@ -301,6 +301,41 @@ async function handleLogsCommand(chatId, rawArg) {
   }
 }
 
+// Ожидающие подтверждения перезапуска: chatId → timestamp
+const pendingRestarts = new Map();
+
+async function handleRestartCommand(chatId) {
+  pendingRestarts.set(chatId, Date.now());
+  await sendRaw(chatId,
+    '⚠️ *Перезапустить Снежанну?*\n\n' +
+    'Отправь /restart\\_confirm чтобы подтвердить.\n' +
+    'Запрос действует 60 секунд.'
+  );
+}
+
+async function handleRestartConfirm(chatId) {
+  const ts = pendingRestarts.get(chatId);
+  if (!ts || Date.now() - ts > 60000) {
+    pendingRestarts.delete(chatId);
+    await sendRaw(chatId, '❌ Запрос на перезапуск устарел или не был создан. Отправь /restart заново.');
+    return;
+  }
+  pendingRestarts.delete(chatId);
+
+  await sendRaw(chatId, '🔄 Перезапускаю Снежанну...');
+  console.log('[Zhora] Manual restart requested');
+
+  const { code } = await sh('sudo systemctl restart snezhanna');
+  await new Promise(r => setTimeout(r, 3000)); // ждём пока сервис поднимется
+
+  const { stdout: status } = await sh('systemctl is-active snezhanna');
+  if (status === 'active') {
+    await sendRaw(chatId, '✅ Снежанна перезапущена и работает.');
+  } else {
+    await sendRaw(chatId, `🚨 Перезапуск выполнен, но статус: *${status || 'неизвестен'}*. Проверь /logs.`);
+  }
+}
+
 async function pollLoop() {
   while (true) {
     try {
@@ -321,11 +356,20 @@ async function pollLoop() {
             console.error('[Zhora] handleStatusCommand error:', e.message)
           );
         } else if (msg.text.startsWith('/logs')) {
-          // /logs или /logs 50 — показать N последних строк лога
           const arg = msg.text.split(' ')[1];
           console.log('[Zhora] /logs command from', msg.from.id, 'arg:', arg || '(default 30)');
           handleLogsCommand(msg.chat.id, arg).catch(e =>
             console.error('[Zhora] handleLogsCommand error:', e.message)
+          );
+        } else if (msg.text === '/restart') {
+          console.log('[Zhora] /restart command from', msg.from.id);
+          handleRestartCommand(msg.chat.id).catch(e =>
+            console.error('[Zhora] handleRestartCommand error:', e.message)
+          );
+        } else if (msg.text === '/restart_confirm') {
+          console.log('[Zhora] /restart_confirm command from', msg.from.id);
+          handleRestartConfirm(msg.chat.id).catch(e =>
+            console.error('[Zhora] handleRestartConfirm error:', e.message)
           );
         }
       }
@@ -390,11 +434,30 @@ function setupSchedules() {
   console.log('[Zhora] Schedules initialized');
 }
 
+// ── Bot commands menu ─────────────────────────────────────────────────────────
+
+async function registerCommands() {
+  try {
+    await tgApi('setMyCommands', {
+      commands: [
+        { command: 'status',         description: 'Статус Снежанны и инфраструктуры' },
+        { command: 'logs',           description: 'Последние 30 строк лога Снежанны' },
+        { command: 'restart',        description: 'Перезапустить Снежанну (с подтверждением)' },
+        { command: 'restart_confirm', description: 'Подтвердить перезапуск Снежанны' },
+      ]
+    });
+    console.log('[Zhora] Bot commands registered');
+  } catch (e) {
+    console.error('[Zhora] Failed to register commands:', e.message);
+  }
+}
+
 // ── Startup ───────────────────────────────────────────────────────────────────
 
 async function main() {
   console.log('[Zhora] Starting watchdog...');
   setupSchedules();
+  await registerCommands();
 
   // Startup message
   try {
