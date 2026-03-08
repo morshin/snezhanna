@@ -264,8 +264,30 @@ bot.on('message', async (msg) => {
       const audioRes = await axios.get(fileUrl, { responseType: 'arraybuffer' });
       userText = await whisper.transcribe(Buffer.from(audioRes.data));
       await bot.sendMessage(chatId, `🎤 _"${userText}"_`, { parse_mode: 'Markdown' });
+    } else if (msg.document) {
+      await bot.sendChatAction(chatId, 'typing');
+      const doc = msg.document;
+      const mimeType = doc.mime_type || 'application/octet-stream';
+      const filename = doc.file_name || 'file';
+
+      const file = await bot.getFile(doc.file_id);
+      const fileUrl = `https://api.telegram.org/file/bot${process.env.TELEGRAM_BOT_TOKEN}/${file.file_path}`;
+      const fileRes = await axios.get(fileUrl, { responseType: 'arraybuffer' });
+      const buffer = Buffer.from(fileRes.data);
+
+      const { parseAttachment } = require('./lib/attachments');
+      const parsedText = await parseAttachment(buffer, mimeType, filename);
+
+      // Если парсер вернул ошибку — сразу сообщим, не идём в Claude
+      if (parsedText.startsWith('[Ошибка') || parsedText.startsWith('[Неподдерживаемый')) {
+        await bot.sendMessage(chatId, parsedText);
+        return;
+      }
+
+      const caption = msg.caption ? `\n\nКомментарий к файлу: ${msg.caption}` : '';
+      userText = `Вот содержимое файла «${filename}»:${caption}\n\n${parsedText}`;
     } else {
-      return; // Ignore non-text/non-voice
+      return; // Ignore unsupported message types
     }
 
     await bot.sendChatAction(chatId, 'typing');
