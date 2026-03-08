@@ -17,6 +17,7 @@ const yadiskDirs = require('./lib/yadisk-dirs');
 const diskLog = require('./lib/disk-log');
 const tasks = require('./lib/tasks');
 const chatMonitor = require('./lib/chat-monitor');
+const strava = require('./lib/strava');
 
 // ── Config & Identity ─────────────────────────────────────────────────────────
 
@@ -636,12 +637,35 @@ ${chatSection}`;
     }
   }, { timezone: config.timezone });
 
+  // Strava sync — Sunday 09:30 Madrid (before weekly digest)
+  cron.schedule('30 9 * * 0', async () => {
+    if (!strava.isConfigured()) return;
+    try {
+      const result = await strava.syncCurrentWeek();
+      if (result) {
+        console.log(`[Schedule] Strava sync done: ${result.weekStr}, ${result.activities.length} activities`);
+      }
+    } catch (e) {
+      console.error('[Schedule] strava_sync error:', e.message);
+    }
+  }, { timezone: config.timezone });
+
   // Weekly digest — Sunday 10:00 Madrid
   cron.schedule('0 10 * * 0', async () => {
     if (!appState.chatId) return;
     try {
+      let fitnessBlock = '';
+      try {
+        const block = strava.buildDigestFitnessBlock();
+        if (block) {
+          fitnessBlock = `\n\n--- ФИТНЕС-БЛОК (Strava) ---\n${block}\n--- КОНЕЦ ФИТНЕС-БЛОКА ---`;
+        }
+      } catch (e) {
+        console.error('[Schedule] Strava fitness block error:', e.message);
+      }
+
       const prompt = `Составь воскресный еженедельный дайджест для Вовочки.
-Включи: краткий обзор прошедшей недели, что важного на следующей неделе, напоминание проверить фитнес-лог и бюрократические дедлайны.`;
+Включи: краткий обзор прошедшей недели, что важного на следующей неделе, бюрократические дедлайны.${fitnessBlock}`;
       const reply = await askClaude(prompt);
       await sendToVova(reply);
     } catch (e) {

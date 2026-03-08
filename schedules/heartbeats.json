@@ -48,6 +48,13 @@
       "command": "node /opt/snezhanna/lib/indexer.js --full"
     },
     {
+      "id": "strava_sync",
+      "name": "Strava Sync",
+      "cron": "30 9 * * 0",
+      "description": "Fetch last 7 days of activities from Strava, save to Yandex.Disk",
+      "enabled": true
+    },
+    {
       "id": "zhora_morning",
       "name": "Утренний рапорт Жоры",
       "cron": "55 7 * * *",
