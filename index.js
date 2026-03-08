@@ -62,6 +62,13 @@ async function askClaude(userMessage) {
       tools
     });
 
+    // Log web search usage (server-side tool, handled by Anthropic)
+    for (const block of response.content) {
+      if (block.type === 'server_tool_use' && block.name === 'web_search') {
+        console.log('[WebSearch] Query:', JSON.stringify(block.input));
+      }
+    }
+
     // If Claude wants to use tools
     if (response.stop_reason === 'tool_use') {
       // Add assistant's full response (text + tool_use blocks) to history

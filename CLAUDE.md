@@ -47,6 +47,7 @@ node lib/indexer.js --incremental # incremental update
 **`index.js`** — Snezhanna main bot:
 - Telegram polling with single-user access control (by numeric ID or username from `TELEGRAM_ALLOWED_USER_ID`)
 - Sends all messages to Claude via `@anthropic-ai/sdk` with a rolling conversation history (window: 40 messages, keep 30)
+- Anthropic native web search (`web_search_20250305`) enabled as a server-side tool — Claude can search the web for current info (rates, news, weather) without any local execution
 - Auto-fetches Google Calendar / Gmail context when keywords are detected in user messages (Russian keywords: "календар", "встреч", "сегодня", "почт", etc.)
 - On startup: calls `yadiskDirs.ensureDirs()` to create any missing agent subdirs (`index/`, `memory/`, `projects/`, `fitness/`, `drafts/`, `digests/`)
 - Scheduled tasks via `node-cron`: morning briefing (08:00), evening check-in (19:00), weekly digest (Sunday 10:00), calendar reminders every 10 min (fires at 30-min mark)
