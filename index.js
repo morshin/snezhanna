@@ -30,15 +30,23 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 let history = [];
 
 async function askClaude(userMessage) {
+  // Сохраняем снимок истории до вызова — восстановим при ошибке,
+  // чтобы не оставлять в истории осиротевшие tool_use / tool_result блоки
+  const historyBeforeCall = [...history];
+
   history.push({ role: 'user', content: userMessage });
 
-  // Trim history, but never orphan a tool_result
+  // Trim history, but never orphan a tool_result or start on an assistant message
   if (history.length > config.history.max_messages) {
     let sliceAt = history.length - config.history.keep_last;
-    // If we'd start on a tool_result, back up to include the preceding assistant message
-    while (sliceAt > 0 && sliceAt < history.length && history[sliceAt].role === 'user' &&
-           Array.isArray(history[sliceAt].content) &&
-           history[sliceAt].content.some(b => b.type === 'tool_result')) {
+    // Сдвигаемся назад, пока не окажемся на обычном user-сообщении:
+    // — нельзя начинать с tool_result (user, но со служебным контентом)
+    // — нельзя начинать с assistant-сообщения (Claude требует, чтобы первым шёл user)
+    while (sliceAt > 0 && (
+      history[sliceAt].role !== 'user' ||
+      (Array.isArray(history[sliceAt].content) &&
+       history[sliceAt].content.some(b => b.type === 'tool_result'))
+    )) {
       sliceAt--;
     }
     history = history.slice(sliceAt);
@@ -54,65 +62,87 @@ async function askClaude(userMessage) {
   });
   const systemWithTime = `Сейчас: ${nowStr} (${config.timezone}).\n\n${identity}`;
 
-  for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
-    const response = await anthropic.messages.create({
-      model: config.model,
-      max_tokens: config.max_tokens,
-      system: systemWithTime,
-      messages: history,
-      tools
-    });
+  try {
+    for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+      const response = await anthropic.messages.create({
+        model: config.model,
+        max_tokens: config.max_tokens,
+        system: systemWithTime,
+        messages: history,
+        tools
+      });
 
-    // Log web search usage (server-side tool, handled by Anthropic)
-    for (const block of response.content) {
-      if (block.type === 'server_tool_use' && block.name === 'web_search') {
-        console.log('[WebSearch] Query:', JSON.stringify(block.input));
-      }
-    }
-
-    // If Claude wants to use tools
-    if (response.stop_reason === 'tool_use') {
-      // Add assistant's full response (text + tool_use blocks) to history
-      history.push({ role: 'assistant', content: response.content });
-
-      // Execute each tool call and collect results
-      const toolResults = [];
+      // Log web search usage (server-side tool, handled by Anthropic)
       for (const block of response.content) {
-        if (block.type === 'tool_use') {
-          console.log(`[Tools] Calling ${block.name}:`, JSON.stringify(block.input));
-          try {
-            const result = await executeTool(block.name, block.input);
-            toolResults.push({
-              type: 'tool_result',
-              tool_use_id: block.id,
-              content: JSON.stringify(result)
-            });
-          } catch (err) {
-            console.error(`[Tools] Error in ${block.name}:`, err.message);
-            toolResults.push({
-              type: 'tool_result',
-              tool_use_id: block.id,
-              content: JSON.stringify({ error: err.message }),
-              is_error: true
-            });
-          }
+        if (block.type === 'server_tool_use' && block.name === 'web_search') {
+          console.log('[WebSearch] Query:', JSON.stringify(block.input));
         }
       }
 
-      // Add tool results as user message
-      history.push({ role: 'user', content: toolResults });
-      continue;
+      // If Claude wants to use tools
+      if (response.stop_reason === 'tool_use') {
+        // Add assistant's full response (text + tool_use blocks) to history
+        history.push({ role: 'assistant', content: response.content });
+
+        // Execute each tool call and collect results
+        const toolResults = [];
+        for (const block of response.content) {
+          if (block.type === 'tool_use') {
+            console.log(`[Tools] Calling ${block.name}:`, JSON.stringify(block.input));
+            try {
+              const result = await executeTool(block.name, block.input);
+              toolResults.push({
+                type: 'tool_result',
+                tool_use_id: block.id,
+                content: JSON.stringify(result)
+              });
+            } catch (err) {
+              console.error(`[Tools] Error in ${block.name}:`, err.message);
+              toolResults.push({
+                type: 'tool_result',
+                tool_use_id: block.id,
+                content: JSON.stringify({ error: err.message }),
+                is_error: true
+              });
+            }
+          }
+        }
+
+      // Add tool results as user message.
+      // Большие tool_result-ы обрезаем перед сохранением в историю:
+      // Claude уже обработал полный ответ в этом раунде, а история нужна
+      // только для контекста — хранить сырой дамп на 10 000 символов нет смысла.
+      const MAX_TOOL_RESULT_CHARS = 2000;
+      const toolResultsForHistory = toolResults.map(r => {
+        if (typeof r.content === 'string' && r.content.length > MAX_TOOL_RESULT_CHARS) {
+          return {
+            ...r,
+            content: r.content.slice(0, MAX_TOOL_RESULT_CHARS) +
+              `\n...[обрезано: исходный размер ${r.content.length} симв.]`
+          };
+        }
+        return r;
+      });
+      history.push({ role: 'user', content: toolResultsForHistory });
+        continue;
+      }
+
+      // End turn — extract text reply
+      const textBlocks = response.content.filter(b => b.type === 'text');
+      const reply = textBlocks.map(b => b.text).join('\n') || '';
+      history.push({ role: 'assistant', content: reply });
+      return reply;
     }
 
-    // End turn — extract text reply
-    const textBlocks = response.content.filter(b => b.type === 'text');
-    const reply = textBlocks.map(b => b.text).join('\n') || '';
-    history.push({ role: 'assistant', content: reply });
-    return reply;
+    // Safety: if we hit max rounds, return whatever we have
+    return 'Извини, Вовик, я слишком долго думала. Попробуй переформулировать вопрос.';
+  } catch (err) {
+    // При любой ошибке откатываем историю в состояние до вызова.
+    // Иначе в истории могут остаться осиротевшие tool_use без tool_result,
+    // что ломает все последующие запросы к Claude.
+    history = historyBeforeCall;
+    throw err;
   }
-
-  // Safety: if we hit max rounds, return whatever we have
-  return 'Извини, Вовик, я слишком долго думала. Попробуй переформулировать вопрос.';
 }
 
 // ── Error formatting ─────────────────────────────────────────────────────────
@@ -342,12 +372,7 @@ bot.on('message', async (msg) => {
         'Вов, сейчас небольшой перелимит запросов к Claude — подожди 2 минуты, попробую ещё раз и сразу вернусь к тебе 🕐'
       ).catch(() => {});
 
-      // Убираем из истории сообщение, которое не дошло до Claude —
-      // иначе при повторном вызове askClaude оно задвоится
-      if (history.length > 0 && history[history.length - 1].role === 'user') {
-        history.pop();
-      }
-
+      // История уже откачена внутри askClaude — просто ждём и повторяем
       await new Promise(resolve => setTimeout(resolve, 2 * 60 * 1000));
 
       try {
