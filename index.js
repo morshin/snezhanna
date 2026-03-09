@@ -14,6 +14,7 @@ const google = require('./lib/google');
 const whisper = require('./lib/whisper');
 const { getAvailableTools, executeTool } = require('./lib/tools');
 const yadiskDirs = require('./lib/yadisk-dirs');
+const vision = require('./lib/vision');
 const diskLog = require('./lib/disk-log');
 const tasks = require('./lib/tasks');
 const chatMonitor = require('./lib/chat-monitor');
@@ -386,6 +387,42 @@ bot.on('message', async (msg) => {
     } else {
       await bot.sendMessage(chatId, `Вов, ${formatErrorForUser(err)}`).catch(() => {});
     }
+  }
+});
+
+// ── Photo handler ─────────────────────────────────────────────────────────────
+
+bot.on('photo', async (msg) => {
+  if (!isAllowed(msg)) return;
+  if (chatMonitor.isMonitored(msg.chat.id)) return;
+  if (appState.chatId && String(msg.chat.id) !== String(appState.chatId)) return;
+
+  const chatId = msg.chat.id;
+
+  try {
+    await bot.sendChatAction(chatId, 'typing');
+
+    // Get largest photo (last in array)
+    const photo = msg.photo[msg.photo.length - 1];
+    const { base64, mime_type } = await vision.downloadTelegramPhoto(
+      bot, photo.file_id, process.env.TELEGRAM_BOT_TOKEN
+    );
+
+    const caption = msg.caption || '';
+    const content = vision.buildPhotoMessage(base64, mime_type, caption || 'Что на этом фото?');
+
+    const reply = await askClaude(content);
+
+    // Replace base64-heavy content in history with a lightweight placeholder
+    const lastUserIdx = history.findLastIndex(h => h.role === 'user');
+    if (lastUserIdx !== -1) {
+      history[lastUserIdx] = { role: 'user', content: vision.photoPlaceholder(caption) };
+    }
+
+    await sendLongMessage(chatId, reply);
+  } catch (err) {
+    console.error('[Snezhanna] Photo error:', err.message);
+    await bot.sendMessage(chatId, `Вов, ${formatErrorForUser(err)}`).catch(() => {});
   }
 });
 
