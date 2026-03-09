@@ -1,0 +1,17 @@
+[Unit]
+Description=Max Tutor Bot for Son
+After=network.target snezhanna.service
+
+[Service]
+Type=simple
+User=snezhanna
+WorkingDirectory=/opt/snezhanna/tutor
+EnvironmentFile=/opt/snezhanna/.env
+ExecStart=/usr/bin/node /opt/snezhanna/tutor/index.js
+Restart=always
+RestartSec=30
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

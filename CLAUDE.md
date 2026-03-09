@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-Snezhanna is a personal AI assistant for Vova (Vladimir Morshin) that runs as a systemd service on a Linux VPS. It operates through Telegram and uses Claude (claude-sonnet-4-6) as its brain. The project has two processes: **Snezhanna** (main bot) and **Zhora** (watchdog).
+Snezhanna is a personal AI assistant for Vova (Vladimir Morshin) that runs as a systemd service on a Linux VPS. It operates through Telegram and uses Claude (claude-sonnet-4-6) as its brain. The project has three processes: **Snezhanna** (main bot), **Max** (tutor bot for Vova's son), and **Zhora** (watchdog monitoring both).
 
 ## Running the bot
 
@@ -23,12 +23,17 @@ sudo systemctl start|stop|restart|status snezhanna
 journalctl -u snezhanna -f          # live logs
 journalctl -u snezhanna -n 100      # last 100 lines
 
+# Tutor bot (Max)
+sudo systemctl start|stop|restart|status tutor
+journalctl -u tutor -f
+
 # Watchdog
 sudo systemctl start|stop|restart|status zhora
 journalctl -u zhora -f
 
 # Deploy service files after editing
 sudo cp systemd/snezhanna.service /etc/systemd/system/
+sudo cp tutor/systemd/tutor.service /etc/systemd/system/
 sudo cp watchdog/zhora.service /etc/systemd/system/
 sudo systemctl daemon-reload
 ```
@@ -42,7 +47,7 @@ node lib/indexer.js --incremental # incremental update
 
 ## Architecture
 
-### Two-process design
+### Three-process design
 
 **`index.js`** — Snezhanna main bot:
 - Telegram polling with single-user access control (by numeric ID or username from `TELEGRAM_ALLOWED_USER_ID`)
@@ -55,10 +60,24 @@ node lib/indexer.js --incremental # incremental update
 - Bot commands: `/reset` (clear history), `/status`, `/auth <code>` (Google OAuth callback)
 - Voice messages: downloaded from Telegram → transcribed via OpenAI Whisper → sent to Claude
 
+**`tutor/index.js`** — Max tutor bot (separate systemd service):
+- Telegram bot for Vova's son (13 y/o, Spanish school), access-controlled by `TUTOR_ALLOWED_USER_ID`
+- Always responds in Spanish; understands Russian but redirects back to Spanish
+- Pedagogical approach: never gives answers directly, asks guiding questions
+- Onboarding flow: collects school timetable day by day → saves to `schedule.json`
+- In-memory session tracking (subject, topics, stuck points, mood)
+- Photo support via shared `lib/vision.js` (homework photos, textbook pages)
+- Voice support via shared `lib/whisper.js` with `language='es'`
+- Commands: `/done` (end session), `/schedule` (view/reset timetable), `/homework` (pending tasks), `/reset`, `/status`
+- Scheduled tasks: afternoon checkin (15:00), evening reminder (21:00), daily summary (20:30), weekly digest (Sunday 18:00), session auto-close (every 5 min, 30 min idle)
+- Reports to `/mnt/yadisk-agent/kids/`: daily sessions, progress.md, weekly digests, homework.json
+- Uses `dotenv` with absolute path to `/opt/snezhanna/.env`
+
 **`watchdog/zhora.js`** — Zhora watchdog (separate systemd service):
-- Checks every 5 minutes: snezhanna systemd status, Telegram API reachability, Yandex Disk WebDAV mount points, disk space (>85% threshold), recent error logs
-- Auto-restarts Snezhanna if it's down; reports to Vova via its own Telegram bot (`WATCHDOG_BOT_TOKEN`)
-- Morning report at 07:55 Madrid time
+- Checks every 5 minutes: snezhanna + tutor systemd status, Telegram API reachability, Yandex Disk WebDAV mount points, disk space (>85% threshold), recent error logs
+- Auto-restarts Snezhanna or Max if down; reports to Vova via its own Telegram bot (`WATCHDOG_BOT_TOKEN`)
+- Morning report at 07:55 Madrid time shows status of both bots
+- Commands: `/status` (all services), `/logs [N]`, `/restart [snezhanna|max]` with confirmation
 - Uses zero npm dependencies — pure Node.js `https` module for Telegram calls
 
 ### Key files
@@ -67,7 +86,8 @@ node lib/indexer.js --incremental # incremental update
 |------|---------|
 | `index.js` | Main bot entrypoint |
 | `lib/google.js` | Google Calendar + Gmail via googleapis OAuth2 |
-| `lib/whisper.js` | OpenAI Whisper transcription + TTS |
+| `lib/whisper.js` | OpenAI Whisper transcription + TTS (language param: `'ru'` default, `'es'` for Max) |
+| `lib/vision.js` | Shared photo handler: download from Telegram, base64 encode, build Claude image blocks |
 | `lib/state.js` | Persist chatId to `.nanobot/state.json` |
 | `lib/indexer.js` | Walk Yandex Disk and build JSON file index |
 | `lib/yadisk-dirs.js` | Ensure agent subdirs exist; project CRUD (`create_project`, `list_projects`, `read_project_file`, `write_project_file`) and project docs (`list_project_docs`, `read_project_doc`, `write_project_doc`) |
@@ -77,10 +97,18 @@ node lib/indexer.js --incremental # incremental update
 | `schedules/heartbeats.json` | Documentation of all scheduled tasks (not loaded at runtime) |
 | `docs/snezhanna-tz.md` | Technical specification (TZ) — infrastructure, integrations, architecture decisions |
 | `skills/*.md` | Capability descriptions (documentation only, not loaded at runtime) |
+| `tutor/index.js` | Max tutor bot entrypoint |
+| `tutor/lib/storage.js` | Yandex Disk I/O for `/mnt/yadisk-agent/kids/` |
+| `tutor/lib/session.js` | In-memory tutoring session state |
+| `tutor/lib/claude.js` | Anthropic API wrapper for Max |
+| `tutor/lib/report.js` | Session/daily/weekly report generation |
+| `tutor/identity/IDENTITY.md` | Max's system prompt (personality, pedagogical rules, language policy) |
+| `docs/tutor-bot-tz.md` | Technical specification for Max tutor bot |
 
 ### State & credentials
 
 - **Runtime state** (chatId): `.nanobot/state.json` — gitignored, auto-created
+- **Tutor state** (chatId): `tutor/.tutor-state.json` — gitignored, auto-created
 - **Google OAuth token**: `token.json` — gitignored; obtained via `/auth <code>` flow in Telegram
 - **Google app credentials**: `credentials.json` — gitignored; must be a Desktop-type OAuth2 client
 - **All secrets**: `.env` — gitignored; loaded by dotenv and referenced in `systemd/snezhanna.service` as `EnvironmentFile`
@@ -99,6 +127,8 @@ Two WebDAV mounts managed via davfs2 (set up by `setup.sh`, run as root):
 - `/mnt/yadisk-agent` — Snezhanna's write area (`/mnt/yadisk-agent/memory/`, `/mnt/yadisk-agent/index/`)
 
 Zhora monitors both mount points and re-mounts if they go down.
+
+Max writes reports to `/mnt/yadisk-agent/kids/` (sessions, progress, weekly digests, homework, schedule).
 
 ### Timezone
 
@@ -126,4 +156,7 @@ GOOGLE_CLIENT_ID         # Google OAuth2
 GOOGLE_CLIENT_SECRET     # Google OAuth2
 YANDEX_WEBDAV_LOGIN      # Yandex Disk WebDAV credentials
 YANDEX_WEBDAV_PASSWORD
+TUTOR_BOT_TOKEN          # Max tutor bot (from @BotFather)
+TUTOR_ALLOWED_USER_ID    # Son's numeric Telegram ID
+KIDS_DATA_DIR            # /mnt/yadisk-agent/kids (default if unset)
 ```

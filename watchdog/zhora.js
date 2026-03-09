@@ -86,18 +86,25 @@ async function send(text) {
   }
 }
 
+// ── Monitored services ────────────────────────────────────────────────────────
+
+const SERVICES = [
+  { name: 'Снежанна', unit: 'snezhanna' },
+  { name: 'Макс',     unit: 'tutor'     },
+];
+
 // ── Checks ────────────────────────────────────────────────────────────────────
 
-async function checkSnezhanna() {
-  const { code } = await sh('systemctl is-active snezhanna');
+async function checkService(service) {
+  const { code } = await sh(`systemctl is-active ${service.unit}`);
   if (code !== 0) {
-    console.log('[Zhora] Snezhanna is DOWN. Restarting...');
-    const restart = await sh('sudo systemctl restart snezhanna');
-    const status = await sh('systemctl is-active snezhanna');
+    console.log(`[Zhora] ${service.name} (${service.unit}) is DOWN. Restarting...`);
+    await sh(`sudo systemctl restart ${service.unit}`);
+    const status = await sh(`systemctl is-active ${service.unit}`);
     if (status.code === 0) {
-      await send('⚠️ *Жора:* Снежанна упала, перезапустил — теперь OK ✅');
+      await send(`⚠️ *Жора:* ${service.name} упала, перезапустил — теперь OK ✅`);
     } else {
-      await send('🚨 *Жора:* Снежанна упала и не поднялась после перезапуска! Проверь логи:\n`journalctl -u snezhanna -n 50`');
+      await send(`🚨 *Жора:* ${service.name} упала и не поднялась после перезапуска! Проверь логи:\n\`journalctl -u ${service.unit} -n 50\``);
     }
     return false;
   }
@@ -154,13 +161,13 @@ async function checkDiskSpace() {
   return true;
 }
 
-async function checkLogs() {
+async function checkLogs(unit, name) {
   const { stdout } = await sh(
-    'journalctl -u snezhanna --since "10 min ago" --no-pager -q 2>/dev/null | grep -i "error\\|fatal\\|uncaught" | tail -5'
+    `journalctl -u ${unit} --since "10 min ago" --no-pager -q 2>/dev/null | grep -i "error\\|fatal\\|uncaught" | tail -5`
   );
   if (stdout && stdout.length > 0) {
     const lines = stdout.split('\n').slice(0, 3).join('\n');
-    await send(`⚠️ *Жора:* В логах Снежанны ошибки:\n\`\`\`\n${lines}\n\`\`\``);
+    await send(`⚠️ *Жора:* В логах ${name} ошибки:\n\`\`\`\n${lines}\n\`\`\``);
     return false;
   }
   return true;
@@ -206,24 +213,35 @@ function isAllowed(msg) {
   return String(id) === OWNER_ID || (username && username === OWNER_ID);
 }
 
+async function getServiceStatusLine(service) {
+  const statusResult = (await sh(`systemctl is-active ${service.unit}`)).stdout;
+  const isOk = statusResult === 'active';
+  let uptimeStr = '';
+  if (isOk) {
+    const { stdout } = await sh(`systemctl show ${service.unit} --property=ActiveEnterTimestamp --value`);
+    if (stdout) {
+      const started = new Date(stdout);
+      const diff = Date.now() - started.getTime();
+      if (!isNaN(diff) && diff > 0) {
+        const days = Math.floor(diff / 86400000);
+        const hours = Math.floor((diff % 86400000) / 3600000);
+        uptimeStr = days > 0 ? ` (uptime ${days}d ${hours}h)` : ` (uptime ${hours}h)`;
+      }
+    }
+  }
+  return `${service.name}: ${isOk ? '✅ active' + uptimeStr : '❌ ' + statusResult}`;
+}
+
 async function handleStatusCommand(chatId) {
   try {
-    const snezhannaStatus = (await sh('systemctl is-active snezhanna')).stdout;
-    const snezhannaOk = snezhannaStatus === 'active';
-
-    // Get uptime if active
-    let uptimeStr = '';
-    if (snezhannaOk) {
-      const { stdout } = await sh("systemctl show snezhanna --property=ActiveEnterTimestamp --value");
-      if (stdout) {
-        const started = new Date(stdout);
-        const diff = Date.now() - started.getTime();
-        if (!isNaN(diff) && diff > 0) {
-          const days = Math.floor(diff / 86400000);
-          const hours = Math.floor((diff % 86400000) / 3600000);
-          uptimeStr = days > 0 ? ` (uptime ${days}d ${hours}h)` : ` (uptime ${hours}h)`;
-        }
-      }
+    const serviceLines = [];
+    let totalErrors = 0;
+    for (const svc of SERVICES) {
+      serviceLines.push(await getServiceStatusLine(svc));
+      const { stdout: logErrors } = await sh(
+        `journalctl -u ${svc.unit} --since "10 min ago" --no-pager -q 2>/dev/null | grep -ic "error\\|fatal\\|uncaught"`
+      );
+      totalErrors += parseInt(logErrors, 10) || 0;
     }
 
     const telegramOk = await checkTelegramApi();
@@ -231,19 +249,14 @@ async function handleStatusCommand(chatId) {
     const mountRw = (await sh('mountpoint -q /mnt/yadisk-agent')).code === 0;
     const disk = (await sh("df / --output=pcent | tail -1 | tr -d ' %'")).stdout;
 
-    const { stdout: logErrors } = await sh(
-      'journalctl -u snezhanna --since "10 min ago" --no-pager -q 2>/dev/null | grep -ic "error\\|fatal\\|uncaught"'
-    );
-    const errorCount = parseInt(logErrors, 10) || 0;
-
     const report =
       `🤖 *Жора рапортует:*\n\n` +
-      `Снежанна: ${snezhannaOk ? '✅ active' + uptimeStr : '❌ ' + snezhannaStatus}\n` +
+      serviceLines.join('\n') + '\n' +
       `Telegram API: ${telegramOk ? '✅' : '❌'}\n` +
       `Диск readonly: ${mountRo ? '✅' : '❌'}\n` +
       `Диск агент: ${mountRw ? '✅' : '❌'}\n` +
       `Место на сервере: ${disk}%\n` +
-      `Ошибки в логах: ${errorCount > 0 ? '⚠️ ' + errorCount + ' за 10 мин' : 'нет'}`;
+      `Ошибки в логах: ${totalErrors > 0 ? '⚠️ ' + totalErrors + ' за 10 мин' : 'нет'}`;
 
     await sendRaw(chatId, report);
   } catch (e) {
@@ -301,38 +314,55 @@ async function handleLogsCommand(chatId, rawArg) {
   }
 }
 
-// Ожидающие подтверждения перезапуска: chatId → timestamp
+// Ожидающие подтверждения перезапуска: chatId → { timestamp, unit, name }
 const pendingRestarts = new Map();
 
-async function handleRestartCommand(chatId) {
-  pendingRestarts.set(chatId, Date.now());
+function findServiceByAlias(alias) {
+  const lower = (alias || '').toLowerCase().trim();
+  if (!lower || lower === 'snezhanna' || lower === 'снежанна') {
+    return SERVICES.find(s => s.unit === 'snezhanna');
+  }
+  if (lower === 'max' || lower === 'макс' || lower === 'tutor') {
+    return SERVICES.find(s => s.unit === 'tutor');
+  }
+  return null;
+}
+
+async function handleRestartCommand(chatId, arg) {
+  const service = findServiceByAlias(arg || 'snezhanna');
+  if (!service) {
+    await sendRaw(chatId, '❌ Неизвестный сервис. Доступные: snezhanna, max');
+    return;
+  }
+  pendingRestarts.set(chatId, { ts: Date.now(), unit: service.unit, name: service.name });
   await sendRaw(chatId,
-    '⚠️ *Перезапустить Снежанну?*\n\n' +
+    `⚠️ *Перезапустить ${service.name}?*\n\n` +
     'Отправь /restart\\_confirm чтобы подтвердить.\n' +
     'Запрос действует 60 секунд.'
   );
 }
 
 async function handleRestartConfirm(chatId) {
-  const ts = pendingRestarts.get(chatId);
-  if (!ts || Date.now() - ts > 60000) {
+  const pending = pendingRestarts.get(chatId);
+  if (!pending || Date.now() - pending.ts > 60000) {
     pendingRestarts.delete(chatId);
     await sendRaw(chatId, '❌ Запрос на перезапуск устарел или не был создан. Отправь /restart заново.');
     return;
   }
   pendingRestarts.delete(chatId);
 
-  await sendRaw(chatId, '🔄 Перезапускаю Снежанну...');
-  console.log('[Zhora] Manual restart requested');
+  const { unit, name } = pending;
+  await sendRaw(chatId, `🔄 Перезапускаю ${name}...`);
+  console.log(`[Zhora] Manual restart requested for ${unit}`);
 
-  const { code } = await sh('sudo systemctl restart snezhanna');
-  await new Promise(r => setTimeout(r, 3000)); // ждём пока сервис поднимется
+  await sh(`sudo systemctl restart ${unit}`);
+  await new Promise(r => setTimeout(r, 3000));
 
-  const { stdout: status } = await sh('systemctl is-active snezhanna');
+  const { stdout: status } = await sh(`systemctl is-active ${unit}`);
   if (status === 'active') {
-    await sendRaw(chatId, '✅ Снежанна перезапущена и работает.');
+    await sendRaw(chatId, `✅ ${name} перезапущена и работает.`);
   } else {
-    await sendRaw(chatId, `🚨 Перезапуск выполнен, но статус: *${status || 'неизвестен'}*. Проверь /logs.`);
+    await sendRaw(chatId, `🚨 Перезапуск выполнен, но статус: *${status || 'неизвестен'}*. Проверь логи:\n\`journalctl -u ${unit} -n 50\``);
   }
 }
 
@@ -361,15 +391,16 @@ async function pollLoop() {
           handleLogsCommand(msg.chat.id, arg).catch(e =>
             console.error('[Zhora] handleLogsCommand error:', e.message)
           );
-        } else if (msg.text === '/restart') {
-          console.log('[Zhora] /restart command from', msg.from.id);
-          handleRestartCommand(msg.chat.id).catch(e =>
-            console.error('[Zhora] handleRestartCommand error:', e.message)
-          );
-        } else if (msg.text === '/restart_confirm') {
+        } else if (msg.text.startsWith('/restart_confirm')) {
           console.log('[Zhora] /restart_confirm command from', msg.from.id);
           handleRestartConfirm(msg.chat.id).catch(e =>
             console.error('[Zhora] handleRestartConfirm error:', e.message)
+          );
+        } else if (msg.text.startsWith('/restart')) {
+          const arg = msg.text.split(' ')[1];
+          console.log('[Zhora] /restart command from', msg.from.id, 'service:', arg || 'snezhanna');
+          handleRestartCommand(msg.chat.id, arg).catch(e =>
+            console.error('[Zhora] handleRestartCommand error:', e.message)
           );
         }
       }
@@ -386,11 +417,13 @@ async function pollLoop() {
 let telegramWasDown = false;
 
 async function runChecks() {
-  const snezhannaOk = await checkSnezhanna();
+  for (const svc of SERVICES) {
+    const ok = await checkService(svc);
+    if (ok) await checkLogs(svc.unit, svc.name);
+  }
   const telegramOk = await checkTelegramApi();
-  const mountsOk = await checkMounts();
-  const diskOk = await checkDiskSpace();
-  if (snezhannaOk) await checkLogs();
+  await checkMounts();
+  await checkDiskSpace();
 
   if (!telegramOk && !telegramWasDown) {
     telegramWasDown = true;
@@ -412,19 +445,25 @@ function setupSchedules() {
   // Morning report — 07:55 Madrid
   cron.schedule('55 7 * * *', async () => {
     try {
-      const snezhannaStatus = (await sh('systemctl is-active snezhanna')).stdout;
+      const serviceLines = [];
+      let allOk = true;
+      for (const svc of SERVICES) {
+        const status = (await sh(`systemctl is-active ${svc.unit}`)).stdout;
+        const ok = status === 'active';
+        if (!ok) allOk = false;
+        serviceLines.push(`${svc.name}: ${ok ? '✅ работает' : '❌ ' + status}`);
+      }
       const mountRo = (await sh('mountpoint -q /mnt/yadisk-readonly')).code === 0 ? '✅' : '❌';
       const mountRw = (await sh('mountpoint -q /mnt/yadisk-agent')).code === 0 ? '✅' : '❌';
       const disk = (await sh("df / --output=pcent | tail -1 | tr -d ' %'")).stdout;
 
-      const ok = snezhannaStatus === 'active';
       await send(
         `🤖 *Жора рапортует:*\n\n` +
-        `Снежанна: ${ok ? '✅ работает' : '❌ ' + snezhannaStatus}\n` +
+        serviceLines.join('\n') + '\n' +
         `Диск readonly: ${mountRo}\n` +
         `Диск агент: ${mountRw}\n` +
         `Место на сервере: ${disk}%\n\n` +
-        (ok ? 'Снежанна готова к работе ✅' : '⚠️ Требуется внимание!')
+        (allOk ? 'Все системы готовы к работе ✅' : '⚠️ Требуется внимание!')
       );
     } catch (e) {
       console.error('[Zhora] Morning report error:', e.message);
@@ -440,10 +479,10 @@ async function registerCommands() {
   try {
     await tgApi('setMyCommands', {
       commands: [
-        { command: 'status',         description: 'Статус Снежанны и инфраструктуры' },
+        { command: 'status',         description: 'Статус всех сервисов и инфраструктуры' },
         { command: 'logs',           description: 'Последние 30 строк лога Снежанны' },
-        { command: 'restart',        description: 'Перезапустить Снежанну (с подтверждением)' },
-        { command: 'restart_confirm', description: 'Подтвердить перезапуск Снежанны' },
+        { command: 'restart',        description: 'Перезапустить сервис: /restart [snezhanna|max]' },
+        { command: 'restart_confirm', description: 'Подтвердить перезапуск' },
       ]
     });
     console.log('[Zhora] Bot commands registered');
@@ -461,7 +500,7 @@ async function main() {
 
   // Startup message
   try {
-    await send('🤖 Жора здесь. Слежу за Снежанной.');
+    await send('🤖 Жора здесь. Слежу за Снежанной и Максом.');
     console.log('[Zhora] Startup message sent');
   } catch (e) {
     console.error('[Zhora] Failed to send startup message:', e.message);
