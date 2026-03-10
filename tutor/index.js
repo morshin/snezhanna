@@ -12,6 +12,7 @@ const session = require('./lib/session');
 const storage = require('./lib/storage');
 const report = require('./lib/report');
 const { setupSchedules } = require('./schedules/crons');
+const langWeek = require('./lib/lang-week');
 const vision = require('../lib/vision');
 const whisper = require('../lib/whisper');
 
@@ -49,6 +50,11 @@ function loadState() {
   try {
     if (fs.existsSync(STATE_FILE)) {
       appState = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
+      // Восстанавливаем прогресс онбординга если был прерван перезапуском
+      if (appState.onboardingInProgress) {
+        onboarding = appState.onboardingInProgress;
+        console.log('[Max] Restored onboarding from disk (step', onboarding.step, 'of', WEEKDAYS.length, ')');
+      }
     }
   } catch (e) {
     console.error('[Max] Failed to load state:', e.message);
@@ -70,45 +76,143 @@ const WEEKDAY_LABELS = {
   lunes: 'LUNES', martes: 'MARTES', miércoles: 'MIÉRCOLES',
   jueves: 'JUEVES', viernes: 'VIERNES'
 };
+const WEEKDAY_LABELS_RU = {
+  lunes: 'понедельник', martes: 'вторник', miércoles: 'среда',
+  jueves: 'четверг', viernes: 'пятница'
+};
+
+function getDayLabel(day) {
+  return langWeek.getCurrentLang() === 'ru' ? WEEKDAY_LABELS_RU[day] : WEEKDAY_LABELS[day];
+}
+
+// Двуязычные тексты онбординга
+const OB = {
+  intro: {
+    es: (day) =>
+      `¡Hola! Soy Max 👋 Voy a ser tu ayudante de estudios.\n` +
+      `Primero necesito saber tu horario escolar.\n\n` +
+      `¿Qué clases tienes los ${WEEKDAY_LABELS[day]}?\n` +
+      `Escríbelas en orden, separadas por comas.\n` +
+      `Ej: Matemáticas, Lengua, Inglés`,
+    ru: (day) =>
+      `Привет! Я Макс 👋 Буду твоим помощником по учёбе.\n` +
+      `Сначала мне нужно твоё расписание.\n\n` +
+      `Какие уроки у тебя в ${WEEKDAY_LABELS_RU[day]}?\n` +
+      `Напиши по порядку через запятую.\n` +
+      `Пример: Математика, Русский, Английский`
+  },
+  confirmed: {
+    es: (dayLabel, list, nextLabel) =>
+      `✅ ${dayLabel}:\n${list}\n\n` +
+      `¿Y los ${nextLabel}?\n` +
+      `Escríbelas en orden, separadas por comas.`,
+    ru: (dayLabel, list, nextLabel) =>
+      `✅ ${dayLabel}:\n${list}\n\n` +
+      `Теперь ${nextLabel}:\n` +
+      `Напиши по порядку через запятую.`
+  },
+  freeAndNext: {
+    es: (dayLabel, nextLabel) =>
+      `✅ ${dayLabel}: día libre\n\n` +
+      `¿Y los ${nextLabel}?\n` +
+      `Escríbelas en orden, separadas por comas.`,
+    ru: (dayLabel, nextLabel) =>
+      `✅ ${dayLabel}: выходной\n\n` +
+      `Теперь ${nextLabel}:\n` +
+      `Напиши по порядку через запятую.`
+  },
+  done: {
+    es: (schedule) => {
+      let text = '¡Listo! Ya tengo tu horario guardado 🎉\n\n📋 Tu horario:\n';
+      for (const day of WEEKDAYS) {
+        const lessons = schedule[day] || [];
+        text += `\n${WEEKDAY_LABELS[day]}:`;
+        if (lessons.length === 0) {
+          text += ' libre';
+        } else {
+          lessons.forEach((l, i) => { text += `\n  ${i + 1}. ${l}`; });
+        }
+      }
+      text += '\n\nA partir de hoy, a las 15:00 te preguntaré cómo fue el día y qué deberes tienes. ¿Alguna pregunta?';
+      return text;
+    },
+    ru: (schedule) => {
+      let text = 'Готово! Расписание сохранено 🎉\n\n📋 Твоё расписание:\n';
+      for (const day of WEEKDAYS) {
+        const lessons = schedule[day] || [];
+        text += `\n${WEEKDAY_LABELS_RU[day].charAt(0).toUpperCase() + WEEKDAY_LABELS_RU[day].slice(1)}:`;
+        if (lessons.length === 0) {
+          text += ' выходной';
+        } else {
+          lessons.forEach((l, i) => { text += `\n  ${i + 1}. ${l}`; });
+        }
+      }
+      text += '\n\nС сегодняшнего дня буду спрашивать в 15:00 как прошёл день и что задали. Вопросы есть?';
+      return text;
+    }
+  }
+};
+
+// Паттерн для распознавания "выходной / нет уроков"
+const FREE_DAY_RE = /^(libre|nada|no hay|no tengo clases?|выходной|нет уроков|нет|свободно|-)$/i;
 
 let onboarding = null; // { step: 0..4, schedule: {} }
 
+// Сохраняем/очищаем прогресс онбординга в appState на диске
+function persistOnboarding() {
+  appState.onboardingInProgress = onboarding;
+  saveState();
+}
+
 function startOnboarding() {
   onboarding = { step: 0, schedule: {} };
-  return `¡Hola! Soy Max 👋 Voy a ser tu ayudante de estudios.\nPrimero necesito saber tu horario escolar.\n¿Qué clases tienes los ${WEEKDAY_LABELS[WEEKDAYS[0]]}? Dímelas todas en orden 📋`;
+  persistOnboarding();
+  const lang = langWeek.getCurrentLang();
+  return OB.intro[lang](WEEKDAYS[0]);
 }
 
 async function handleOnboarding(text) {
   const day = WEEKDAYS[onboarding.step];
-
-  // Parse subjects from user text using Claude
-  const parsed = await askMaxOneShot(
-    'Eres un parser. El alumno te dice sus asignaturas del día. Devuelve SOLO un JSON array de strings con los nombres de las asignaturas en español correcto (con mayúscula). Ejemplo: ["Matemáticas", "Lengua", "Inglés"]. Sin explicaciones, solo el JSON array.',
-    `Asignaturas para ${day}: "${text}"`
-  );
+  const lang = langWeek.getCurrentLang();
+  const dayLabel = getDayLabel(day);
 
   let subjects;
-  try {
-    // Extract JSON array from response
-    const match = parsed.match(/\[[\s\S]*?\]/);
-    subjects = match ? JSON.parse(match[0]) : [text];
-  } catch (e) {
-    subjects = text.split(/[,;]+/).map(s => s.trim()).filter(Boolean);
+  if (FREE_DAY_RE.test(text.trim())) {
+    subjects = [];
+  } else {
+    const parsed = await askMaxOneShot(
+      'Eres un parser. El alumno te dice sus asignaturas del día. Devuelve SOLO un JSON array de strings con los nombres de las asignaturas en español correcto (con mayúscula). Ejemplo: ["Matemáticas", "Lengua", "Inglés"]. Sin explicaciones, solo el JSON array.',
+      `Asignaturas para ${day}: "${text}"`
+    );
+    try {
+      const match = parsed.match(/\[[\s\S]*?\]/);
+      subjects = match ? JSON.parse(match[0]) : [text];
+    } catch (e) {
+      subjects = text.split(/[,;]+/).map(s => s.trim()).filter(Boolean);
+    }
   }
 
   onboarding.schedule[day] = subjects;
   onboarding.step++;
+  persistOnboarding();
 
   if (onboarding.step < WEEKDAYS.length) {
     const nextDay = WEEKDAYS[onboarding.step];
-    return `Perfecto ✅ ¿Y los ${WEEKDAY_LABELS[nextDay]}?`;
+    const nextLabel = getDayLabel(nextDay);
+    if (subjects.length === 0) {
+      return OB.freeAndNext[lang](dayLabel, nextLabel);
+    }
+    const numberedList = subjects.map((s, i) => `  ${i + 1}. ${s}`).join('\n');
+    return OB.confirmed[lang](dayLabel, numberedList, nextLabel);
   }
 
-  // All days collected — save
-  storage.saveSchedule(onboarding.schedule);
+  // Все дни собраны — сохраняем
+  const savedSchedule = { ...onboarding.schedule };
+  storage.saveSchedule(savedSchedule);
   onboarding = null;
+  persistOnboarding();
 
-  return '¡Listo! Ya tengo tu horario guardado 🎉\nA partir de hoy, a las 15:00 te preguntaré cómo fue el día y qué deberes tienes. ¿Alguna pregunta?';
+  return OB.done[lang](savedSchedule);
 }
 
 // ── Error formatting ──────────────────────────────────────────────────────────
@@ -227,7 +331,12 @@ async function handleCommand(msg, text) {
     let scheduleText = '📋 Tu horario:\n';
     for (const day of WEEKDAYS) {
       const lessons = schedule[day] || [];
-      scheduleText += `\n**${WEEKDAY_LABELS[day]}:** ${lessons.join(', ')}`;
+      scheduleText += `\n${WEEKDAY_LABELS[day]}:`;
+      if (lessons.length === 0) {
+        scheduleText += ' libre';
+      } else {
+        lessons.forEach((l, i) => { scheduleText += `\n  ${i + 1}. ${l}`; });
+      }
     }
     await bot.sendMessage(chatId, scheduleText);
     return true;
@@ -488,11 +597,41 @@ bot.on('voice', async (msg) => {
 
 // ── Startup ───────────────────────────────────────────────────────────────────
 
+// Команды для меню Telegram (кнопка "/" в чате)
+const BOT_COMMANDS_ES = [
+  { command: 'homework',  description: 'Ver deberes pendientes 📝' },
+  { command: 'schedule',  description: 'Ver mi horario escolar 📋' },
+  { command: 'done',      description: 'Terminar la sesión de estudio ✅' },
+  { command: 'status',    description: 'Estado del bot 🟢' },
+  { command: 'reset',     description: 'Borrar historial de conversación 🗑' },
+  { command: 'start',     description: '¡Empecemos! 👋' },
+];
+const BOT_COMMANDS_RU = [
+  { command: 'homework',  description: 'Домашние задания 📝' },
+  { command: 'schedule',  description: 'Моё расписание 📋' },
+  { command: 'done',      description: 'Завершить учёбу ✅' },
+  { command: 'status',    description: 'Статус бота 🟢' },
+  { command: 'reset',     description: 'Сбросить историю чата 🗑' },
+  { command: 'start',     description: 'Привет! 👋' },
+];
+
+async function registerBotCommands() {
+  try {
+    // Устанавливаем команды для двух языков: по умолчанию испанский, отдельно русский
+    await bot.setMyCommands(BOT_COMMANDS_ES);
+    await bot.setMyCommands(BOT_COMMANDS_RU, { language_code: 'ru' });
+    console.log('[Max] Bot commands menu registered');
+  } catch (e) {
+    console.error('[Max] Failed to register bot commands:', e.message);
+  }
+}
+
 async function main() {
   console.log('[Max] Starting...');
 
   storage.ensureDirs();
   loadState();
+  await registerBotCommands();
 
   setupSchedules({
     bot,
@@ -511,7 +650,11 @@ async function main() {
     const lastSent = appState.lastStartupAt || 0;
     if (Date.now() - lastSent > STARTUP_COOLDOWN_MS) {
       try {
-        await bot.sendMessage(appState.chatId, '¡Hola! 👋 Soy Max, tu ayudante de estudio. ¿Empezamos?');
+        const lang = langWeek.getCurrentLang();
+        const startupMsg = lang === 'ru'
+          ? '👋 Привет! Я Макс, твой помощник по учёбе. Начнём?'
+          : '¡Hola! 👋 Soy Max, tu ayudante de estudio. ¿Empezamos?';
+        await bot.sendMessage(appState.chatId, startupMsg);
         appState.lastStartupAt = Date.now();
         saveState();
         console.log('[Max] Startup message sent to chatId:', appState.chatId);

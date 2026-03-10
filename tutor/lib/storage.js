@@ -74,7 +74,7 @@ function addHomeworkTask(task) {
     due: task.due || '',
     done: false,
     doneAt: null,
-    added: new Date().toISOString().slice(0, 10)
+    added: new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Madrid' })
   });
   saveHomework(hw);
   return id;

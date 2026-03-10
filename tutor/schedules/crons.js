@@ -1,6 +1,7 @@
 'use strict';
 
 const cron = require('node-cron');
+const langWeek = require('../lib/lang-week');
 
 const TIMEZONE = 'Europe/Madrid';
 const DAYS_ES = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
@@ -17,7 +18,78 @@ function getTodayStr() {
   return new Date().toLocaleDateString('sv-SE', { timeZone: TIMEZONE });
 }
 
+// Двуязычные тексты для автоматических сообщений
+const T = {
+  afternoonGreeting: {
+    es: '¡Ey! 👋 ¿Cómo fue el cole hoy?\n¿Qué deberes te han puesto? Dímelos todos 📝',
+    ru: 'Эй! 👋 Как сегодня в школе?\nЧто задали? Расскажи всё 📝'
+  },
+  tomorrowHas: {
+    es: 'Mañana tienes:',
+    ru: 'Завтра у тебя:'
+  },
+  pendingHomework: {
+    es: 'Deberes aún pendientes:',
+    ru: 'Домашние задания (ещё не сделано):'
+  },
+  eveningGreeting: {
+    es: '¡Oye, antes de dormir! 🌙\n',
+    ru: 'Эй, перед сном! 🌙\n'
+  },
+  homeworkHeader: {
+    es: '\nDeberes:',
+    ru: '\nДомашнее задание:'
+  },
+  done: {
+    es: '— hecho',
+    ru: '— готово'
+  },
+  pending: {
+    es: '— pendiente',
+    ru: '— не сделано'
+  },
+  allDone: {
+    es: '\n\n¡Todo listo! Descansa bien 😴',
+    ru: '\n\nВсё готово! Отдыхай хорошо 😴'
+  },
+  allDoneQuestion: {
+    es: '\n\n¿Está todo listo? 😴',
+    ru: '\n\nВсё сделано? 😴'
+  },
+  sessionTimeout: {
+    es: '⏰ Se acabó el tiempo de la sesión. ¡Buen trabajo hoy!\n\n',
+    ru: '⏰ Время сессии истекло. Молодец, хорошо поработал сегодня!\n\n'
+  },
+  sessionClosed: {
+    es: '⏰ Sesión cerrada automáticamente. ¡Hasta la próxima! 👋',
+    ru: '⏰ Сессия закрыта автоматически. До следующего раза! 👋'
+  },
+  weekGreeting: {
+    es: (name) => `¡Hola${name ? ', ' + name : ''}! 👋 ¡Esta semana es la semana del español, te felicito! 😄 ¡Vamos a practicar todo en español esta semana!`,
+    ru: (name) => `Привет${name ? ', ' + name : ''}! 👋 Эта неделя у нас — неделя русского языка, с чем я тебя и поздравляю! 😄 Так что давай, общаемся по-русски!`
+  }
+};
+
+// Хелпер: возвращает текст по ключу на текущем языке недели
+function t(key, ...args) {
+  const lang = langWeek.getCurrentLang();
+  const val = T[key][lang];
+  return typeof val === 'function' ? val(...args) : val;
+}
+
 function setupSchedules({ bot, chatId, storage, session, claude, report, sendLongMessage, setAwaitingHomework }) {
+
+  // Понедельничное приветствие с объявлением языка недели — пн 08:00
+  cron.schedule('0 8 * * 1', async () => {
+    if (!chatId()) return;
+    try {
+      const msg = t('weekGreeting', 'Рома');
+      await bot.sendMessage(chatId(), msg);
+      console.log('[Cron] Week greeting sent, lang:', langWeek.getCurrentLang());
+    } catch (e) {
+      console.error('[Cron] week greeting error:', e.message);
+    }
+  }, { timezone: TIMEZONE });
 
   // Afternoon checkin — 15:00 Mon–Fri
   cron.schedule('0 15 * * 1-5', async () => {
@@ -29,18 +101,19 @@ function setupSchedules({ bot, chatId, storage, session, claude, report, sendLon
       const tomorrowDay = getTomorrowDay();
       const tomorrowLessons = schedule[tomorrowDay] || [];
       const hw = storage.loadHomework();
-      const pending = hw.tasks.filter(t => !t.done);
+      const pending = hw.tasks.filter(task => !task.done);
 
-      let msg = '¡Ey! 👋 ¿Cómo fue el cole hoy?\n¿Qué deberes te han puesto? Dímelos todos 📝';
+      let msg = t('afternoonGreeting');
 
       if (tomorrowLessons.length > 0) {
-        msg += `\n\nMañana tienes: ${tomorrowLessons.join(', ')}.`;
+        const numbered = tomorrowLessons.map((l, i) => `  ${i + 1}. ${l}`).join('\n');
+        msg += `\n\n${t('tomorrowHas')}\n${numbered}`;
       }
 
       if (pending.length > 0) {
-        msg += '\n\nDeberes aún pendientes:';
-        for (const t of pending) {
-          msg += `\n• ${t.subject}: ${t.description}${t.due ? ` (para el ${t.due})` : ''}`;
+        msg += '\n\n' + t('pendingHomework');
+        for (const task of pending) {
+          msg += `\n• ${task.subject}: ${task.description}${task.due ? ` (para el ${task.due})` : ''}`;
         }
       }
 
@@ -70,32 +143,33 @@ function setupSchedules({ bot, chatId, storage, session, claude, report, sendLon
       tomorrow.setDate(tomorrow.getDate() + 1);
       const tomorrowStr = tomorrow.toLocaleDateString('sv-SE', { timeZone: TIMEZONE });
 
-      const pending = hw.tasks.filter(t => !t.done && (!t.due || t.due <= tomorrowStr));
+      const pending = hw.tasks.filter(task => !task.done && (!task.due || task.due <= tomorrowStr));
       // H-5: показываем только выполненные за последние 7 дней, иначе список бесконечно растёт
       const sevenDaysAgoStr = new Date(Date.now() - 7 * 24 * 3600 * 1000)
         .toLocaleDateString('sv-SE', { timeZone: TIMEZONE });
-      const done = hw.tasks.filter(t => t.done && t.doneAt && t.doneAt >= sevenDaysAgoStr);
+      const done = hw.tasks.filter(task => task.done && task.doneAt && task.doneAt >= sevenDaysAgoStr);
 
-      let msg = '¡Oye, antes de dormir! 🌙\n';
+      let msg = t('eveningGreeting');
 
       if (tomorrowLessons.length > 0) {
-        msg += `Mañana tienes: ${tomorrowLessons.join(', ')}.\n`;
+        const numbered = tomorrowLessons.map((l, i) => `  ${i + 1}. ${l}`).join('\n');
+        msg += `${t('tomorrowHas')}\n${numbered}\n`;
       }
 
       if (pending.length > 0 || done.length > 0) {
-        msg += '\nDeberes:';
-        for (const t of done) {
-          msg += `\n✅ ${t.subject}: ${t.description} — hecho`;
+        msg += t('homeworkHeader');
+        for (const task of done) {
+          msg += `\n✅ ${task.subject}: ${task.description} — ${t('done')}`;
         }
-        for (const t of pending) {
-          msg += `\n⏳ ${t.subject}: ${t.description} — pendiente`;
+        for (const task of pending) {
+          msg += `\n⏳ ${task.subject}: ${task.description} — ${t('pending')}`;
         }
       }
 
       if (pending.length === 0) {
-        msg += '\n\n¡Todo listo! Descansa bien 😴';
+        msg += t('allDone');
       } else {
-        msg += '\n\n¿Está todo listo? 😴';
+        msg += t('allDoneQuestion');
       }
 
       await bot.sendMessage(chatId(), msg);
@@ -132,12 +206,10 @@ function setupSchedules({ bot, chatId, storage, session, claude, report, sendLon
       if (data && chatId()) {
         try {
           const summary = await report.generateSessionSummary(data);
-          await sendLongMessage(chatId(),
-            '⏰ Se acabó el tiempo de la sesión. ¡Buen trabajo hoy!\n\n' + summary
-          );
+          await sendLongMessage(chatId(), t('sessionTimeout') + summary);
         } catch (e) {
           console.error('[Cron] Failed to generate session summary:', e.message);
-          await bot.sendMessage(chatId(), '⏰ Sesión cerrada automáticamente. ¡Hasta la próxima! 👋').catch(() => {});
+          await bot.sendMessage(chatId(), t('sessionClosed')).catch(() => {});
         }
       }
     }

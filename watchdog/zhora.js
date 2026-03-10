@@ -314,6 +314,64 @@ async function handleLogsCommand(chatId, rawArg) {
   }
 }
 
+// ── Lang week (язык недели Макса) ─────────────────────────────────────────────
+
+const LANG_FILE = require('path').join(__dirname, '../tutor/lang-week.json');
+
+// Вычисляем ISO-номер недели — дублируем логику из lang-week.js
+// (Жора намеренно избегает зависимостей, поэтому не импортирует тот модуль)
+function getISOWeek(date) {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const dayNum = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  const weekNo = Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+  return `${d.getUTCFullYear()}-W${String(weekNo).padStart(2, '0')}`;
+}
+
+async function handleLangCommand(chatId, arg) {
+  const fs = require('fs');
+
+  // /lang без аргумента — показать текущий язык
+  if (!arg) {
+    try {
+      const data = fs.existsSync(LANG_FILE)
+        ? JSON.parse(fs.readFileSync(LANG_FILE, 'utf8'))
+        : { lang: 'es', weekStr: '' };
+      const langName = data.lang === 'ru' ? 'русский 🇷🇺' : 'испанский 🇪🇸';
+      const week = data.weekStr || '(не задана)';
+      await sendRaw(chatId,
+        `🗣 *Язык недели Макса:* ${langName}\nНеделя: ${week}\n\nЧтобы сменить: /lang ru  или  /lang es`
+      );
+    } catch (e) {
+      await sendRaw(chatId, '❌ Ошибка чтения файла языка: ' + e.message);
+    }
+    return;
+  }
+
+  const lang = arg.toLowerCase().trim();
+  if (lang !== 'es' && lang !== 'ru') {
+    await sendRaw(chatId,
+      '❌ Неизвестный язык. Доступные:\n• `ru` — русский\n• `es` — испанский'
+    );
+    return;
+  }
+
+  try {
+    const weekStr = getISOWeek(new Date());
+    const data = { lang, weekStr, setAt: new Date().toISOString() };
+    fs.writeFileSync(LANG_FILE, JSON.stringify(data, null, 2), 'utf8');
+    const langName = lang === 'ru' ? 'русский 🇷🇺' : 'испанский 🇪🇸';
+    await sendRaw(chatId,
+      `✅ Язык Макса на эту неделю: *${langName}*\nМакс начнёт использовать новый язык сразу при следующем запросе.`
+    );
+    console.log('[Zhora] Max language set to:', lang, 'week:', weekStr);
+  } catch (e) {
+    await sendRaw(chatId, '❌ Ошибка записи файла языка: ' + e.message);
+    console.error('[Zhora] Failed to set language:', e.message);
+  }
+}
+
 // Ожидающие подтверждения перезапуска: chatId → { timestamp, unit, name }
 const pendingRestarts = new Map();
 
@@ -402,6 +460,12 @@ async function pollLoop() {
           handleRestartCommand(msg.chat.id, arg).catch(e =>
             console.error('[Zhora] handleRestartCommand error:', e.message)
           );
+        } else if (msg.text.startsWith('/lang')) {
+          const arg = msg.text.split(' ')[1];
+          console.log('[Zhora] /lang command from', msg.from.id, 'arg:', arg || '(show current)');
+          handleLangCommand(msg.chat.id, arg).catch(e =>
+            console.error('[Zhora] handleLangCommand error:', e.message)
+          );
         }
       }
     } catch (e) {
@@ -479,10 +543,11 @@ async function registerCommands() {
   try {
     await tgApi('setMyCommands', {
       commands: [
-        { command: 'status',         description: 'Статус всех сервисов и инфраструктуры' },
-        { command: 'logs',           description: 'Последние 30 строк лога Снежанны' },
-        { command: 'restart',        description: 'Перезапустить сервис: /restart [snezhanna|max]' },
+        { command: 'status',          description: 'Статус всех сервисов и инфраструктуры' },
+        { command: 'logs',            description: 'Последние 30 строк лога Снежанны' },
+        { command: 'restart',         description: 'Перезапустить сервис: /restart [snezhanna|max]' },
         { command: 'restart_confirm', description: 'Подтвердить перезапуск' },
+        { command: 'lang',            description: 'Язык недели Макса: /lang [ru|es]' },
       ]
     });
     console.log('[Zhora] Bot commands registered');

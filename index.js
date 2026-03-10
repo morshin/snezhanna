@@ -660,9 +660,11 @@ ${tasksText}
         const events = await google.getCalendarEvents(2);
         const tomorrow = new Date();
         tomorrow.setDate(tomorrow.getDate() + 1);
+        // Сравниваем даты в Madrid-timezone, иначе события около полуночи попадают не в тот день
+        const tomorrowStr = tomorrow.toLocaleDateString('sv-SE', { timeZone: config.timezone });
         const tomorrowEvents = events.filter(e => {
           const d = new Date(e.start.dateTime || e.start.date);
-          return d.toDateString() === tomorrow.toDateString();
+          return d.toLocaleDateString('sv-SE', { timeZone: config.timezone }) === tomorrowStr;
         });
         if (tomorrowEvents.length > 0) {
           eventsText = tomorrowEvents.map(e => `• ${e.summary} (${formatEventTime(e)})`).join('\n');

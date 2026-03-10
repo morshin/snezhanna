@@ -6,6 +6,7 @@ const Anthropic = require('@anthropic-ai/sdk');
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const identity = fs.readFileSync(path.join(__dirname, '..', 'identity', 'IDENTITY.md'), 'utf8');
+const langWeek = require('./lang-week');
 
 // M-1: читаем из общего конфига чтобы не дублировать значения
 const config = require('../../config/nanobot.json');
@@ -45,9 +46,19 @@ function buildHomeworkContext(pendingHomework) {
   );
 }
 
+function buildLangBlock() {
+  const lang = langWeek.getCurrentLang();
+  if (lang === 'ru') {
+    return 'ЯЗЫК ЭТОЙ НЕДЕЛИ: РУССКИЙ. Общайся по-русски. Если ученик пишет на испанском без явной просьбы — похвали за испанский и мягко верни к русскому.';
+  }
+  return 'LANGUAGE THIS WEEK: SPANISH. Always respond in Spanish. If the student writes in Russian without an explicit request — gently remind them to use Spanish.';
+}
+
 async function askMax(history, sessionContext, pendingHomework) {
+  const lang = langWeek.getCurrentLang();
   const system = [
-    { type: 'text', text: `Ahora: ${nowStr()} (Europe/Madrid).` },
+    { type: 'text', text: `Сейчас: ${nowStr()} (Europe/Madrid). Язык недели: ${lang === 'ru' ? 'русский' : 'испанский'}.` },
+    { type: 'text', text: buildLangBlock() },
     { type: 'text', text: identity, cache_control: { type: 'ephemeral' } }
   ];
   if (sessionContext) {
