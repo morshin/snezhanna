@@ -7,10 +7,12 @@ const Anthropic = require('@anthropic-ai/sdk');
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const identity = fs.readFileSync(path.join(__dirname, '..', 'identity', 'IDENTITY.md'), 'utf8');
 
-const MAX_MESSAGES = 40;
-const KEEP_LAST = 30;
-const MODEL = 'claude-sonnet-4-6';
-const MAX_TOKENS = 4096;
+// M-1: читаем из общего конфига чтобы не дублировать значения
+const config = require('../../config/nanobot.json');
+const MAX_MESSAGES = config.history.max_messages;
+const KEEP_LAST = config.history.keep_last;
+const MODEL = config.model;
+const MAX_TOKENS = config.max_tokens;
 
 function nowStr() {
   return new Date().toLocaleString('es-ES', {
@@ -29,12 +31,32 @@ function trimHistory(history) {
   return history.slice(sliceAt);
 }
 
-async function askMax(history, sessionContext) {
-  const systemParts = [
-    `Ahora: ${nowStr()} (Europe/Madrid).`,
-    identity,
-    sessionContext || ''
-  ].filter(Boolean);
+function buildHomeworkContext(pendingHomework) {
+  if (!pendingHomework || pendingHomework.length === 0) return '';
+  const list = pendingHomework
+    .map(t => `• [${t.id}] ${t.subject}: ${t.description}${t.due ? ` (para el ${t.due})` : ''}`)
+    .join('\n');
+  return (
+    'Deberes pendientes del alumno:\n' + list + '\n\n' +
+    'Si el alumno menciona que ya terminó alguno de estos deberes, escribe [DONE:ID] ' +
+    'al principio de tu respuesta (antes del texto normal), donde ID es el identificador ' +
+    'exacto de la tarea. Ejemplo: [DONE:hw_1741521600000]. ' +
+    'El alumno no ve estos marcadores — son solo para el sistema.'
+  );
+}
+
+async function askMax(history, sessionContext, pendingHomework) {
+  const system = [
+    { type: 'text', text: `Ahora: ${nowStr()} (Europe/Madrid).` },
+    { type: 'text', text: identity, cache_control: { type: 'ephemeral' } }
+  ];
+  if (sessionContext) {
+    system.push({ type: 'text', text: sessionContext });
+  }
+  const hwContext = buildHomeworkContext(pendingHomework);
+  if (hwContext) {
+    system.push({ type: 'text', text: hwContext });
+  }
 
   const trimmed = trimHistory(history);
 
@@ -42,9 +64,14 @@ async function askMax(history, sessionContext) {
     const response = await anthropic.messages.create({
       model: MODEL,
       max_tokens: MAX_TOKENS,
-      system: systemParts.join('\n\n'),
-      messages: trimmed
+      system,
+      messages: trimmed,
+      betas: ['prompt-caching-2024-07-31']
     });
+
+    if (response.usage?.cache_read_input_tokens) {
+      console.log(`[Cache] hit: ${response.usage.cache_read_input_tokens} tokens cached`);
+    }
 
     const textBlocks = response.content.filter(b => b.type === 'text');
     return textBlocks.map(b => b.text).join('\n') || '';

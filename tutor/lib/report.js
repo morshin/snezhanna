@@ -51,7 +51,8 @@ Formato requerido:
 
 async function generateDailySummary(dateStr) {
   const sessionReport = storage.readSessionReport(dateStr);
-  if (!sessionReport || sessionReport.trim() === `# ${dateStr}`) {
+  // M-8: второе условие было мёртвым — appendSessionReport всегда добавляет больше чем просто заголовок
+  if (!sessionReport) {
     console.log('[Report] No sessions for', dateStr, '— skipping daily summary');
     return;
   }
@@ -83,8 +84,11 @@ ${currentProgress || '(пока пусто)'}
 
 async function generateWeeklySummary() {
   const now = new Date();
-  const weekNum = getISOWeek(now);
-  const year = now.getFullYear();
+  // M-2: номер недели и год считаем в Madrid-timezone, а не UTC
+  const madridDateStr = now.toLocaleDateString('sv-SE', { timeZone: 'Europe/Madrid' });
+  const madridDate = new Date(madridDateStr + 'T12:00:00Z');
+  const weekNum = getISOWeek(madridDate);
+  const year = madridDate.getFullYear();
   const weekStr = `${year}-W${String(weekNum).padStart(2, '0')}`;
 
   const progress = storage.readProgress();
@@ -125,9 +129,10 @@ ${pendingHw.map(t => `- ${t.subject}: ${t.description} (до ${t.due})`).join('\
 
   storage.writeWeeklyDigest(weekStr, digest);
 
-  // Clean up done homework older than a week
+  // H-4: удаляем выполненные ДЗ по дате ВЫПОЛНЕНИЯ (doneAt), не по дате добавления (added)
+  // Так ДЗ добавленное 2 недели назад и сделанное вчера не удалится раньше времени
   const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 3600 * 1000).toISOString().slice(0, 10);
-  hw.tasks = hw.tasks.filter(t => !t.done || t.added > oneWeekAgo);
+  hw.tasks = hw.tasks.filter(t => !t.done || !t.doneAt || t.doneAt > oneWeekAgo);
   storage.saveHomework(hw);
 }
 

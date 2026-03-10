@@ -61,17 +61,25 @@ async function askClaude(userMessage) {
     hour: '2-digit', minute: '2-digit',
     timeZone: config.timezone
   });
-  const systemWithTime = `Сейчас: ${nowStr} (${config.timezone}).\n\n${identity}`;
+  const system = [
+    { type: 'text', text: `Сейчас: ${nowStr} (${config.timezone}).` },
+    { type: 'text', text: identity, cache_control: { type: 'ephemeral' } }
+  ];
 
   try {
     for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
       const response = await anthropic.messages.create({
         model: config.model,
         max_tokens: config.max_tokens,
-        system: systemWithTime,
+        system,
         messages: history,
-        tools
+        tools,
+        betas: ['prompt-caching-2024-07-31']
       });
+
+      if (response.usage?.cache_read_input_tokens) {
+        console.log(`[Cache] hit: ${response.usage.cache_read_input_tokens} tokens cached`);
+      }
 
       // Log web search usage (server-side tool, handled by Anthropic)
       for (const block of response.content) {

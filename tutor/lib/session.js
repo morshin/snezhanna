@@ -34,7 +34,8 @@ function addMessage(role, content) {
 
 function getHistory() {
   if (!current) return [];
-  return current.messages;
+  // L-2: возвращаем копию массива чтобы внешний код не мог случайно мутировать историю
+  return [...current.messages];
 }
 
 function getContext() {

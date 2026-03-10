@@ -20,6 +20,31 @@ const whisper = require('../lib/whisper');
 const STATE_FILE = path.join(__dirname, '.tutor-state.json');
 let appState = { chatId: null };
 
+// Флаг: бот ждёт ответа на вопрос "Что задали?" (15:00 чекин)
+let awaitingHomework = false;
+
+function setAwaitingHomework(value) {
+  awaitingHomework = value;
+  console.log('[Max] awaitingHomework =', value);
+}
+
+// C-4: мьютекс на обработку входящих сообщений — предотвращает гонку при быстрой отправке
+// Для каждого chatId держим цепочку промисов: новое сообщение ждёт пока предыдущее не обработается
+const processingLocks = new Map();
+
+async function withLock(chatId, fn) {
+  const prev = processingLocks.get(chatId) || Promise.resolve();
+  let release;
+  const current = new Promise(resolve => { release = resolve; });
+  processingLocks.set(chatId, current);
+  try {
+    await prev;
+    return await fn();
+  } finally {
+    release();
+  }
+}
+
 function loadState() {
   try {
     if (fs.existsSync(STATE_FILE)) {
@@ -103,12 +128,73 @@ function formatErrorForUser(err) {
   return 'Algo salió mal. Intenta de nuevo.';
 }
 
+// ── Homework parsing ──────────────────────────────────────────────────────────
+
+// Вызывается один раз после того как ученик ответил на вопрос "Что задали?"
+// Парсит ответ через Claude и сохраняет задания в homework.json
+async function parseAndSaveHomework(text) {
+  const todayStr = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Madrid' });
+  const tomorrowDate = new Date();
+  tomorrowDate.setDate(tomorrowDate.getDate() + 1);
+  const tomorrowStr = tomorrowDate.toLocaleDateString('sv-SE', { timeZone: 'Europe/Madrid' });
+
+  const parsed = await askMaxOneShot(
+    `Eres un parser de deberes escolares. El alumno acaba de decir qué deberes tiene hoy.
+Extrae TODOS los deberes mencionados y devuelve SOLO un JSON array (sin texto extra).
+Cada tarea debe tener: {"subject": "Nombre de la asignatura", "description": "Qué hay que hacer", "due": "YYYY-MM-DD o vacío si no se menciona"}.
+Si no hay deberes ("nada", "no tengo", etc.), devuelve un array vacío: [].
+Hoy es ${todayStr}. Cuando diga "mañana" = ${tomorrowStr}.`,
+    `El alumno dice: "${text}"`
+  );
+
+  let tasks = [];
+  try {
+    const match = parsed.match(/\[[\s\S]*\]/);
+    tasks = match ? JSON.parse(match[0]) : [];
+  } catch (e) {
+    console.error('[Max] Failed to parse homework JSON:', e.message, '| raw:', parsed);
+    tasks = [];
+  }
+
+  for (const task of tasks) {
+    if (task.subject && task.description) {
+      storage.addHomeworkTask(task);
+    }
+  }
+
+  console.log(`[Max] Homework parsed: ${tasks.length} task(s) saved`);
+  return tasks;
+}
+
+// Вырезает маркеры [DONE:hw_xxx] из ответа Claude и возвращает чистый текст + список ID
+function extractDoneMarkers(text) {
+  const doneIds = [];
+  const cleanText = text.replace(/\[DONE:([^\]]+)\]/g, (_, id) => {
+    doneIds.push(id.trim());
+    return '';
+  }).trim();
+  return { cleanText, doneIds };
+}
+
 // ── Commands ──────────────────────────────────────────────────────────────────
 
 async function handleCommand(msg, text) {
   const chatId = msg.chat.id;
 
-  if (text === '/done' || text === '/fin') {
+  // L-3: /start — Telegram отправляет его автоматически при первом открытии бота
+  if (text === '/start') {
+    const schedule = storage.loadSchedule();
+    if (!schedule) {
+      const reply = startOnboarding();
+      await sendLongMessage(chatId, reply);
+    } else {
+      await bot.sendMessage(chatId, '¡Hola! 👋 Soy Max, tu ayudante de estudios. ¿En qué te ayudo hoy?');
+    }
+    return true;
+  }
+
+  // H-3: добавлен /стоп из ТЗ
+  if (text === '/done' || text === '/fin' || text === '/стоп') {
     if (!session.isActive()) {
       await bot.sendMessage(chatId, 'No hay sesión activa 🤷');
       return true;
@@ -137,12 +223,13 @@ async function handleCommand(msg, text) {
       await bot.sendMessage(chatId, startOnboarding());
       return true;
     }
-    let msg = '📋 Tu horario:\n';
+    // M-5: переименовано в scheduleText чтобы не затенять параметр msg функции
+    let scheduleText = '📋 Tu horario:\n';
     for (const day of WEEKDAYS) {
       const lessons = schedule[day] || [];
-      msg += `\n**${WEEKDAY_LABELS[day]}:** ${lessons.join(', ')}`;
+      scheduleText += `\n**${WEEKDAY_LABELS[day]}:** ${lessons.join(', ')}`;
     }
-    await bot.sendMessage(chatId, msg);
+    await bot.sendMessage(chatId, scheduleText);
     return true;
   }
 
@@ -158,11 +245,12 @@ async function handleCommand(msg, text) {
       await bot.sendMessage(chatId, '¡No tienes deberes pendientes! 🎉');
       return true;
     }
-    let msg = '📝 Deberes pendientes:\n';
+    // M-5: переименовано в hwText чтобы не затенять параметр msg функции
+    let hwText = '📝 Deberes pendientes:\n';
     for (const t of pending) {
-      msg += `\n• ${t.subject}: ${t.description}${t.due ? ` (para ${t.due})` : ''}`;
+      hwText += `\n• ${t.subject}: ${t.description}${t.due ? ` (para ${t.due})` : ''}`;
     }
-    await bot.sendMessage(chatId, msg);
+    await bot.sendMessage(chatId, hwText);
     return true;
   }
 
@@ -197,6 +285,8 @@ bot.on('message', async (msg) => {
 
   const text = msg.text.trim();
 
+  // C-4: мьютекс — обрабатываем сообщения строго последовательно
+  await withLock(chatId, async () => {
   try {
     // Commands
     if (text.startsWith('/')) {
@@ -224,21 +314,45 @@ bot.on('message', async (msg) => {
       session.startSession('General');
     }
 
+    // Если бот ждал ответа на "Что задали?" — парсим ДЗ из этого сообщения
+    if (awaitingHomework) {
+      awaitingHomework = false;
+      try {
+        const tasks = await parseAndSaveHomework(text);
+        if (tasks.length > 0) {
+          const taskList = tasks.map(t => `• ${t.subject}: ${t.description}${t.due ? ` (para el ${t.due})` : ''}`).join('\n');
+          console.log('[Max] Homework saved, notifying Claude context');
+          // Показываем подтверждение сохранения в лог, но не прерываем — Claude ответит сам
+          session.addMessage('user', `[Sistema: se guardaron ${tasks.length} deber(es): ${taskList}]`);
+        }
+      } catch (e) {
+        console.error('[Max] Homework parse error:', e.message);
+      }
+    }
+
     // Add to session + send to Claude
     session.addMessage('user', text);
     await bot.sendChatAction(chatId, 'typing');
 
     const history = session.getHistory();
     const context = session.getContext();
-    const reply = await askMax(history, context);
+    const pending = storage.loadHomework().tasks.filter(t => !t.done);
+    const reply = await askMax(history, context, pending);
 
-    session.addMessage('assistant', reply);
-    await sendLongMessage(chatId, reply);
+    // Извлекаем маркеры выполненных ДЗ и отмечаем их в storage
+    const { cleanText, doneIds } = extractDoneMarkers(reply);
+    for (const id of doneIds) {
+      storage.markHomeworkDone(id);
+    }
+
+    session.addMessage('assistant', cleanText);
+    await sendLongMessage(chatId, cleanText);
 
   } catch (err) {
     console.error('[Max] Error:', err.message);
     await bot.sendMessage(chatId, formatErrorForUser(err)).catch(() => {});
   }
+  }); // withLock
 });
 
 // ── Photo handler ─────────────────────────────────────────────────────────────
@@ -253,6 +367,7 @@ bot.on('photo', async (msg) => {
     saveState();
   }
 
+  await withLock(chatId, async () => {
   try {
     await bot.sendChatAction(chatId, 'typing');
 
@@ -289,6 +404,7 @@ bot.on('photo', async (msg) => {
     console.error('[Max] Photo error:', err.message);
     await bot.sendMessage(chatId, formatErrorForUser(err)).catch(() => {});
   }
+  }); // withLock
 });
 
 // ── Voice handler ─────────────────────────────────────────────────────────────
@@ -303,6 +419,7 @@ bot.on('voice', async (msg) => {
     saveState();
   }
 
+  await withLock(chatId, async () => {
   try {
     await bot.sendChatAction(chatId, 'typing');
 
@@ -311,7 +428,9 @@ bot.on('voice', async (msg) => {
     const audioRes = await axios.get(fileUrl, { responseType: 'arraybuffer' });
     const text = await whisper.transcribe(Buffer.from(audioRes.data), 'voice.ogg', 'es');
 
-    await bot.sendMessage(chatId, `🎤 _"${text}"_`, { parse_mode: 'Markdown' });
+    // M-4: без экранирования Markdown-символы в тексте транскрипции вызывают ошибку API
+    const escapedText = text.replace(/[_*`\[]/g, '\\$&');
+    await bot.sendMessage(chatId, `🎤 _"${escapedText}"_`, { parse_mode: 'Markdown' });
 
     // Check if schedule exists — if not, start onboarding
     if (onboarding) {
@@ -331,19 +450,40 @@ bot.on('voice', async (msg) => {
       session.startSession('General');
     }
 
+    // Если бот ждал ответа на "Что задали?" — парсим ДЗ из голосового
+    if (awaitingHomework) {
+      awaitingHomework = false;
+      try {
+        const tasks = await parseAndSaveHomework(text);
+        if (tasks.length > 0) {
+          const taskList = tasks.map(t => `• ${t.subject}: ${t.description}${t.due ? ` (para el ${t.due})` : ''}`).join('\n');
+          session.addMessage('user', `[Sistema: se guardaron ${tasks.length} deber(es): ${taskList}]`);
+        }
+      } catch (e) {
+        console.error('[Max] Homework parse error (voice):', e.message);
+      }
+    }
+
     session.addMessage('user', text);
 
     const history = session.getHistory();
     const context = session.getContext();
-    const reply = await askMax(history, context);
+    const pending = storage.loadHomework().tasks.filter(t => !t.done);
+    const reply = await askMax(history, context, pending);
 
-    session.addMessage('assistant', reply);
-    await sendLongMessage(chatId, reply);
+    const { cleanText, doneIds } = extractDoneMarkers(reply);
+    for (const id of doneIds) {
+      storage.markHomeworkDone(id);
+    }
+
+    session.addMessage('assistant', cleanText);
+    await sendLongMessage(chatId, cleanText);
 
   } catch (err) {
     console.error('[Max] Voice error:', err.message);
     await bot.sendMessage(chatId, formatErrorForUser(err)).catch(() => {});
   }
+  }); // withLock
 });
 
 // ── Startup ───────────────────────────────────────────────────────────────────
@@ -361,15 +501,25 @@ async function main() {
     session,
     claude: { askMax, askMaxOneShot },
     report,
-    sendLongMessage
+    sendLongMessage,
+    setAwaitingHomework
   });
 
   if (appState.chatId) {
-    try {
-      await bot.sendMessage(appState.chatId, '¡Hola! 👋 Soy Max, tu ayudante de estudio. ¿Empezamos?');
-      console.log('[Max] Startup message sent to chatId:', appState.chatId);
-    } catch (e) {
-      console.error('[Max] Failed to send startup message:', e.message);
+    // M-6: Жора может перезапускать сервис несколько раз — отправляем приветствие не чаще раза в 4 часа
+    const STARTUP_COOLDOWN_MS = 4 * 60 * 60 * 1000;
+    const lastSent = appState.lastStartupAt || 0;
+    if (Date.now() - lastSent > STARTUP_COOLDOWN_MS) {
+      try {
+        await bot.sendMessage(appState.chatId, '¡Hola! 👋 Soy Max, tu ayudante de estudio. ¿Empezamos?');
+        appState.lastStartupAt = Date.now();
+        saveState();
+        console.log('[Max] Startup message sent to chatId:', appState.chatId);
+      } catch (e) {
+        console.error('[Max] Failed to send startup message:', e.message);
+      }
+    } else {
+      console.log('[Max] Startup message skipped (cooldown, last sent', Math.round((Date.now() - lastSent) / 60000), 'min ago)');
     }
   } else {
     console.log('[Max] No chatId saved — will save on first message');

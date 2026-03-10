@@ -32,9 +32,15 @@ function loadSchedule() {
 }
 
 function saveSchedule(data) {
-  data.updated = new Date().toISOString().slice(0, 10);
-  fs.writeFileSync(SCHEDULE_FILE, JSON.stringify(data, null, 2), 'utf8');
-  console.log('[Storage] Schedule saved');
+  try {
+    // M-7: создаём копию чтобы не мутировать объект вызывающего кода
+    const toSave = { ...data, updated: new Date().toISOString().slice(0, 10) };
+    fs.writeFileSync(SCHEDULE_FILE, JSON.stringify(toSave, null, 2), 'utf8');
+    console.log('[Storage] Schedule saved');
+  } catch (e) {
+    console.error('[Storage] Failed to save schedule:', e.message);
+    throw e;
+  }
 }
 
 // ── Homework ──────────────────────────────────────────────────────────────────
@@ -50,18 +56,24 @@ function loadHomework() {
 }
 
 function saveHomework(data) {
-  fs.writeFileSync(HOMEWORK_FILE, JSON.stringify(data, null, 2), 'utf8');
+  try {
+    fs.writeFileSync(HOMEWORK_FILE, JSON.stringify(data, null, 2), 'utf8');
+  } catch (e) {
+    console.error('[Storage] Failed to save homework:', e.message);
+    throw e;
+  }
 }
 
 function addHomeworkTask(task) {
   const hw = loadHomework();
-  const id = 'hw_' + String(hw.tasks.length + 1).padStart(3, '0');
+  const id = 'hw_' + Date.now();
   hw.tasks.push({
     id,
     subject: task.subject || '',
     description: task.description || '',
     due: task.due || '',
     done: false,
+    doneAt: null,
     added: new Date().toISOString().slice(0, 10)
   });
   saveHomework(hw);
@@ -73,17 +85,24 @@ function markHomeworkDone(taskId) {
   const task = hw.tasks.find(t => t.id === taskId);
   if (task) {
     task.done = true;
+    task.doneAt = new Date().toISOString().slice(0, 10);
     saveHomework(hw);
+    console.log('[Storage] Homework marked done:', taskId, task.subject);
   }
 }
 
 // ── Session reports ───────────────────────────────────────────────────────────
 
 function appendSessionReport(dateStr, md) {
-  const filePath = path.join(SESSIONS_DIR, `${dateStr}.md`);
-  const existing = fs.existsSync(filePath) ? fs.readFileSync(filePath, 'utf8') : `# ${dateStr}\n`;
-  fs.writeFileSync(filePath, existing + '\n' + md + '\n', 'utf8');
-  console.log('[Storage] Session report appended:', filePath);
+  try {
+    const filePath = path.join(SESSIONS_DIR, `${dateStr}.md`);
+    const existing = fs.existsSync(filePath) ? fs.readFileSync(filePath, 'utf8') : `# ${dateStr}\n`;
+    fs.writeFileSync(filePath, existing + '\n' + md + '\n', 'utf8');
+    console.log('[Storage] Session report appended:', filePath);
+  } catch (e) {
+    console.error('[Storage] Failed to append session report:', e.message);
+    throw e;
+  }
 }
 
 // ── Progress ──────────────────────────────────────────────────────────────────
@@ -98,16 +117,26 @@ function readProgress() {
 }
 
 function writeProgress(md) {
-  fs.writeFileSync(PROGRESS_FILE, md, 'utf8');
-  console.log('[Storage] Progress updated');
+  try {
+    fs.writeFileSync(PROGRESS_FILE, md, 'utf8');
+    console.log('[Storage] Progress updated');
+  } catch (e) {
+    console.error('[Storage] Failed to write progress:', e.message);
+    throw e;
+  }
 }
 
 // ── Weekly digest ─────────────────────────────────────────────────────────────
 
 function writeWeeklyDigest(weekStr, md) {
-  const filePath = path.join(WEEKLY_DIR, `${weekStr}.md`);
-  fs.writeFileSync(filePath, md, 'utf8');
-  console.log('[Storage] Weekly digest written:', filePath);
+  try {
+    const filePath = path.join(WEEKLY_DIR, `${weekStr}.md`);
+    fs.writeFileSync(filePath, md, 'utf8');
+    console.log('[Storage] Weekly digest written:', filePath);
+  } catch (e) {
+    console.error('[Storage] Failed to write weekly digest:', e.message);
+    throw e;
+  }
 }
 
 // ── Read session files for a date ─────────────────────────────────────────────

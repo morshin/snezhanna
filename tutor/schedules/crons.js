@@ -8,16 +8,16 @@ const DAYS_ES = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes'
 function getTomorrowDay() {
   const tomorrow = new Date();
   tomorrow.setDate(tomorrow.getDate() + 1);
-  const dayIdx = parseInt(tomorrow.toLocaleDateString('en-US', { weekday: 'numeric', timeZone: TIMEZONE }));
-  // JS: 0=Sun, but we need Spanish day name
-  return DAYS_ES[tomorrow.getDay()];
+  // C-1: используем Madrid-timezone для получения правильного дня недели
+  const dayName = tomorrow.toLocaleDateString('es-ES', { weekday: 'long', timeZone: TIMEZONE });
+  return dayName.toLowerCase(); // 'lunes', 'martes', etc.
 }
 
 function getTodayStr() {
   return new Date().toLocaleDateString('sv-SE', { timeZone: TIMEZONE });
 }
 
-function setupSchedules({ bot, chatId, storage, session, claude, report, sendLongMessage }) {
+function setupSchedules({ bot, chatId, storage, session, claude, report, sendLongMessage, setAwaitingHomework }) {
 
   // Afternoon checkin — 15:00 Mon–Fri
   cron.schedule('0 15 * * 1-5', async () => {
@@ -31,20 +31,24 @@ function setupSchedules({ bot, chatId, storage, session, claude, report, sendLon
       const hw = storage.loadHomework();
       const pending = hw.tasks.filter(t => !t.done);
 
-      let msg = '¡Ey! 👋 ¿Cómo fue el cole hoy?\n¿Qué deberes te han puesto?';
+      let msg = '¡Ey! 👋 ¿Cómo fue el cole hoy?\n¿Qué deberes te han puesto? Dímelos todos 📝';
 
       if (tomorrowLessons.length > 0) {
         msg += `\n\nMañana tienes: ${tomorrowLessons.join(', ')}.`;
       }
 
       if (pending.length > 0) {
-        msg += '\n\nDeberes pendientes:';
+        msg += '\n\nDeberes aún pendientes:';
         for (const t of pending) {
-          msg += `\n• ${t.subject}: ${t.description}${t.due ? ` (para ${t.due})` : ''}`;
+          msg += `\n• ${t.subject}: ${t.description}${t.due ? ` (para el ${t.due})` : ''}`;
         }
       }
 
       await bot.sendMessage(chatId(), msg);
+
+      // Следующий ответ ученика будет автоматически распарсен как список ДЗ
+      if (setAwaitingHomework) setAwaitingHomework(true);
+
     } catch (e) {
       console.error('[Cron] afternoon checkin error:', e.message);
     }
@@ -67,7 +71,10 @@ function setupSchedules({ bot, chatId, storage, session, claude, report, sendLon
       const tomorrowStr = tomorrow.toLocaleDateString('sv-SE', { timeZone: TIMEZONE });
 
       const pending = hw.tasks.filter(t => !t.done && (!t.due || t.due <= tomorrowStr));
-      const done = hw.tasks.filter(t => t.done);
+      // H-5: показываем только выполненные за последние 7 дней, иначе список бесконечно растёт
+      const sevenDaysAgoStr = new Date(Date.now() - 7 * 24 * 3600 * 1000)
+        .toLocaleDateString('sv-SE', { timeZone: TIMEZONE });
+      const done = hw.tasks.filter(t => t.done && t.doneAt && t.doneAt >= sevenDaysAgoStr);
 
       let msg = '¡Oye, antes de dormir! 🌙\n';
 
