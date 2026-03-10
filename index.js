@@ -73,8 +73,7 @@ async function askClaude(userMessage) {
         max_tokens: config.max_tokens,
         system,
         messages: history,
-        tools,
-        betas: ['prompt-caching-2024-07-31']
+        tools
       });
 
       if (response.usage?.cache_read_input_tokens) {

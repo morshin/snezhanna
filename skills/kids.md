@@ -7,6 +7,7 @@
 - Последняя сессия: read_file("kids/sessions/YYYY-MM-DD.md") за сегодня или вчера
 - Прогресс по предметам: read_file("kids/progress.md")
 - Недельный дайджест: read_file("kids/weekly/YYYY-Wxx.md")
+- Домашние задания: read_file("kids/homework.json") — текущие задания (done/pending, doneAt)
 
 ## Когда упоминать
 

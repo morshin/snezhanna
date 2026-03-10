@@ -52,6 +52,7 @@ node lib/indexer.js --incremental # incremental update
 **`index.js`** — Snezhanna main bot:
 - Telegram polling with single-user access control (by numeric ID or username from `TELEGRAM_ALLOWED_USER_ID`)
 - Sends all messages to Claude via `@anthropic-ai/sdk` with a rolling conversation history (window: 40 messages, keep 30)
+- Prompt caching enabled (`betas: ['prompt-caching-2024-07-31']`): identity block marked with `cache_control: { type: 'ephemeral' }` to reduce input token usage and avoid rate limits; cache hits logged as `[Cache] hit: N tokens cached`
 - Anthropic native web search (`web_search_20250305`) enabled as a server-side tool — Claude can search the web for current info (rates, news, weather) without any local execution
 - Auto-fetches Google Calendar / Gmail context when keywords are detected in user messages (Russian keywords: "календар", "встреч", "сегодня", "почт", etc.)
 - On startup: calls `yadiskDirs.ensureDirs()` to create any missing agent subdirs (`index/`, `memory/`, `projects/`, `fitness/`, `drafts/`, `digests/`)
@@ -68,7 +69,11 @@ node lib/indexer.js --incremental # incremental update
 - In-memory session tracking (subject, topics, stuck points, mood)
 - Photo support via shared `lib/vision.js` (homework photos, textbook pages)
 - Voice support via shared `lib/whisper.js` with `language='es'`
-- Commands: `/done` (end session), `/schedule` (view/reset timetable), `/homework` (pending tasks), `/reset`, `/status`
+- Prompt caching enabled (same as Snezhanna): identity cached, cache hits logged
+- Homework tracking: afternoon checkin (15:00) asks "what homework?", next reply auto-parsed via `askMaxOneShot` and saved to `homework.json`; Claude marks completed homework with `[DONE:ID]` markers stripped before display
+- Message processing mutex (`withLock`) prevents race conditions on rapid messages
+- Startup message cooldown (4 hours) to avoid spam on Zhora restarts
+- Commands: `/start`, `/done` / `/стоп` (end session), `/schedule` (view/reset timetable), `/homework` (pending tasks), `/reset`, `/status`
 - Scheduled tasks: afternoon checkin (15:00), evening reminder (21:00), daily summary (20:30), weekly digest (Sunday 18:00), session auto-close (every 5 min, 30 min idle)
 - Reports to `/mnt/yadisk-agent/kids/`: daily sessions, progress.md, weekly digests, homework.json
 - Uses `dotenv` with absolute path to `/opt/snezhanna/.env`

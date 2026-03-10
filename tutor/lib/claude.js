@@ -65,8 +65,7 @@ async function askMax(history, sessionContext, pendingHomework) {
       model: MODEL,
       max_tokens: MAX_TOKENS,
       system,
-      messages: trimmed,
-      betas: ['prompt-caching-2024-07-31']
+      messages: trimmed
     });
 
     if (response.usage?.cache_read_input_tokens) {
