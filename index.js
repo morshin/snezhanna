@@ -30,6 +30,74 @@ const identity = fs.readFileSync(path.join(__dirname, 'identity/IDENTITY.md'), '
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 let history = [];
 
+// Одноразовый вызов Claude без использования глобальной истории разговора.
+// Используется для крон-задач: у них изолированный локальный контекст,
+// они не загрязняют историю чата и не ломаются от "отравленной" истории.
+async function askClaudeOneShot(userMessage) {
+  const tools = getAvailableTools();
+  const MAX_TOOL_ROUNDS = 10;
+
+  const nowStr = new Date().toLocaleString('ru-RU', {
+    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
+    hour: '2-digit', minute: '2-digit',
+    timeZone: config.timezone
+  });
+  const system = [
+    { type: 'text', text: `Сейчас: ${nowStr} (${config.timezone}).` },
+    { type: 'text', text: identity, cache_control: { type: 'ephemeral' } }
+  ];
+
+  let localHistory = [{ role: 'user', content: userMessage }];
+
+  for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+    const response = await anthropic.messages.create({
+      model: config.model,
+      max_tokens: config.max_tokens,
+      system,
+      messages: localHistory,
+      tools
+    });
+
+    if (response.usage?.cache_read_input_tokens) {
+      console.log(`[Cache/OneShot] hit: ${response.usage.cache_read_input_tokens} tokens cached`);
+    }
+
+    if (response.stop_reason === 'tool_use') {
+      localHistory.push({ role: 'assistant', content: response.content });
+
+      const toolResults = [];
+      for (const block of response.content) {
+        if (block.type === 'tool_use') {
+          console.log(`[Tools/OneShot] Calling ${block.name}:`, JSON.stringify(block.input));
+          try {
+            const result = await executeTool(block.name, block.input);
+            toolResults.push({
+              type: 'tool_result',
+              tool_use_id: block.id,
+              content: JSON.stringify(result)
+            });
+          } catch (err) {
+            console.error(`[Tools/OneShot] Error in ${block.name}:`, err.message);
+            toolResults.push({
+              type: 'tool_result',
+              tool_use_id: block.id,
+              content: JSON.stringify({ error: err.message }),
+              is_error: true
+            });
+          }
+        }
+      }
+      localHistory.push({ role: 'user', content: toolResults });
+      continue;
+    }
+
+    const textBlocks = response.content.filter(b => b.type === 'text');
+    return textBlocks.map(b => b.text).join('\n') || '';
+  }
+
+  return 'Извини, Вовик, слишком долго думала над этим.';
+}
+
 async function askClaude(userMessage) {
   // Сохраняем снимок истории до вызова — восстановим при ошибке,
   // чтобы не оставлять в истории осиротевшие tool_use / tool_result блоки
@@ -620,6 +688,7 @@ function setupSchedules() {
   // Morning briefing — 08:00 Madrid
   cron.schedule('0 8 * * *', async () => {
     if (!appState.chatId) return;
+    console.log('[Schedule] morning_briefing fired');
     try {
       let eventsText = '• Событий нет';
       if (google.isAuthorized()) {
@@ -644,8 +713,9 @@ ${eventsText}
 ${tasksText}
 
 Кратко прокомментируй день и выдели 1-2 самые важные вещи. Будь живым и тёплым.`;
-      const reply = await askClaude(prompt);
+      const reply = await askClaudeOneShot(prompt);
       await sendToVova(reply);
+      console.log('[Schedule] morning_briefing done');
     } catch (e) {
       console.error('[Schedule] morning_briefing error:', e.message);
     }
@@ -654,6 +724,7 @@ ${tasksText}
   // Evening check-in — 19:00 Madrid
   cron.schedule('0 19 * * *', async () => {
     if (!appState.chatId) return;
+    console.log('[Schedule] evening_checkin fired');
     try {
       let eventsText = '• Событий нет';
       if (google.isAuthorized()) {
@@ -686,7 +757,7 @@ ${tasksText}
 ${eventsText}
 ${diskSection}
 ${chatSection}`;
-      const reply = await askClaude(prompt);
+      const reply = await askClaudeOneShot(prompt);
       await sendToVova(reply);
       diskLog.clear();
       chatMonitor.clear();
@@ -703,6 +774,7 @@ ${chatSection}`;
       } catch (checklistErr) {
         console.error('[Schedule] checklist send error:', checklistErr.message);
       }
+      console.log('[Schedule] evening_checkin done');
     } catch (e) {
       console.error('[Schedule] evening_checkin error:', e.message);
     }
@@ -711,6 +783,7 @@ ${chatSection}`;
   // Strava sync — Sunday 09:30 Madrid (before weekly digest)
   cron.schedule('30 9 * * 0', async () => {
     if (!strava.isConfigured()) return;
+    console.log('[Schedule] strava_sync fired');
     try {
       const result = await strava.syncCurrentWeek();
       if (result) {
@@ -724,6 +797,7 @@ ${chatSection}`;
   // Weekly digest — Sunday 10:00 Madrid
   cron.schedule('0 10 * * 0', async () => {
     if (!appState.chatId) return;
+    console.log('[Schedule] weekly_digest fired');
     try {
       let fitnessBlock = '';
       try {
@@ -737,8 +811,9 @@ ${chatSection}`;
 
       const prompt = `Составь воскресный еженедельный дайджест для Вовочки.
 Включи: краткий обзор прошедшей недели, что важного на следующей неделе, бюрократические дедлайны.${fitnessBlock}`;
-      const reply = await askClaude(prompt);
+      const reply = await askClaudeOneShot(prompt);
       await sendToVova(reply);
+      console.log('[Schedule] weekly_digest done');
     } catch (e) {
       console.error('[Schedule] weekly_digest error:', e.message);
     }
@@ -764,9 +839,72 @@ ${chatSection}`;
         }
       }
     } catch (e) {
-      // Silently skip calendar errors in reminder loop
+      console.error('[Schedule] calendar_reminder error:', e.message);
     }
   });
+
+  // Email check — every 30 minutes
+  // Храним ID уже обработанных писем в памяти, чтобы не присылать дубли между запусками крона.
+  // При перезапуске бота сет очищается — это нормально: первый запуск даст свежий дайджест.
+  const seenEmailIds = new Set();
+  // Флаг первого запуска: на старте только заполняем seenEmailIds без уведомления,
+  // чтобы не захламлять чат накопившимися письмами при рестарте бота
+  let emailCheckFirstRun = true;
+
+  cron.schedule('*/30 * * * *', async () => {
+    if (!appState.chatId || !google.isAuthorized()) return;
+    try {
+      const messages = await google.getGmailMessages(20, true);
+      const newMessages = messages.filter(m => !seenEmailIds.has(m.id));
+
+      // Помечаем все текущие ID как виденные
+      messages.forEach(m => seenEmailIds.add(m.id));
+
+      if (emailCheckFirstRun) {
+        // На первом запуске просто запоминаем текущие письма, не уведомляем
+        emailCheckFirstRun = false;
+        console.log(`[Schedule] email_check first run: seeded ${messages.length} existing unread email(s)`);
+        return;
+      }
+
+      if (newMessages.length === 0) return;
+
+      console.log(`[Schedule] email_check: ${newMessages.length} new unread email(s)`);
+
+      // Получаем полный текст каждого нового письма (getMessageById авто-помечает как прочитанное)
+      const fullMessages = [];
+      for (const m of newMessages.slice(0, 10)) {
+        try {
+          const full = await google.getMessageById(m.id);
+          fullMessages.push(full);
+        } catch (e) {
+          console.error('[Schedule] email_check: failed to get message', m.id, e.message);
+        }
+      }
+
+      if (fullMessages.length === 0) return;
+
+      const emailsText = fullMessages.map((m, i) =>
+        `--- Письмо ${i + 1} ---\nОт: ${m.from}\nКому: ${m.to}\nТема: ${m.subject}\nДата: ${m.date}\n\n${m.body.slice(0, 2000)}`
+      ).join('\n\n');
+
+      const prompt = `Пришли новые письма на почту (${fullMessages.length} шт.). \
+Проанализируй каждое и составь краткий дайджест для Вовы. \
+Для каждого письма укажи:
+- Тип: 📋 Задача / 📅 Событие / 📁 Проектный апдейт / ℹ️ Инфо / 🗑 Спам
+- Суть в 1–2 предложениях
+- Что нужно сделать (если нужно)
+
+Письма, требующие действий, — вынеси первыми. Не добавляй лишней воды.
+
+${emailsText}`;
+
+      const reply = await askClaudeOneShot(prompt);
+      await sendToVova(reply);
+    } catch (e) {
+      console.error('[Schedule] email_check error:', e.message);
+    }
+  }, { timezone: config.timezone });
 
   console.log('[Snezhanna] Schedules initialized (timezone: Europe/Madrid)');
 }

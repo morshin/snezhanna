@@ -267,16 +267,41 @@ async function handleStatusCommand(chatId) {
 
 async function handleLogsCommand(chatId, rawArg) {
   try {
-    // Количество строк: /logs или /logs 50
-    const n = Math.min(Math.max(parseInt(rawArg, 10) || 30, 5), 100);
+    // Парсим аргументы: /logs [snezhanna|max|index] [N]
+    // Примеры: /logs, /logs 50, /logs max, /logs max 20, /logs index
+    const parts = (rawArg || '').trim().split(/\s+/);
 
-    // --output=cat даёт чистый текст сообщений без метаданных systemd
-    const { stdout } = await sh(
-      `journalctl -u snezhanna -n ${n} --no-pager --output=cat 2>/dev/null`
-    );
+    let target = 'snezhanna';
+    let nRaw = null;
+
+    for (const part of parts) {
+      if (/^(snezhanna|снежанна)$/i.test(part)) { target = 'snezhanna'; }
+      else if (/^(max|макс|tutor)$/i.test(part))  { target = 'tutor'; }
+      else if (/^(index|индекс)$/i.test(part))     { target = 'index'; }
+      else if (/^\d+$/.test(part))                 { nRaw = part; }
+    }
+
+    const n = Math.min(Math.max(parseInt(nRaw, 10) || 30, 5), 100);
+
+    let stdout, label, errorUnit;
+
+    if (target === 'index') {
+      // Индексер пишет в файл, не в journalctl
+      const { stdout: tail } = await sh(`tail -n ${n} /var/log/snezhanna-index.log 2>/dev/null`);
+      stdout = tail;
+      label = 'Индексер Яндекс.Диска';
+      errorUnit = null;
+    } else {
+      const { stdout: jout } = await sh(
+        `journalctl -u ${target} -n ${n} --no-pager --output=cat 2>/dev/null`
+      );
+      stdout = jout;
+      label = target === 'snezhanna' ? 'Снежанны' : 'Макса';
+      errorUnit = target;
+    }
 
     if (!stdout || stdout.trim() === '') {
-      await sendRaw(chatId, '📋 *Логи Снежанны*\n\nЛоги пусты или сервис ещё не запускался.');
+      await sendRaw(chatId, `📋 *Логи ${label}*\n\nЛоги пусты или сервис ещё не запускался.`);
       return;
     }
 
@@ -285,24 +310,25 @@ async function handleLogsCommand(chatId, rawArg) {
       line.length > 180 ? line.slice(0, 177) + '…' : line
     );
 
-    // Считаем ошибки за последний час
-    const { stdout: errOut } = await sh(
-      'journalctl -u snezhanna --since "1 hour ago" --no-pager -q 2>/dev/null' +
-      ' | grep -ic "error\\|fatal\\|uncaught" || echo 0'
-    );
-    const errorCount = parseInt(errOut, 10) || 0;
+    // Считаем ошибки за последний час (только для systemd-юнитов)
+    let footer = '';
+    if (errorUnit) {
+      const { stdout: errOut } = await sh(
+        `journalctl -u ${errorUnit} --since "1 hour ago" --no-pager -q 2>/dev/null` +
+        ' | grep -ic "error\\|fatal\\|uncaught" || echo 0'
+      );
+      const errorCount = parseInt(errOut, 10) || 0;
+      footer = errorCount > 0
+        ? `\n⚠️ Ошибок за последний час: *${errorCount}*`
+        : '\n✅ Ошибок за последний час нет';
+    }
 
-    const header = `📋 *Логи Снежанны* — последние ${lines.length} строк\n`;
-    const footer = errorCount > 0
-      ? `\n⚠️ Ошибок за последний час: *${errorCount}*`
-      : '\n✅ Ошибок за последний час нет';
+    const header = `📋 *Логи ${label}* — последние ${lines.length} строк\n`;
 
     // Telegram ограничение: 4096 символов на сообщение
-    // Резервируем место под header, code-fence и footer
     const maxBody = 4096 - header.length - footer.length - 10;
     let body = lines.join('\n');
     if (body.length > maxBody) {
-      // Отрезаем начало, оставляем хвост (самые свежие строки)
       body = '…\n' + body.slice(body.length - maxBody + 2);
     }
 
@@ -445,7 +471,7 @@ async function pollLoop() {
           );
         } else if (msg.text.startsWith('/logs')) {
           const arg = msg.text.split(' ')[1];
-          console.log('[Zhora] /logs command from', msg.from.id, 'arg:', arg || '(default 30)');
+          console.log('[Zhora] /logs command from', msg.from.id, 'args:', arg || '(default)');
           handleLogsCommand(msg.chat.id, arg).catch(e =>
             console.error('[Zhora] handleLogsCommand error:', e.message)
           );
@@ -544,7 +570,7 @@ async function registerCommands() {
     await tgApi('setMyCommands', {
       commands: [
         { command: 'status',          description: 'Статус всех сервисов и инфраструктуры' },
-        { command: 'logs',            description: 'Последние 30 строк лога Снежанны' },
+        { command: 'logs',            description: 'Логи: /logs [snezhanna|max|index] [N]' },
         { command: 'restart',         description: 'Перезапустить сервис: /restart [snezhanna|max]' },
         { command: 'restart_confirm', description: 'Подтвердить перезапуск' },
         { command: 'lang',            description: 'Язык недели Макса: /lang [ru|es]' },
