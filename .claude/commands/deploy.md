@@ -1,15 +1,37 @@
 # Deploy Snezhanna
 
-Restart the bot service and verify it's running correctly.
+Restart one or all bot services and verify they are running correctly.
+
+## Deploy all services
+
+```bash
+sudo systemctl restart snezhanna tutor zhora
+```
+
+## Deploy a specific service
+
+```bash
+sudo systemctl restart snezhanna   # main bot
+sudo systemctl restart tutor       # Max tutor bot
+sudo systemctl restart zhora       # watchdog
+```
 
 ## Steps
 
-1. Run `sudo systemctl restart snezhanna` to restart the service.
-2. Wait 3 seconds, then run `sudo systemctl status snezhanna` to check the service status.
-3. Run `journalctl -u snezhanna -n 30 --no-pager` to show the last 30 log lines.
+1. Restart the target service(s).
+2. Wait 3 seconds, then check status:
+   ```bash
+   sudo systemctl status snezhanna tutor zhora
+   ```
+3. Show the last 30 log lines for the restarted service(s):
+   ```bash
+   journalctl -u snezhanna -n 30 --no-pager
+   journalctl -u tutor -n 30 --no-pager
+   journalctl -u zhora -n 30 --no-pager
+   ```
 4. Report:
-   - Whether the service started successfully (Active: active (running)).
+   - Whether each service started successfully (`Active: active (running)`).
    - Any errors or warnings in the logs.
    - The startup message timestamp.
 
-If the service failed to start, show the full error from the logs and suggest a fix.
+If a service failed to start, show the full error from the logs and suggest a fix.

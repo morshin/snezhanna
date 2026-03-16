@@ -12,7 +12,7 @@ Guide me through developing a new feature for Snezhanna end-to-end.
 
 4. **Implement** — Write the code. Follow these conventions:
    - New capabilities go into `lib/` as individual modules (e.g. `lib/myfeature.js`).
-   - To expose a capability as a Claude tool, add its definition to the `TOOLS` array in `lib/tools.js` and add a `case` for it inside the `callTool()` switch statement in the same file.
+   - To expose a capability as a Claude tool, add its definition to the `TOOLS` array in `lib/tools.js` and add a `case` for it inside the `executeTool()` switch statement in the same file.
    - Use `'use strict';` at the top of every JS file.
    - Log with `[ModuleName]` prefix, e.g. `console.log('[MyFeature] ...')`.
    - Handle errors gracefully — return `{ error: message }` from tools, never throw unhandled.
@@ -20,9 +20,9 @@ Guide me through developing a new feature for Snezhanna end-to-end.
    - New config keys go into `config/nanobot.json`.
 
 5. **Environment variables** — If the feature requires new secrets or credentials:
-   - Add them to `.env`.
-   - Add the same variable names to `systemd/snezhanna.service` under the `[Service]` section (it acts as the EnvironmentFile for the systemd unit).
+   - Add them to `.env` (the service reads it automatically via `EnvironmentFile=` in snezhanna.service).
+   - Add the same variable names (with empty values) to `.env.example` so the template stays up to date.
 
-6. **Update docs** — Run `/update-docs` to update `CLAUDE.md` and any relevant `skills/*.md` files.
+6. **Update docs** — Run `/update-docs` to update `CLAUDE.md`, `identity/IDENTITY.md`, `docs/snezhanna-tz.md`, and any relevant `skills/*.md` files.
 
 7. **Summary** — Report what was created/modified and how to test it, then run `/deploy` to restart the service and verify it started cleanly.

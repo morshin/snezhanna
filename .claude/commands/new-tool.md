@@ -2,39 +2,43 @@
 
 Create a new Claude tool for Snezhanna that will be available via the tool_use API.
 
+## Architecture
+
+All tools live in a **single file** `lib/tools.js`:
+- `TOOLS` array — Anthropic tool definitions (name, description, input_schema)
+- `executeTool(name, input)` function — dispatch switch that calls the right handler
+
+Tools are NOT split into separate files. The implementation logic usually lives in a dedicated `lib/<module>.js` that `tools.js` imports.
+
 ## Steps
 
 1. **Clarify** — Ask what the tool should do if not fully described. A tool needs: a name, a description, input parameters, and what it returns.
 
-2. **Read existing tools** — Read `lib/tools/index.js` and one or two existing tool files in `lib/tools/` to understand the registration pattern and code conventions.
+2. **Read existing tools** — Read `lib/tools.js` in full to understand the TOOLS array format, the `executeTool()` switch, and code conventions.
 
-3. **Create the tool file** — Create `lib/tools/<tool-name>.js` following this structure:
+3. **Implement the logic** — If the tool requires non-trivial logic, create `lib/<module>.js` for it. If it's simple (1–2 lines), implement it inline in `executeTool()`.
+
+4. **Add the tool definition** — Append an entry to the `TOOLS` array in `lib/tools.js`:
    ```js
-   'use strict';
-
-   async function myTool(input) {
-     // implementation
-     return { result: '...' };
+   {
+     name: 'my_tool',
+     description: 'What this tool does.',
+     input_schema: {
+       type: 'object',
+       properties: {
+         param: { type: 'string', description: 'What param is for' }
+       },
+       required: ['param']
+     }
    }
-
-   module.exports = {
-     definition: {
-       name: 'my_tool',
-       description: 'What this tool does.',
-       input_schema: {
-         type: 'object',
-         properties: {
-           param: { type: 'string', description: 'What param is for' }
-         },
-         required: ['param']
-       }
-     },
-     handler: myTool
-   };
    ```
 
-4. **Register** — Add the tool to `lib/tools/index.js` so it's included in `getAvailableTools()`.
+5. **Add the handler** — Add a `case` inside the `executeTool()` switch in `lib/tools.js`:
+   ```js
+   case 'my_tool':
+     return await myModule.doSomething(input.param);
+   ```
 
-5. **Update docs** — Add the new tool to the **Key files** table in `CLAUDE.md` if it introduces a significant capability. Create or update `skills/<capability>.md`.
+6. **Update docs** — Run `/update-docs` to update `CLAUDE.md`, `identity/IDENTITY.md`, and any relevant `skills/*.md`.
 
-6. **Test instructions** — Tell me how to test the tool manually by sending a message to Snezhanna.
+7. **Test instructions** — Tell me how to test the tool manually by sending a message to Snezhanna.
