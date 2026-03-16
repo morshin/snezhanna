@@ -56,7 +56,8 @@ node lib/indexer.js --incremental # incremental update
 - Anthropic native web search (`web_search_20250305`) enabled as a server-side tool — Claude can search the web for current info (rates, news, weather) without any local execution
 - Auto-fetches Google Calendar / Gmail context when keywords are detected in user messages (Russian keywords: "календар", "встреч", "сегодня", "почт", etc.)
 - On startup: calls `yadiskDirs.ensureDirs()` to create any missing agent subdirs (`index/`, `memory/`, `projects/`, `fitness/`, `drafts/`, `digests/`)
-- Scheduled tasks via `node-cron`: morning briefing (08:00), evening check-in (19:00), weekly digest (Sunday 10:00), calendar reminders every 10 min (fires at 30-min mark)
+- Scheduled tasks via `node-cron`: morning briefing (08:00), workload weekly check-in (Monday 09:00), evening check-in (19:00), weekly digest (Sunday 10:00), calendar reminders every 10 min (fires at 30-min mark)
+- Workload & Wellbeing scoring: weekly life-balance score (0–10) across 4 domains (work, family, health, personal). Monday 09:00 check-in collects self-reported data, then `lib/workload.js` aggregates Calendar/Gmail/Tasks/Strava data and runs a standalone Claude scoring call. Morning briefing appends an overload coach block when score ≤ 5. On-demand via phrases like "мой скор", "как я справляюсь". History persisted to `/mnt/yadisk-agent/workload-history.json` (last 12 weeks)
 - Evening check-in includes a summary of all Yandex Disk write operations logged during the day (via `lib/disk-log.js`); log is cleared after sending
 - Bot commands: `/reset` (clear history), `/status`, `/auth <code>` (Google OAuth callback)
 - Voice messages: downloaded from Telegram → transcribed via OpenAI Whisper → sent to Claude
@@ -93,7 +94,11 @@ node lib/indexer.js --incremental # incremental update
 | `lib/google.js` | Google Calendar + Gmail via googleapis OAuth2 |
 | `lib/whisper.js` | OpenAI Whisper transcription + TTS (language param: `'ru'` default, `'es'` for Max) |
 | `lib/vision.js` | Shared photo handler: download from Telegram, base64 encode, build Claude image blocks |
-| `lib/state.js` | Persist chatId to `.nanobot/state.json` |
+| `lib/state.js` | Persist chatId, businessConnectionId, awaitingWorkloadCheckin to `.nanobot/state.json` |
+| `lib/workload.js` | Workload & Wellbeing scoring: data collection, Claude scoring call, history persistence, weekly report and overload coach block |
+| `lib/workload-scoring-prompt.md` | System prompt for the workload scoring Claude call (JSON output schema, domain weights, tone rules) |
+| `lib/briefing-overload-prompt.md` | System prompt for the morning briefing overload coach block |
+| `docs/snezhanna-workload-scoring-tz.md` | Technical specification for the Workload & Wellbeing Scoring feature |
 | `lib/indexer.js` | Walk Yandex Disk and build JSON file index |
 | `lib/yadisk-dirs.js` | Ensure agent subdirs exist; project CRUD (`create_project`, `list_projects`, `read_project_file`, `write_project_file`) and project docs (`list_project_docs`, `read_project_doc`, `write_project_doc`) |
 | `lib/disk-log.js` | In-memory log of Yandex Disk write operations; flushed after evening check-in |

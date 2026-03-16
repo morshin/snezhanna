@@ -19,6 +19,7 @@ const diskLog = require('./lib/disk-log');
 const tasks = require('./lib/tasks');
 const chatMonitor = require('./lib/chat-monitor');
 const strava = require('./lib/strava');
+const workload = require('./lib/workload');
 
 // ── Config & Identity ─────────────────────────────────────────────────────────
 
@@ -304,6 +305,7 @@ async function sendToVova(text, options = {}) {
 // ── Message handler ───────────────────────────────────────────────────────────
 
 let pendingStartup = false;
+let workloadCheckinTimeout = null;
 
 bot.on('message', async (msg) => {
   if (!isAllowed(msg)) return;
@@ -361,6 +363,84 @@ bot.on('message', async (msg) => {
       if (userText === '/status') {
         const gcal = google.isAuthorized() ? '✅' : '❌ нет авторизации';
         await bot.sendMessage(chatId, `📊 Статус:\n• Google: ${gcal}\n• Claude: ✅\n• Я работаю 🟢`);
+        return;
+      }
+
+      // ── Workload check-in intercept ──
+      if (appState.awaitingWorkloadCheckin && appState.awaitingWorkloadCheckin.active) {
+        const elapsed = Date.now() - appState.awaitingWorkloadCheckin.timestamp;
+        if (elapsed < 30 * 60 * 1000) {
+          // Clear flag
+          appState.awaitingWorkloadCheckin = null;
+          state.save(appState);
+          if (workloadCheckinTimeout) {
+            clearTimeout(workloadCheckinTimeout);
+            workloadCheckinTimeout = null;
+          }
+          await bot.sendChatAction(chatId, 'typing');
+          try {
+            const data = await workload.collectData();
+            const scoring = await workload.runScoring(data, userText);
+            const history = workload.loadHistory();
+            const entry = {
+              date: new Date().toLocaleDateString('sv-SE', { timeZone: config.timezone }),
+              overall_score: scoring.overall_score,
+              domains: {
+                work: scoring.domains.work.score,
+                family: scoring.domains.family.score,
+                health: scoring.domains.health.score,
+                personal: scoring.domains.personal.score
+              },
+              trend: scoring.trend,
+              checkin_provided: true,
+              key_risks: scoring.key_risks,
+              suggestions: scoring.suggestions
+            };
+            workload.saveHistory(history, entry);
+            const report = workload.buildWeeklyReport(scoring, history);
+            await sendLongMessage(chatId, report);
+          } catch (e) {
+            console.error('[Workload] Checkin scoring error:', e.message);
+            await bot.sendMessage(chatId, 'Вов, что-то не смогла собрать отчёт. Попробую позже.');
+          }
+          return;
+        }
+      }
+
+      // ── Workload on-demand intent detection ──
+      const WORKLOAD_INTENTS = [
+        'как я справляюсь', 'мой скор', 'обзор недели', 'что со мной не так',
+        'как у меня со здоровьем', 'как дела на работе', 'как я в последнее время',
+        'покажи мой скор', 'лучше или хуже стало'
+      ];
+      const lowerText = userText.toLowerCase();
+      if (WORKLOAD_INTENTS.some(intent => lowerText.includes(intent))) {
+        await bot.sendChatAction(chatId, 'typing');
+        try {
+          const data = await workload.collectData();
+          const scoring = await workload.runScoring(data, userText);
+          const history = workload.loadHistory();
+          const entry = {
+            date: new Date().toLocaleDateString('sv-SE', { timeZone: config.timezone }),
+            overall_score: scoring.overall_score,
+            domains: {
+              work: scoring.domains.work.score,
+              family: scoring.domains.family.score,
+              health: scoring.domains.health.score,
+              personal: scoring.domains.personal.score
+            },
+            trend: scoring.trend,
+            checkin_provided: false,
+            key_risks: scoring.key_risks,
+            suggestions: scoring.suggestions
+          };
+          workload.saveHistory(history, entry);
+          const report = workload.buildWeeklyReport(scoring, history);
+          await sendLongMessage(chatId, report);
+        } catch (e) {
+          console.error('[Workload] On-demand scoring error:', e.message);
+          await bot.sendMessage(chatId, `Вов, ${formatErrorForUser(e)}`);
+        }
         return;
       }
 
@@ -713,8 +793,41 @@ ${eventsText}
 ${tasksText}
 
 Кратко прокомментируй день и выдели 1-2 самые важные вещи. Будь живым и тёплым.`;
-      const reply = await askClaudeOneShot(prompt);
-      await sendToVova(reply);
+      let briefingText = await askClaudeOneShot(prompt);
+
+      // Overload coach block (only when last score ≤ 5)
+      try {
+        const lastScore = workload.getLastScore();
+        if (lastScore !== null && lastScore <= 5) {
+          let todayEvents = [];
+          let tomorrowEvents = [];
+          if (google.isAuthorized()) {
+            const allEvents = await google.getCalendarEvents(2);
+            const todayDate = new Date().toLocaleDateString('sv-SE', { timeZone: config.timezone });
+            const tmrw = new Date();
+            tmrw.setDate(tmrw.getDate() + 1);
+            const tmrwDate = tmrw.toLocaleDateString('sv-SE', { timeZone: config.timezone });
+            todayEvents = allEvents.filter(e => {
+              const d = new Date(e.start.dateTime || e.start.date);
+              return d.toLocaleDateString('sv-SE', { timeZone: config.timezone }) === todayDate;
+            });
+            tomorrowEvents = allEvents.filter(e => {
+              const d = new Date(e.start.dateTime || e.start.date);
+              return d.toLocaleDateString('sv-SE', { timeZone: config.timezone }) === tmrwDate;
+            });
+          }
+          let openTasks = [];
+          try { openTasks = tasks.getTodayTasks(); } catch (_) {}
+          const overloadBlock = await workload.buildOverloadBlock(lastScore, todayEvents, tomorrowEvents, openTasks);
+          if (overloadBlock) {
+            briefingText += '\n\n---\n\n' + overloadBlock;
+          }
+        }
+      } catch (e) {
+        console.error('[Schedule] overload_block error:', e.message);
+      }
+
+      await sendToVova(briefingText);
       console.log('[Schedule] morning_briefing done');
     } catch (e) {
       console.error('[Schedule] morning_briefing error:', e.message);
@@ -777,6 +890,54 @@ ${chatSection}`;
       console.log('[Schedule] evening_checkin done');
     } catch (e) {
       console.error('[Schedule] evening_checkin error:', e.message);
+    }
+  }, { timezone: config.timezone });
+
+  // Workload weekly check-in — Monday 09:00 Madrid
+  cron.schedule('0 9 * * 1', async () => {
+    if (!appState.chatId) return;
+    console.log('[Schedule] workload_checkin fired');
+    try {
+      const checkinMsg = `Вов, понедельничный чек-ин 📋\n\nОтветь коротко (можно одним сообщением):\n\n1. Как ощущается эта неделя в целом — потянул или нет?\n2. Было ли время с семьёй / детьми?\n3. Как со сном и энергией?\n4. Было ли что-то личное — хобби, отдых, своё время?`;
+      await sendToVova(checkinMsg);
+
+      appState.awaitingWorkloadCheckin = { active: true, timestamp: Date.now() };
+      state.save(appState);
+
+      // 30-minute timeout: run scoring without checkin if no response
+      workloadCheckinTimeout = setTimeout(async () => {
+        if (!appState.awaitingWorkloadCheckin || !appState.awaitingWorkloadCheckin.active) return;
+        console.log('[Workload] Checkin timeout — running scoring without response');
+        appState.awaitingWorkloadCheckin = null;
+        state.save(appState);
+        workloadCheckinTimeout = null;
+        try {
+          const data = await workload.collectData();
+          const scoring = await workload.runScoring(data, null);
+          const history = workload.loadHistory();
+          const entry = {
+            date: new Date().toLocaleDateString('sv-SE', { timeZone: config.timezone }),
+            overall_score: scoring.overall_score,
+            domains: {
+              work: scoring.domains.work.score,
+              family: scoring.domains.family.score,
+              health: scoring.domains.health.score,
+              personal: scoring.domains.personal.score
+            },
+            trend: scoring.trend,
+            checkin_provided: false,
+            key_risks: scoring.key_risks,
+            suggestions: scoring.suggestions
+          };
+          workload.saveHistory(history, entry);
+          const report = workload.buildWeeklyReport(scoring, history);
+          await sendToVova(report);
+        } catch (e) {
+          console.error('[Workload] Timeout scoring error:', e.message);
+        }
+      }, 30 * 60 * 1000);
+    } catch (e) {
+      console.error('[Schedule] workload_checkin error:', e.message);
     }
   }, { timezone: config.timezone });
 

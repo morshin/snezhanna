@@ -24,7 +24,7 @@ The feature is intentionally "human" — Snezhanna acts as a caring close friend
 
 | Domain | Weight | Data Sources |
 |--------|--------|--------------|
-| Work / Productivity | 30% | Google Calendar (work events), Gmail (volume/urgency), self-reported tasks |
+| Work / Productivity | 30% | Google Calendar (work events), Gmail (volume/urgency), Yandex.Disk project tasks |
 | Family / Children | 25% | Google Calendar (family events), self-reported updates |
 | Health / Sport | 25% | Strava (activity frequency, volume), self-reported sleep/energy |
 | Personal / Hobbies / Rest | 20% | Google Calendar (personal time), self-reported mood/leisure |
@@ -41,7 +41,44 @@ The feature is intentionally "human" — Snezhanna acts as a caring close friend
 |--------|-------------------|
 | **Google Calendar** | Events count per domain in past 7 days; presence of free time blocks; back-to-back meeting days; family/personal event presence |
 | **Gmail** | Approximate email volume; presence of urgent/flagged threads; unanswered threads older than 3 days |
+| **Yandex.Disk project tasks** | Task overload signals from `tasks/tasks.json` + `projects/*/tasks.json` — see details below |
+| **GitHub Issues** | Open issues assigned to Vova — fetched live via `lib/github-issues.js`, counted alongside local tasks |
 | **Strava** | Number of activities in past 7 days; total distance/duration; rest days vs. active days |
+
+### Yandex.Disk Tasks — Detail
+
+Tasks are stored as JSON files, managed by `lib/tasks.js` (existing integration). Snezhanna already reads and writes these files.
+
+**File locations:**
+- Global tasks: `/mnt/yadisk-agent/tasks/tasks.json`
+- Per-project tasks: `/mnt/yadisk-agent/projects/{project_name}/tasks.json`
+
+**Eisenhower Matrix quadrants (existing schema):**
+- Q1 — Urgent + Important (do now)
+- Q2 — Not urgent + Important (schedule)
+- Q3 — Urgent + Not important (delegate)
+- Q4 — Not urgent + Not important (eliminate)
+
+**What to extract per task for scoring:**
+
+| Field | Notes |
+|-------|-------|
+| Status | `"todo"` / `"in_progress"` / `"done"` / `"cancelled"` |
+| Quadrant | Derived from `urgent` (bool) × `important` (bool) → Q1/Q2/Q3/Q4 |
+| Deadline | `due_date` field (`"YYYY-MM-DD"` or null) |
+| Project | `project` field (null = global) |
+| Overdue | `due_date` < today AND status is `todo` or `in_progress` |
+
+**Signals used for scoring (Work domain):**
+
+- Count of open Q1 tasks (`urgent:true, important:true`) — high Q1 backlog = fire-fighting mode, significant score penalty
+- Count of overdue tasks (due_date in the past, status todo/in_progress) — 3+ overdue = major penalty
+- Ratio of `done`/total tasks created or updated in past 7 days — low completion = loss of control
+- Open Q3 tasks (`urgent:true, important:false`) still owned by Vova — signal that delegation isn't happening
+- Open Q4 tasks (`urgent:false, important:false`) — signal of inability to cut non-essential work
+- Open GitHub Issues assigned to Vova (from `lib/github-issues.js`) — counted alongside local tasks
+
+**For the morning briefing overload block:** when score ≤ 5, Snezhanna picks 1–3 specific tasks by title — preferring Q3 (delegate candidates) and Q4 (cut candidates), plus oldest overdue Q1 if any — and names them with project context: *"Вот эта задача — она Q3, может кто-то другой возьмёт?"*
 
 ### Self-reported (collected via weekly check-in message)
 
@@ -51,6 +88,8 @@ On the weekly trigger, before running analysis, Snezhanna sends a short conversa
 2. "Было ли время с семьёй / детьми?" (yes/no or brief)
 3. "Как со сном и энергией?" (brief)
 4. "Было ли что-то личное — хобби, отдых, своё время?" (brief)
+
+> Task status (overdue, volume, priorities) is collected automatically from Yandex.Disk — no need to ask Vladimir about it.
 
 Vladimir can answer all in one message or skip questions. Responses are factored into scoring before analysis.
 
@@ -194,15 +233,16 @@ On-demand analysis uses same logic as weekly, minus the check-in step (goes stra
 ## Implementation Notes
 
 ### New files
-- `snezhanna/workload.js` — main module: scheduling, check-in collection, data aggregation, scoring, report generation
-- `snezhanna/workload-prompt.md` — system prompt for the scoring Claude call (separate for easy tuning)
+- `lib/workload.js` — main module: scheduling, check-in collection, data aggregation, scoring, report generation
+- `lib/workload-scoring-prompt.md` — system prompt for the scoring Claude call (separate for easy tuning)
+- `lib/briefing-overload-prompt.md` — prompt for the morning briefing overload block
 
-### Dependencies
-- Existing Google Calendar integration (already in Snezhanna)
-- Existing Gmail integration (already in Snezhanna)
-- Existing Strava OAuth integration (already in Snezhanna)
-- Yandex.Disk write mount at `/mnt/yadisk-agent/` (already in infra)
-- Separate Claude API call for scoring (not the conversation thread)
+### Integration points (existing code to reuse)
+- `lib/google.js` — Calendar + Gmail data (already exists)
+- `lib/strava.js` — weekly activity data (already exists)
+- `lib/tasks.js` — read global and per-project tasks from Yandex.Disk JSON (already exists)
+- `lib/yadisk.js` — read/write `workload-history.json` on Yandex.Disk (already exists)
+- `index.js` — register Monday 09:00 cron job + hook into morning briefing generator
 
 ### Scheduling
 Use the existing cron/scheduler pattern already present in Snezhanna for morning briefings. Add a Monday 09:00 job for workload check-in trigger.
