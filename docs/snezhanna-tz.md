@@ -1,9 +1,22 @@
 # Technical Specification: Personal AI Assistant «Snezhanna»
 
+> **Версия:** 2.0 (актуализирована 2026-03-16)
+> Документ отражает **реальное текущее состояние** проекта.
+
+---
+
 ## Overview
 
-Deploy a personal AI assistant based on **nanobot** on an Ubuntu VM inside Proxmox on a Hetzner dedicated server.
-The assistant communicates via **Telegram** (text + voice), runs 24/7, and proactively messages the owner on schedule.
+Personal AI assistant running on an Ubuntu VM inside Proxmox on a Hetzner dedicated server.
+The assistant communicates via **Telegram** (text + voice + photos), runs 24/7, and proactively messages the owner on schedule.
+
+The project consists of **three independent processes**:
+
+| Process | File | Description |
+|---------|------|-------------|
+| **Snezhanna** | `index.js` | Main assistant bot |
+| **Max** | `tutor/index.js` | Tutor bot for Vova's son |
+| **Zhora** | `watchdog/zhora.js` | Watchdog monitoring both bots |
 
 ---
 
@@ -18,9 +31,9 @@ The assistant communicates via **Telegram** (text + voice), runs 24/7, and proac
 | VM network | vmbr1 (internal), IP: 192.168.78.10 |
 | Proxmox host | 5.9.69.196 (vmbr0, external) |
 | SSH access | Via Jump Host: `ssh -J root@5.9.69.196 vova@192.168.78.10` |
-| VS Code | Remote SSH profile: `snezhanna` (via ProxyJump) |
+| VS Code / Cursor | Remote SSH profile: `snezhanna` (via ProxyJump) |
 | Project path | `/opt/snezhanna` |
-| System user | `snezhanna` (runs the agent process) |
+| System user | `snezhanna` (runs all agent processes) |
 
 ### SSH config (Windows `~/.ssh/config`)
 
@@ -43,7 +56,7 @@ Host snezhanna
 - **Name:** Snezhanna (she/her)
 - **Owner:** Vova (variations by context/mood: Володя, Вовик, Вов, Вовена, Влади)
 - **Language:** Russian always, unless Vova switches to another
-- **Style:** warm, lively, with humor, informal. Not a robot — a smart assistant with character. 
+- **Style:** warm, lively, with humor, informal. Not a robot — a smart assistant with character.
 - **Timezone:** Europe/Madrid
 
 Examples:
@@ -57,14 +70,19 @@ Examples:
 
 | Component | Technology |
 |-----------|-----------|
-| Agent | nanobot (npm package, pinned version) |
-| Channel | Telegram Bot API |
-| Brain | Anthropic Claude (claude-sonnet-4-6) |
-| Voice transcription | OpenAI Whisper API (`/v1/audio/transcriptions`) |
-| Voice responses | OpenAI TTS API (`/v1/audio/speech`) |
+| Agent | Custom Node.js (`index.js`) — **не nanobot** |
+| Channel | Telegram Bot API (`node-telegram-bot-api`) |
+| Brain | Anthropic Claude (`claude-sonnet-4-6`) via `@anthropic-ai/sdk` |
+| Voice transcription | OpenAI Whisper API (`whisper-1`) |
+| Voice responses | OpenAI TTS API (`tts-1`, voice: `nova`) |
+| Photo/vision | Telegram photo download → base64 → Claude vision |
+| Web search | Anthropic native web search (`web_search_20250305`, server-side) |
+| Email attachments | PDF (`pdf-parse`), XLSX (`xlsx`), DOCX (`mammoth`) |
 | Disk storage | Yandex.Disk via WebDAV (davfs2) |
+| Scheduled tasks | `node-cron` |
+| HTTP client | `axios` |
 | Process manager | systemd |
-| Runtime | Node.js 22.x (installed: v22.22.0) |
+| Runtime | Node.js 22.x |
 | Package manager | npm 10.x |
 | Repository | GitHub private: `github.com/morshin/snezhanna` |
 
@@ -72,31 +90,74 @@ Examples:
 
 ## GitHub Repository
 
-Private repo `snezhanna` — contains only config and skills, not nanobot source.
-nanobot is used as an npm dependency.
+Private repo `snezhanna` — all custom code lives here.
 
 ### Structure
 
 ```
 snezhanna/
   ├── .env.example
-  ├── .env                  # ← in .gitignore, never in repo
+  ├── .env                  # ← gitignored
   ├── .gitignore
   ├── package.json
+  ├── package-lock.json
   ├── README.md
+  ├── CLAUDE.md             # AI assistant guidance
+  ├── index.js              # Snezhanna main entrypoint
+  ├── setup.sh              # Initial server setup script
   ├── config/
-  │   └── nanobot.json
+  │   └── nanobot.json      # Config: model, tokens, timezone, yadisk, chat_monitor
   ├── identity/
-  │   └── IDENTITY.md
+  │   └── IDENTITY.md       # Snezhanna's system prompt
+  ├── lib/
+  │   ├── attachments.js    # Email attachment parsing (PDF/XLSX/DOCX)
+  │   ├── chat-monitor.js   # In-memory Telegram chat message store
+  │   ├── disk-log.js       # In-memory Yandex.Disk write operation log
+  │   ├── file-cache.js     # File content cache
+  │   ├── google.js         # Google Calendar + Gmail via googleapis OAuth2
+  │   ├── indexer.js        # Yandex.Disk file indexer
+  │   ├── memory.js         # Memory file read/write helpers
+  │   ├── races.js          # Strava race management
+  │   ├── state.js          # Persist chatId to .nanobot/state.json
+  │   ├── strava.js         # Strava API: weekly sync, fitness digest
+  │   ├── tasks.js          # Task tracking (Eisenhower matrix)
+  │   ├── tools.js          # All Claude tool definitions + executeTool dispatcher
+  │   ├── vision.js         # Photo: download from Telegram, base64, image blocks
+  │   ├── whisper.js        # OpenAI Whisper transcription + TTS
+  │   ├── yadisk-dirs.js    # Ensure agent subdirs; project/doc CRUD
+  │   └── yadisk.js         # Yandex.Disk WebDAV read/write helpers
   ├── docs/
-  │   └── snezhanna-tz.md
+  │   ├── snezhanna-tz.md           # This document
+  │   ├── tutor-bot-tz.md           # Max tutor bot spec
+  │   ├── tz-strava.md              # Strava integration spec
+  │   ├── tz-task-tracking.md       # Task tracking spec
+  │   ├── tz-calendar-metadata.md   # Calendar metadata spec
+  │   ├── snezhanna-workload-scoring-tz.md  # Workload scoring spec (WIP)
+  │   └── backlog.md                # Future improvements backlog
   ├── skills/
   │   ├── google-calendar.md
   │   ├── gmail.md
   │   ├── yadisk.md
-  │   └── memory.md
+  │   ├── memory.md
+  │   ├── strava.md
+  │   └── kids.md
   ├── schedules/
-  │   └── heartbeats.json
+  │   └── heartbeats.json   # Documentation of all cron jobs (not loaded at runtime)
+  ├── tutor/
+  │   ├── index.js          # Max tutor bot entrypoint
+  │   ├── schedules/
+  │   │   └── crons.js
+  │   ├── lib/
+  │   │   ├── claude.js     # Anthropic API wrapper for Max
+  │   │   ├── lang-week.js  # Weekly language topic rotation
+  │   │   ├── report.js     # Session/daily/weekly report generation
+  │   │   ├── session.js    # In-memory tutoring session state
+  │   │   ├── storage.js    # Yandex.Disk I/O for /mnt/yadisk-agent/kids/
+  │   │   └── telegram.js   # Telegram helpers for tutor bot
+  │   ├── identity/
+  │   │   └── IDENTITY.md   # Max's system prompt
+  │   └── systemd/
+  │       └── tutor.service
   ├── watchdog/
   │   ├── zhora.js
   │   └── zhora.service
@@ -125,23 +186,31 @@ token.json
   "version": "1.0.0",
   "description": "Personal AI assistant Snezhanna",
   "private": true,
+  "main": "index.js",
   "dependencies": {
-    "nanobot": "0.x.x"
+    "@anthropic-ai/sdk": "^0.39.0",
+    "axios": "^1.7.9",
+    "dotenv": "^16.4.7",
+    "form-data": "^4.0.1",
+    "googleapis": "^144.0.0",
+    "mammoth": "^1.11.0",
+    "node-cron": "^3.0.3",
+    "node-telegram-bot-api": "^0.67.0",
+    "pdf-parse": "^2.4.5",
+    "xlsx": "^0.18.5"
   },
   "scripts": {
-    "start": "nanobot start",
-    "dev": "nanobot start --debug"
+    "start": "node index.js",
+    "dev": "node index.js --debug"
   }
 }
 ```
-
-Note: pin nanobot to a specific version, not "latest".
 
 ---
 
 ## Environment Variables
 
-```
+```bash
 # Anthropic (Claude — Snezhanna's brain)
 ANTHROPIC_API_KEY=
 
@@ -162,6 +231,16 @@ GOOGLE_CLIENT_SECRET=
 # Yandex.Disk WebDAV
 YANDEX_WEBDAV_LOGIN=
 YANDEX_WEBDAV_PASSWORD=
+
+# Strava (optional — fitness tracking)
+STRAVA_CLIENT_ID=
+STRAVA_CLIENT_SECRET=
+STRAVA_REFRESH_TOKEN=
+
+# Tutor bot — Max (son's study assistant)
+TUTOR_BOT_TOKEN=           # bot token from @BotFather
+TUTOR_ALLOWED_USER_ID=     # son's numeric Telegram ID
+KIDS_DATA_DIR=             # /mnt/yadisk-agent/kids (default if unset)
 ```
 
 ---
@@ -172,34 +251,40 @@ YANDEX_WEBDAV_PASSWORD=
 
 - Accept text messages
 - Accept voice messages → transcribe via Whisper → process as text
+- Accept photos → download → base64 encode → send to Claude as vision message
+- Accept document/file attachments → parse (PDF, XLSX, DOCX) → forward content to Claude
 - Optionally respond with voice via TTS
+- Telegram checklist support — Vova can check off tasks directly in the app
 - **Only one user allowed** (`TELEGRAM_ALLOWED_USER_ID`) — all others ignored
 
 ### 2. Google Calendar
 
 - Read events for today and upcoming days
-- Create, update, delete events on request
-- OAuth2 via `credentials.json`
+- Create events (including recurring via RRULE)
+- Update events by ID
+- Delete events (single instance or entire series)
+- OAuth2 via `credentials.json` (Desktop-type OAuth2 client)
 - Google Cloud project under personal Google account
 - APIs enabled: Google Calendar API, Gmail API
-- OAuth type: Desktop app
-- Test user added: personal Gmail
 
 ### 3. Gmail — snezhanna@morshin.pro
 
 - Dedicated email for Snezhanna: `snezhanna@morshin.pro`
 - Vova's work mail is auto-forwarded here
-- Read inbox (last 20-50 emails)
+- Read inbox (last N unread emails, metadata)
+- Read full email content by ID
+- Read attachments (PDF, XLSX, DOCX — up to 10 MB)
 - Create draft replies on request
+- Mark emails as read / archive / add label
+- Automatic email monitoring every 30 min — digest with categories (task / event / project update / info / spam)
 - **Never send automatically** — only with explicit confirmation
-- Mark emails as read on request
 
 ### 4. Yandex.Disk (WebDAV)
 
-Mount two separate points:
+Two separate mount points:
 
 ```bash
-# Read only — Vova's full disk
+# Read-only — Vova's full disk
 /mnt/yadisk-readonly   (mount options: ro)
 WebDAV URL: https://webdav.yandex.ru
 
@@ -210,7 +295,39 @@ WebDAV URL: https://webdav.yandex.ru/Snezhanna
 
 Agent physically cannot write outside its own folder.
 Credentials from `.env`. If Yandex has 2FA — use app password from id.yandex.ru → Security → App passwords.
-Add to `/etc/fstab` for auto-mount on reboot.
+Added to `/etc/fstab` for auto-mount on reboot.
+
+### 5. Strava (fitness tracking)
+
+- Weekly activity sync every Sunday at 09:30 → saved to `/mnt/yadisk-agent/fitness/weekly/`
+- Each week: `YYYY-WNN.json` (raw API data) + `YYYY-WNN-summary.md` (human-readable)
+- Race management: create/list/update folders in `fitness/races/{date}_{name}/`
+- Sunday digest includes fitness block: current week vs previous, Snezhanna's commentary
+- Requires `STRAVA_CLIENT_ID`, `STRAVA_CLIENT_SECRET`, `STRAVA_REFRESH_TOKEN` in `.env`
+- Optional: bot works without Strava if env vars are missing
+
+### 6. Task Tracking
+
+- Free-form task input → stored as JSON on Yandex.Disk
+- Eisenhower Matrix prioritization (urgent × important → Q1/Q2/Q3/Q4)
+- Per-project tasks (stored in `projects/{name}/tasks.json`) and global tasks (`tasks/tasks.json`)
+- Morning briefing includes top tasks sorted by quadrant
+- Evening check-in sends native Telegram checklist (Vova can check off tasks in-app)
+- See `docs/tz-task-tracking.md` for full spec
+
+### 7. Chat Monitoring
+
+- Snezhanna passively monitors specified Telegram chats (family + work)
+- Monitored chats configured in `config/nanobot.json → chat_monitor.chats`
+- In-memory message store (cleared after evening check-in)
+- Messages available to Claude as context when Vova asks about them
+- Evening check-in includes summary of disk write operations (via `lib/disk-log.js`)
+
+### 8. Web Search
+
+- Anthropic native web search tool (`web_search_20250305`)
+- Server-side, no local execution needed
+- Claude can search for current info: exchange rates, news, weather, etc.
 
 ---
 
@@ -242,7 +359,7 @@ By size: files > 50 MB
 
 ### Index file
 
-Save to `/mnt/yadisk-agent/index/file_index.json`:
+Saved to `/mnt/yadisk-agent/index/file_index.json`:
 
 ```json
 {
@@ -262,9 +379,9 @@ Save to `/mnt/yadisk-agent/index/file_index.json`:
 
 ### Update schedule
 
-- Full reindex: every Sunday at 03:00
-- Incremental: every night at 02:00
-- On demand: "Снежанна, обнови индекс"
+- Full reindex: every Sunday at 03:00 (system cron)
+- Incremental: every night at 02:00 (system cron)
+- On demand: "Снежанна, обнови индекс" → `node lib/indexer.js [--incremental]`
 
 ---
 
@@ -281,18 +398,37 @@ Save to `/mnt/yadisk-agent/index/file_index.json`:
   │   ├── bureaucracy.md
   │   └── decisions.md
   ├── projects/
-  │   └── {project_name}.md
+  │   └── {project_name}/
+  │       ├── tasks.json
+  │       └── *.md
   ├── fitness/
-  │   └── log.md
+  │   ├── weekly/
+  │   │   ├── YYYY-WNN.json
+  │   │   └── YYYY-WNN-summary.md
+  │   └── races/
+  │       └── {date}_{name}/
+  │           ├── README.md
+  │           ├── plan.md
+  │           ├── gear.md
+  │           └── result.md
+  ├── tasks/
+  │   └── tasks.json
   ├── drafts/
-  └── digests/
+  ├── digests/
+  └── kids/              ← Max tutor bot writes here
+      ├── homework.json
+      ├── schedule.json
+      ├── progress.md
+      └── sessions/
 ```
 
 ---
 
 ## Schedule (Heartbeat / Cron Jobs)
 
-### Daily 08:00 Madrid — Morning briefing
+All times are in **Europe/Madrid** timezone.
+
+### Daily 08:00 — Morning briefing
 
 ```
 Доброе утро, Вовик! ☀️
@@ -301,7 +437,7 @@ Save to `/mnt/yadisk-agent/index/file_index.json`:
 • [Calendar events]
 
 📋 Открытые задачи:
-• [top-3 tasks]
+• [top tasks by Eisenhower quadrant]
 
 📬 Почта:
 • [unread count, important senders]
@@ -309,26 +445,51 @@ Save to `/mnt/yadisk-agent/index/file_index.json`:
 Хорошего дня! 🚀
 ```
 
-### Daily 19:00 Madrid — Evening check-in
+### Daily 19:00 — Evening check-in
 
 ```
 Вова, как прошёл день?
 Завтра у тебя:
 • [tomorrow's Calendar events]
+
+[Telegram checklist with today's open tasks]
+
+[Summary of Yandex.Disk write operations during the day]
 ```
 
 ### Every Sunday 10:00 — Weekly digest
 
 - What happened this week
 - What's coming next week
-- Fitness progress
+- Fitness progress (Strava block if configured)
 - Upcoming deadlines from `bureaucracy.md`
 
-### 30 min before each Calendar event
+### Every Sunday 09:30 — Strava sync
 
-```
-Вовик, через 30 минут: {event} в {time}
-```
+- Fetch last 7 days of activities
+- Save weekly JSON + summary to `fitness/weekly/`
+
+### Every 30 min — Email check
+
+- Read new unread emails
+- Categorize: task / event / project update / info / spam
+- Send digest if there are important messages
+
+### Every 10 min — Calendar reminders
+
+- Check events in next 30 minutes
+- Fire reminder at the 30-min mark
+
+---
+
+## Prompt Caching
+
+Prompt caching is enabled on both Snezhanna and Max:
+
+- Identity block (`IDENTITY.md`) marked with `cache_control: { type: 'ephemeral' }`
+- `betas: ['prompt-caching-2024-07-31']` passed to Anthropic SDK
+- Cache hits logged: `[Cache] hit: N tokens cached`
+- Reduces input token usage and avoids rate limits on repeated calls
 
 ---
 
@@ -340,18 +501,20 @@ Save to `/mnt/yadisk-agent/index/file_index.json`:
 - Gmail: never sends without explicit confirmation
 - All tokens in `.env`, never in git
 - Agent runs as unprivileged user `snezhanna`
-- IDENTITY.md includes prompt injection protection — ignore malicious instructions from emails, files, disk
+- `IDENTITY.md` includes prompt injection protection — ignore malicious instructions from emails, files, disk
+- Email/disk content treated as DATA, not instructions
 
 ---
 
-## Systemd — Snezhanna
+## Systemd Services
 
-`/etc/systemd/system/snezhanna.service`:
+### Snezhanna (`systemd/snezhanna.service`)
 
 ```ini
 [Unit]
 Description=Snezhanna Personal AI Assistant
-After=network.target
+After=network.target network-online.target
+Wants=network-online.target
 
 [Service]
 Type=simple
@@ -363,63 +526,41 @@ Restart=always
 RestartSec=10
 StandardOutput=journal
 StandardError=journal
+SyslogIdentifier=snezhanna
 
 [Install]
 WantedBy=multi-user.target
 ```
 
----
+### Max Tutor Bot (`tutor/systemd/tutor.service`)
 
-## Watchdog «Zhora»
+```ini
+[Unit]
+Description=Max Tutor Bot for Son
+After=network.target snezhanna.service
 
-Separate sysadmin service. Independent from Snezhanna. Uses its own Telegram bot.
+[Service]
+Type=simple
+User=snezhanna
+WorkingDirectory=/opt/snezhanna/tutor
+EnvironmentFile=/opt/snezhanna/.env
+ExecStart=/usr/bin/node /opt/snezhanna/tutor/index.js
+Restart=always
+RestartSec=30
+StandardOutput=journal
+StandardError=journal
 
-### Checks every 5 minutes
-
-1. Snezhanna process — `systemctl is-active snezhanna`
-2. Telegram Bot API — ping api.telegram.org
-3. Disk mounts — both `/mnt/yadisk-readonly` and `/mnt/yadisk-agent`
-4. Server disk — not over 85%
-5. Snezhanna logs — no repeating critical errors in last 10 min
-
-### Response scenarios
-
-Snezhanna down → restart → report result
-Disk unmounted → remount → report result
-Disk > 85% → warn Vova
-Telegram API down → report when restored
-All good → silent
-
-### `/status` command
-
-Zhora listens for incoming Telegram messages via long polling. When Vova sends `/status`, Zhora runs all checks and replies with a full status report:
-
-```
-🤖 Жора рапортует:
-
-Снежанна: ✅ active (uptime 3d 14h)
-Telegram API: ✅
-Диск readonly: ✅
-Диск агент: ✅
-Место на сервере: 42%
-Ошибки в логах: нет
+[Install]
+WantedBy=multi-user.target
 ```
 
-Only responds to `TELEGRAM_ALLOWED_USER_ID`. All other users are ignored.
-
-### Morning report at 07:55
-
-```
-🤖 Жора рапортует: все системы в норме.
-Снежанна готова к работе ✅
-```
-
-### Systemd — Zhora
+### Zhora Watchdog (`watchdog/zhora.service`)
 
 ```ini
 [Unit]
 Description=Zhora Watchdog for Snezhanna
-After=network.target snezhanna.service
+After=network.target network-online.target snezhanna.service
+Wants=network-online.target
 
 [Service]
 Type=simple
@@ -431,79 +572,197 @@ Restart=always
 RestartSec=30
 StandardOutput=journal
 StandardError=journal
+SyslogIdentifier=zhora
 
 [Install]
 WantedBy=multi-user.target
 ```
 
+### Service management
+
+```bash
+# Deploy service files after editing
+sudo cp systemd/snezhanna.service /etc/systemd/system/
+sudo cp tutor/systemd/tutor.service /etc/systemd/system/
+sudo cp watchdog/zhora.service /etc/systemd/system/
+sudo systemctl daemon-reload
+
+# Snezhanna
+sudo systemctl start|stop|restart|status snezhanna
+journalctl -u snezhanna -f
+journalctl -u snezhanna -n 100
+
+# Max tutor
+sudo systemctl start|stop|restart|status tutor
+journalctl -u tutor -f
+
+# Zhora
+sudo systemctl start|stop|restart|status zhora
+journalctl -u zhora -f
+```
+
 ---
 
-## What Was Done Manually (Already Completed ✅)
+## Watchdog «Zhora»
+
+Separate sysadmin service. Independent from Snezhanna. Uses its own Telegram bot.
+
+### Checks every 5 minutes
+
+1. **Snezhanna** process — `systemctl is-active snezhanna`
+2. **Max (tutor)** process — `systemctl is-active tutor`
+3. **Telegram Bot API** — ping api.telegram.org
+4. **Disk mounts** — both `/mnt/yadisk-readonly` and `/mnt/yadisk-agent`
+5. **Server disk** — not over 85%
+6. **Error logs** — no repeating critical errors in last 10 min
+
+### Response scenarios
+
+- Snezhanna down → restart → report result
+- Tutor (Max) down → restart → report result
+- Disk unmounted → remount → report result
+- Disk > 85% → warn Vova
+- Telegram API down → report when restored
+- All good → silent
+
+### Commands
+
+Zhora listens via long polling. Only responds to `TELEGRAM_ALLOWED_USER_ID`.
+
+| Command | Description |
+|---------|-------------|
+| `/status` | Full status report (all services + disk + logs) |
+| `/logs [snezhanna\|max\|index] [N]` | Last N log lines (default: 30) |
+| `/restart [snezhanna\|max]` | Request restart with confirmation |
+| `/restart_confirm` | Confirm pending restart |
+
+### `/status` response example
+
+```
+🤖 Жора рапортует:
+
+Снежанна: ✅ active (uptime 3d 14h)
+Макс: ✅ active (uptime 3d 14h)
+Telegram API: ✅
+Диск readonly: ✅
+Диск агент: ✅
+Место на сервере: 42%
+Ошибки в логах: нет
+```
+
+### Morning report at 07:55
+
+```
+🤖 Жора рапортует: все системы в норме.
+Снежанна готова к работе ✅
+```
+
+---
+
+## Max Tutor Bot
+
+Separate Telegram bot for Vova's son. See `docs/tutor-bot-tz.md` for full spec.
+
+**Summary:**
+- Always responds in Spanish; understands Russian but redirects to Spanish
+- Pedagogical approach: never gives answers, asks guiding questions
+- Onboarding: collects school timetable day by day → `schedule.json`
+- Homework tracking: afternoon checkin (15:00) → auto-parsed → `homework.json`
+- Photo support (homework photos, textbook pages) via shared `lib/vision.js`
+- Voice support via shared `lib/whisper.js` with `language='es'`
+- Prompt caching enabled
+- Reports to `/mnt/yadisk-agent/kids/`
+- Commands: `/start`, `/done`, `/schedule`, `/homework`, `/reset`, `/status`
+
+---
+
+## Google OAuth flow
+
+1. On startup (or on `/status`), if `token.json` is missing, Snezhanna sends Vova a Google auth URL
+2. Vova visits the URL, copies the code, sends `/auth <code>` to the bot
+3. `lib/google.js::saveToken()` exchanges the code and writes `token.json`
+4. Scopes: `calendar` (read/write) and `gmail.modify`
+
+---
+
+## Configuration (`config/nanobot.json`)
+
+Single source of truth for runtime settings:
+
+```json
+{
+  "model": "claude-sonnet-4-6",
+  "max_tokens": 4096,
+  "temperature": 1.0,
+  "timezone": "Europe/Madrid",
+  "language": "ru",
+  "voice": {
+    "transcription_model": "whisper-1",
+    "transcription_language": "ru",
+    "tts_model": "tts-1",
+    "tts_voice": "nova"
+  },
+  "history": {
+    "max_messages": 40,
+    "keep_last": 30
+  },
+  "yadisk": {
+    "readonly_mount": "/mnt/yadisk-readonly",
+    "agent_mount": "/mnt/yadisk-agent",
+    "index_file": "/mnt/yadisk-agent/index/file_index.json"
+  },
+  "index": {
+    "include_folders": ["Документы", "Clients", "Spain taxes", "morshin.pro", "Яндекс.Фото"],
+    "exclude_extensions": ["..."],
+    "exclude_folders": ["..."],
+    "max_size_kb": 51200,
+    "max_age_years": 3
+  },
+  "chat_monitor": {
+    "chats": [
+      { "chat_id": 123, "name": "...", "type": "personal|work", "category": "kids|family", "project": "..." }
+    ]
+  }
+}
+```
+
+---
+
+## State & Credentials
+
+| File | Purpose | Gitignored |
+|------|---------|-----------|
+| `.nanobot/state.json` | Snezhanna's chatId | ✅ |
+| `tutor/.tutor-state.json` | Max's chatId | ✅ |
+| `token.json` | Google OAuth token | ✅ |
+| `credentials.json` | Google OAuth2 Desktop credentials | ✅ |
+| `.env` | All secrets | ✅ |
+
+---
+
+## What Was Done — Infrastructure ✅
 
 - ✅ Proxmox VM created (ID 101, Ubuntu 22.04, 2CPU, 2GB RAM, 20GB disk, vmbr1, IP 192.168.78.10)
 - ✅ Ubuntu 22.04 installed, user `vova` created
-- ✅ Node.js v22.22.0 installed
+- ✅ Node.js v22.x installed
 - ✅ tmux and git installed
 - ✅ qemu-guest-agent installed
 - ✅ System user `snezhanna` created at `/opt/snezhanna`
 - ✅ SSH keys configured (Windows → Proxmox jump → VM)
-- ✅ VS Code Remote SSH configured with ProxyJump
+- ✅ Cursor Remote SSH configured with ProxyJump
 - ✅ GitHub repo `morshin/snezhanna` created (private)
 - ✅ GitHub SSH key added
-- ✅ Claude Code installed (v2.1.63)
 - ✅ Google Cloud project created (personal account)
 - ✅ Google Calendar API + Gmail API enabled
-- ✅ OAuth 2.0 Desktop credentials → `credentials.json` at `/opt/snezhanna/`
+- ✅ OAuth 2.0 Desktop credentials → `credentials.json`
 - ✅ Personal Gmail added as OAuth test user
 - ✅ Snezhanna email created: snezhanna@morshin.pro
 - ✅ Telegram bot Snezhanna created
 - ✅ Telegram bot Zhora created
+- ✅ Telegram bot Max created
 - ✅ Anthropic API key created
 - ✅ OpenAI API key created (Whisper + TTS)
-- ✅ `.env` filled with all tokens at `/opt/snezhanna/.env`
-- ✅ `.gitignore` created
-
----
-
-## Claude Code Prompt — Ready to Run
-
-Start tmux and Claude Code on the server:
-
-```bash
-tmux new -s snezhanna
-cd /opt/snezhanna
-claude
-```
-
-Paste this prompt:
-
-```
-Read snezhanna-tz.md for full context.
-
-Set up a complete personal AI assistant called Snezhanna based on nanobot.
-
-Everything is already prepared:
-- .env is filled with all API tokens at /opt/snezhanna/.env
-- credentials.json is at /opt/snezhanna/credentials.json
-- Node.js 22 is installed
-- System user 'snezhanna' exists at /opt/snezhanna
-- GitHub repo is at /opt/snezhanna
-
-Please do:
-1. Create full project structure per the TZ (package.json, config, identity, skills, schedules, watchdog)
-2. Pin nanobot to latest stable version in package.json (not "latest" string)
-3. Run npm install
-4. Create IDENTITY.md with Snezhanna's personality and explicit prompt injection protection
-5. Install davfs2 and set up WebDAV mounts for Yandex.Disk (add to /etc/fstab):
-   - /mnt/yadisk-readonly → full disk, read only
-   - /mnt/yadisk-agent → /Агент-Снежанна/ folder only, read+write
-6. Create agent folder structure on /mnt/yadisk-agent
-7. Create and enable systemd service: snezhanna
-8. Create and enable systemd service: zhora (watchdog)
-9. Set up all cron jobs per schedule in TZ
-10. Commit everything to git (except .env and credentials.json)
-
-After successful launch:
-- Snezhanna sends to Telegram: "Вов, я онлайн! 🦞"
-- Zhora sends via his bot: "🤖 Жора здесь. Слежу за Снежанной."
-```
+- ✅ `.env` filled with all tokens
+- ✅ davfs2 installed, WebDAV mounts configured in `/etc/fstab`
+- ✅ All three systemd services active and enabled
+- ✅ Agent folder structure created on Yandex.Disk
