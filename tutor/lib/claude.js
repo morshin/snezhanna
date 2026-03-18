@@ -5,6 +5,7 @@ const path = require('path');
 const Anthropic = require('@anthropic-ai/sdk');
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+const { logTokens } = require('../../lib/token-log');
 const identity = fs.readFileSync(path.join(__dirname, '..', 'identity', 'IDENTITY.md'), 'utf8');
 const langWeek = require('./lang-week');
 
@@ -54,7 +55,7 @@ function buildLangBlock() {
   return 'LANGUAGE THIS WEEK: SPANISH. Always respond in Spanish. If the student writes in Russian without an explicit request — gently remind them to use Spanish.';
 }
 
-async function askMax(history, sessionContext, pendingHomework) {
+async function askMax(history, sessionContext, pendingHomework, requestType = 'text') {
   const lang = langWeek.getCurrentLang();
   const system = [
     { type: 'text', text: `Сейчас: ${nowStr()} (Europe/Madrid). Язык недели: ${lang === 'ru' ? 'русский' : 'испанский'}.` },
@@ -83,6 +84,14 @@ async function askMax(history, sessionContext, pendingHomework) {
       console.log(`[Cache] hit: ${response.usage.cache_read_input_tokens} tokens cached`);
     }
 
+    logTokens({
+      bot: 'max',
+      type: requestType,
+      tools_called: [],
+      history_len: trimmed.length,
+      usage: response.usage
+    });
+
     const textBlocks = response.content.filter(b => b.type === 'text');
     return textBlocks.map(b => b.text).join('\n') || '';
   } catch (err) {
@@ -91,13 +100,21 @@ async function askMax(history, sessionContext, pendingHomework) {
   }
 }
 
-async function askMaxOneShot(systemPrompt, userPrompt) {
+async function askMaxOneShot(systemPrompt, userPrompt, requestType = 'scheduled') {
   try {
     const response = await anthropic.messages.create({
       model: MODEL,
       max_tokens: MAX_TOKENS,
       system: systemPrompt,
       messages: [{ role: 'user', content: userPrompt }]
+    });
+
+    logTokens({
+      bot: 'max',
+      type: requestType,
+      tools_called: [],
+      history_len: 1,
+      usage: response.usage
     });
 
     const textBlocks = response.content.filter(b => b.type === 'text');

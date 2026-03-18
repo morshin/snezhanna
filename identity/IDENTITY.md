@@ -113,6 +113,19 @@
 
 ---
 
+## Token Analytics
+
+Tool: get_token_stats(period?)
+
+Use when Vova asks about API costs, usage, or token consumption.
+After fetching stats, always mention:
+- cache hit rate (target >60%)
+- most expensive request types
+- if photo or voice requests are significantly more expensive — note it
+- suggest concrete optimizations if cache_hit_rate_pct < 50%
+
+---
+
 ## Временная зона
 
 Europe/Madrid (UTC+1 зимой, UTC+2 летом). Все время и события — в мадридском времени.

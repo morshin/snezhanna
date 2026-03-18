@@ -20,6 +20,7 @@ const tasks = require('./lib/tasks');
 const chatMonitor = require('./lib/chat-monitor');
 const strava = require('./lib/strava');
 const workload = require('./lib/workload');
+const { logTokens } = require('./lib/token-log');
 
 // ── Config & Identity ─────────────────────────────────────────────────────────
 
@@ -34,7 +35,7 @@ let history = [];
 // Одноразовый вызов Claude без использования глобальной истории разговора.
 // Используется для крон-задач: у них изолированный локальный контекст,
 // они не загрязняют историю чата и не ломаются от "отравленной" истории.
-async function askClaudeOneShot(userMessage) {
+async function askClaudeOneShot(userMessage, requestType = 'scheduled') {
   const tools = getAvailableTools();
   const MAX_TOOL_ROUNDS = 10;
 
@@ -62,6 +63,14 @@ async function askClaudeOneShot(userMessage) {
     if (response.usage?.cache_read_input_tokens) {
       console.log(`[Cache/OneShot] hit: ${response.usage.cache_read_input_tokens} tokens cached`);
     }
+
+    logTokens({
+      bot: 'snezhanna',
+      type: requestType,
+      tools_called: response.content.filter(b => b.type === 'tool_use').map(b => b.name),
+      history_len: localHistory.length,
+      usage: response.usage
+    });
 
     if (response.stop_reason === 'tool_use') {
       localHistory.push({ role: 'assistant', content: response.content });
@@ -99,7 +108,7 @@ async function askClaudeOneShot(userMessage) {
   return 'Извини, Вовик, слишком долго думала над этим.';
 }
 
-async function askClaude(userMessage) {
+async function askClaude(userMessage, requestType = 'text') {
   // Сохраняем снимок истории до вызова — восстановим при ошибке,
   // чтобы не оставлять в истории осиротевшие tool_use / tool_result блоки
   const historyBeforeCall = [...history];
@@ -148,6 +157,14 @@ async function askClaude(userMessage) {
       if (response.usage?.cache_read_input_tokens) {
         console.log(`[Cache] hit: ${response.usage.cache_read_input_tokens} tokens cached`);
       }
+
+      logTokens({
+        bot: 'snezhanna',
+        type: requestType,
+        tools_called: response.content.filter(b => b.type === 'tool_use').map(b => b.name),
+        history_len: history.length,
+        usage: response.usage
+      });
 
       // Log web search usage (server-side tool, handled by Anthropic)
       for (const block of response.content) {
@@ -339,6 +356,7 @@ bot.on('message', async (msg) => {
 
   const chatId = msg.chat.id;
   let userText = '';
+  let requestType = 'text';
 
   try {
 
@@ -500,7 +518,8 @@ bot.on('message', async (msg) => {
 
     await bot.sendChatAction(chatId, 'typing');
 
-    const reply = await askClaude(userText);
+    requestType = msg.voice ? 'voice' : 'text';
+    const reply = await askClaude(userText, requestType);
 
     // Send voice if: user sent voice and reply is short, OR user explicitly asked for voice
     const wantsVoice = msg.voice && reply.length < 500
@@ -533,7 +552,7 @@ bot.on('message', async (msg) => {
 
       try {
         console.log('[Snezhanna] Retrying after rate limit...');
-        const retryReply = await askClaude(userText);
+        const retryReply = await askClaude(userText, requestType);
         await sendLongMessage(chatId, retryReply);
       } catch (retryErr) {
         console.error('[Snezhanna] Retry failed:', retryErr.message);
@@ -566,7 +585,7 @@ bot.on('photo', async (msg) => {
     const caption = msg.caption || '';
     const content = vision.buildPhotoMessage(base64, mime_type, caption || 'Что на этом фото?');
 
-    const reply = await askClaude(content);
+    const reply = await askClaude(content, 'photo');
 
     // Replace base64-heavy content in history with a lightweight placeholder
     const lastUserIdx = history.findLastIndex(h => h.role === 'user');

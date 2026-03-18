@@ -446,7 +446,7 @@ bot.on('message', async (msg) => {
     const history = session.getHistory();
     const context = session.getContext();
     const pending = storage.loadHomework().tasks.filter(t => !t.done);
-    const reply = await askMax(history, context, pending);
+    const reply = await askMax(history, context, pending, 'text');
 
     // Извлекаем маркеры выполненных ДЗ и отмечаем их в storage
     const { cleanText, doneIds } = extractDoneMarkers(reply);
@@ -502,7 +502,7 @@ bot.on('photo', async (msg) => {
       ...history.map(m => ({ role: m.role, content: m.content })),
       { role: 'user', content }
     ];
-    const reply = await askMax(messagesForClaude, context);
+    const reply = await askMax(messagesForClaude, context, undefined, 'photo');
 
     // Store text placeholder in session, not base64
     session.addMessage('user', vision.photoPlaceholder(caption));
@@ -578,7 +578,7 @@ bot.on('voice', async (msg) => {
     const history = session.getHistory();
     const context = session.getContext();
     const pending = storage.loadHomework().tasks.filter(t => !t.done);
-    const reply = await askMax(history, context, pending);
+    const reply = await askMax(history, context, pending, 'voice');
 
     const { cleanText, doneIds } = extractDoneMarkers(reply);
     for (const id of doneIds) {
