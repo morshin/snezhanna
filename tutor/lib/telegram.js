@@ -6,8 +6,15 @@ const bot = new TelegramBot(process.env.TUTOR_BOT_TOKEN, { polling: true });
 const ALLOWED = (process.env.TUTOR_ALLOWED_USER_ID || '').replace('@', '');
 
 // C-3: без этого обработчика сетевые ошибки крашат процесс
+// EFATAL означает полную остановку поллинга — перезапускаем через 10 сек
 bot.on('polling_error', (err) => {
   console.error('[Max] Polling error:', err.code || err.message);
+  if (err.code === 'EFATAL') {
+    console.error('[Max] Fatal polling error — restarting polling in 10s...');
+    setTimeout(() => {
+      bot.startPolling().catch(e => console.error('[Max] Failed to restart polling:', e.message));
+    }, 10000);
+  }
 });
 
 function isAllowed(msg) {

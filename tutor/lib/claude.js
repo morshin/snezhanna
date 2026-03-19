@@ -8,6 +8,7 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const { logTokens } = require('../../lib/token-log');
 const identity = fs.readFileSync(path.join(__dirname, '..', 'identity', 'IDENTITY.md'), 'utf8');
 const langWeek = require('./lang-week');
+const storage = require('./storage');
 
 // M-1: читаем из общего конфига чтобы не дублировать значения
 const config = require('../../config/nanobot.json');
@@ -70,6 +71,13 @@ async function askMax(history, sessionContext, pendingHomework, requestType = 't
     system.push({ type: 'text', text: hwContext });
   }
 
+  const activeQuests = storage.getActiveQuests();
+  if (activeQuests.length > 0) {
+    const questContext = `[Sistema: misiones activas del padre]\n` +
+      activeQuests.map(q => `ID:${q.id} | ${q.subject}: ${q.description} (+${q.reward_minutes} min)`).join('\n');
+    system.push({ type: 'text', text: questContext });
+  }
+
   const trimmed = trimHistory(history);
 
   try {
@@ -125,4 +133,37 @@ async function askMaxOneShot(systemPrompt, userPrompt, requestType = 'scheduled'
   }
 }
 
-module.exports = { askMax, askMaxOneShot };
+// Отвечает на свободный вопрос родителя по-русски, с контекстом сессий и прогресса
+async function askParent(question) {
+  // Собираем контекст: прогресс, последние 14 дней сессий, ДЗ
+  const progress = storage.readProgress();
+  const sessionDates = storage.listSessionDates().slice(0, 14);
+  const sessionParts = sessionDates.map(d => {
+    const md = storage.readSessionReport(d);
+    return md ? `### ${d}\n${md}` : null;
+  }).filter(Boolean);
+  const hw = storage.loadHomework();
+  const pending = hw.tasks.filter(t => !t.done);
+
+  const contextParts = [];
+  if (progress) contextParts.push(`## Прогресс ученика\n${progress}`);
+  if (sessionParts.length > 0) contextParts.push(`## Сессии (последние ${sessionParts.length} дней)\n${sessionParts.join('\n\n')}`);
+  if (pending.length > 0) {
+    const hwList = pending.map(t => `• ${t.subject}: ${t.description}${t.due ? ` (до ${t.due})` : ''}`).join('\n');
+    contextParts.push(`## Невыполненные домашние задания\n${hwList}`);
+  } else {
+    contextParts.push('## Домашние задания\nНевыполненных заданий нет.');
+  }
+
+  const systemPrompt = `Ты помощник-тьютор бота Макс. Ты общаешься с отцом ученика (13 лет, испанская школа в Мадриде).
+Отвечай на русском языке. Будь конкретен, дружелюбен, по делу.
+Используй только информацию из предоставленного контекста — не придумывай факты.
+Если информации недостаточно, честно скажи об этом.
+Сейчас: ${nowStr()} (Europe/Madrid).
+
+${contextParts.join('\n\n')}`;
+
+  return askMaxOneShot(systemPrompt, question, 'parent_query');
+}
+
+module.exports = { askMax, askMaxOneShot, askParent };

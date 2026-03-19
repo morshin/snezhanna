@@ -64,7 +64,8 @@ node lib/indexer.js --incremental # incremental update
 
 **`tutor/index.js`** — Max tutor bot (separate systemd service):
 - Telegram bot for Vova's son (13 y/o, Spanish school), access-controlled by `TUTOR_ALLOWED_USER_ID`
-- Always responds in Spanish; understands Russian but redirects back to Spanish
+- **Two-actor model**: student (`TUTOR_ALLOWED_USER_ID`) and parent (`PARENT_CHAT_ID`). Parent messages are routed to a separate handler before the student flow — never forwarded to Claude's tutoring session
+- Always responds in Spanish to student; understands Russian but redirects back to Spanish; responds in Russian to parent
 - Pedagogical approach: never gives answers directly, asks guiding questions
 - Onboarding flow: collects school timetable day by day → saves to `schedule.json`
 - In-memory session tracking (subject, topics, stuck points, mood)
@@ -72,11 +73,14 @@ node lib/indexer.js --incremental # incremental update
 - Voice support via shared `lib/whisper.js` with `language='es'`
 - Prompt caching enabled (same as Snezhanna): identity cached, cache hits logged
 - Homework tracking: afternoon checkin (15:00) asks "what homework?", next reply auto-parsed via `askMaxOneShot` and saved to `homework.json`; Claude marks completed homework with `[DONE:ID]` markers stripped before display
+- **Quest system**: parent assigns quests via `/quest`; active quests injected into Claude context; Claude appends `[QUEST_DONE:id]` when objective met; index.js strips markers, calls `completeQuest()`, updates HMAC-signed `balance.json`, notifies parent
+- **Parent commands**: `/report` (today's session), `/week` (weekly digest), `/homework`, `/balance`, `/quests`, `/assign <subject>: <task>`, `/quest <subject> "<desc>" +Nмин`, `/cancelquest <id>`
+- **Parent notifications**: post-session summary after every session end (student `/done`, auto-close), quest completion alert, subject avoidance flag (weekly), stuck-topic flag (repeated stuck points across sessions)
 - Message processing mutex (`withLock`) prevents race conditions on rapid messages
-- Startup message cooldown (4 hours) to avoid spam on Zhora restarts
-- Commands: `/start`, `/done` / `/стоп` (end session), `/schedule` (view/reset timetable), `/homework` (pending tasks), `/reset`, `/status`
-- Scheduled tasks: afternoon checkin (15:00), evening reminder (21:00), daily summary (20:30), weekly digest (Sunday 18:00), session auto-close (every 5 min, 30 min idle)
-- Reports to `/mnt/yadisk-agent/kids/`: daily sessions, progress.md, weekly digests, homework.json
+- Startup message cooldown (4 hours) for both student and parent, to avoid spam on Zhora restarts
+- Commands (student): `/start`, `/done` / `/стоп` (end session), `/schedule` (view/reset timetable), `/homework` (pending tasks), `/reset`, `/status`
+- Scheduled tasks: afternoon checkin (15:00), evening reminder (21:00), daily summary (20:30), weekly digest (Sunday 18:00) + subject avoidance check, session auto-close (every 5 min, 30 min idle)
+- Reports to `/mnt/yadisk-agent/kids/`: daily sessions, progress.md, weekly digests, homework.json, quests.json, balance.json
 - Uses `dotenv` with absolute path to `/opt/snezhanna/.env`
 
 **`watchdog/zhora.js`** — Zhora watchdog (separate systemd service):
@@ -108,12 +112,13 @@ node lib/indexer.js --incremental # incremental update
 | `docs/snezhanna-tz.md` | Technical specification (TZ) — infrastructure, integrations, architecture decisions |
 | `skills/*.md` | Capability descriptions (documentation only, not loaded at runtime) |
 | `tutor/index.js` | Max tutor bot entrypoint |
-| `tutor/lib/storage.js` | Yandex Disk I/O for `/mnt/yadisk-agent/kids/` |
+| `tutor/lib/storage.js` | Yandex Disk I/O for `/mnt/yadisk-agent/kids/`; quest CRUD; HMAC-signed balance |
 | `tutor/lib/session.js` | In-memory tutoring session state |
-| `tutor/lib/claude.js` | Anthropic API wrapper for Max |
-| `tutor/lib/report.js` | Session/daily/weekly report generation |
-| `tutor/identity/IDENTITY.md` | Max's system prompt (personality, pedagogical rules, language policy) |
+| `tutor/lib/claude.js` | Anthropic API wrapper for Max; injects active quests into system context |
+| `tutor/lib/report.js` | Session/daily/weekly report generation; `checkSubjectAvoidance()`; `checkStuckTopic()` |
+| `tutor/identity/IDENTITY.md` | Max's system prompt (personality, pedagogical rules, language policy, quest awareness) |
 | `docs/tutor-bot-tz.md` | Technical specification for Max tutor bot |
+| `docs/tutor-parent-interface-tz.md` | Technical specification for Max Parent Interface feature |
 
 ### State & credentials
 
@@ -138,7 +143,7 @@ Two WebDAV mounts managed via davfs2 (set up by `setup.sh`, run as root):
 
 Zhora monitors both mount points and re-mounts if they go down.
 
-Max writes reports to `/mnt/yadisk-agent/kids/` (sessions, progress, weekly digests, homework, schedule).
+Max writes reports to `/mnt/yadisk-agent/kids/` (sessions, progress, weekly digests, homework.json, schedule.json, quests.json, balance.json).
 
 ### Timezone
 
@@ -169,4 +174,6 @@ YANDEX_WEBDAV_PASSWORD
 TUTOR_BOT_TOKEN          # Max tutor bot (from @BotFather)
 TUTOR_ALLOWED_USER_ID    # Son's numeric Telegram ID
 KIDS_DATA_DIR            # /mnt/yadisk-agent/kids (default if unset)
+PARENT_CHAT_ID           # Vova's numeric Telegram ID (same as TELEGRAM_ALLOWED_USER_ID); receives parent notifications via Max's bot
+QUEST_HMAC_SECRET        # 64-char hex secret for HMAC-signing balance.json (shared with TimeGuard)
 ```

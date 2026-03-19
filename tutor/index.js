@@ -7,7 +7,7 @@ const path = require('path');
 const axios = require('axios');
 
 const { bot, ALLOWED, isAllowed, sendLongMessage } = require('./lib/telegram');
-const { askMax, askMaxOneShot } = require('./lib/claude');
+const { askMax, askMaxOneShot, askParent } = require('./lib/claude');
 const session = require('./lib/session');
 const storage = require('./lib/storage');
 const report = require('./lib/report');
@@ -280,6 +280,258 @@ function extractDoneMarkers(text) {
   return { cleanText, doneIds };
 }
 
+// Вырезает маркеры [QUEST_DONE:quest_xxx] из ответа Claude
+function extractQuestDoneMarkers(text) {
+  const pattern = /\[QUEST_DONE:([^\]]+)\]/g;
+  const questIds = [];
+  let match;
+  while ((match = pattern.exec(text)) !== null) questIds.push(match[1].trim());
+  const cleanText = text.replace(/\[QUEST_DONE:[^\]]+\]/g, '').trim();
+  return { cleanText, questIds };
+}
+
+// ── Parent helpers ─────────────────────────────────────────────────────────────
+
+function isParent(msg) {
+  const parentId = process.env.PARENT_CHAT_ID;
+  if (!parentId) return false;
+  return String(msg.from && msg.from.id) === String(parentId);
+}
+
+async function notifyParent(text) {
+  const parentId = process.env.PARENT_CHAT_ID;
+  if (!parentId) return;
+  try {
+    await bot.sendMessage(parentId, text);
+  } catch (e) {
+    console.error('[Max] Failed to notify parent:', e.message);
+  }
+}
+
+function formatBalance(minutes) {
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return h > 0 ? `${h}ч ${m}мин (${minutes} мин)` : `${minutes} мин`;
+}
+
+function getISOWeekStr() {
+  const now = new Date();
+  const madridDateStr = now.toLocaleDateString('sv-SE', { timeZone: 'Europe/Madrid' });
+  const d = new Date(madridDateStr + 'T12:00:00Z');
+  const dayNum = (d.getUTCDay() || 7);
+  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  const weekNum = Math.ceil(((d - yearStart) / 86400000 + 1) / 7);
+  return `${d.getUTCFullYear()}-W${String(weekNum).padStart(2, '0')}`;
+}
+
+async function handleParentCommand(msg, text) {
+  const parentId = process.env.PARENT_CHAT_ID;
+
+  // /report — сессия за сегодня
+  if (text === '/report') {
+    const todayStr = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Madrid' });
+    const sessionMd = storage.readSessionReport(todayStr);
+    if (!sessionMd) {
+      await bot.sendMessage(parentId, 'Сегодня сессий не было.');
+    } else {
+      await sendLongMessage(parentId, sessionMd);
+    }
+    return;
+  }
+
+  // /week — недельный дайджест
+  if (text === '/week') {
+    const weekStr = getISOWeekStr();
+    const fs = require('fs');
+    const path = require('path');
+    const weeklyDir = path.join(process.env.KIDS_DATA_DIR || '/mnt/yadisk-agent/kids', 'weekly');
+    const filePath = path.join(weeklyDir, `${weekStr}.md`);
+    if (!fs.existsSync(filePath)) {
+      await bot.sendMessage(parentId, 'Дайджест ещё не сгенерирован.');
+    } else {
+      await sendLongMessage(parentId, fs.readFileSync(filePath, 'utf8'));
+    }
+    return;
+  }
+
+  // /homework — ДЗ для родителя (по-русски)
+  if (text === '/homework') {
+    const hw = storage.loadHomework();
+    const pending = hw.tasks.filter(t => !t.done);
+    if (pending.length === 0) {
+      await bot.sendMessage(parentId, '✅ Нет невыполненных домашних заданий.');
+      return;
+    }
+    let reply = '📝 Домашние задания:\n';
+    for (const t of pending) {
+      reply += `\n• ${t.subject}: ${t.description}${t.due ? ` (до ${t.due})` : ''}`;
+    }
+    await bot.sendMessage(parentId, reply);
+    return;
+  }
+
+  // /balance — баланс TimeGuard
+  if (text === '/balance') {
+    const bal = storage.loadBalance();
+    await bot.sendMessage(parentId, `⏱ Баланс: ${formatBalance(bal.balance_minutes)}.`);
+    return;
+  }
+
+  // /schedule — расписание сына
+  if (text === '/schedule') {
+    const schedule = storage.loadSchedule();
+    if (!schedule) {
+      await bot.sendMessage(parentId, 'Расписание ещё не заполнено.');
+      return;
+    }
+    const days = { lunes: 'Пн', martes: 'Вт', miércoles: 'Ср', jueves: 'Чт', viernes: 'Пт' };
+    let reply = `📅 Расписание (обновлено ${schedule.updated || '—'}):\n`;
+    for (const [day, label] of Object.entries(days)) {
+      const subjects = schedule[day];
+      if (subjects && subjects.length > 0) {
+        reply += `\n${label}: ${subjects.join(', ')}`;
+      } else {
+        reply += `\n${label}: —`;
+      }
+    }
+    await bot.sendMessage(parentId, reply);
+    return;
+  }
+
+  // /quests — активные квесты
+  if (text === '/quests') {
+    const quests = storage.getActiveQuests();
+    if (quests.length === 0) {
+      await bot.sendMessage(parentId, 'Нет активных квестов.');
+      return;
+    }
+    let reply = '📋 Активные квесты:\n';
+    quests.forEach((q, i) => {
+      reply += `\n${i + 1}. ${q.subject} — ${q.description}\n   Награда: +${q.reward_minutes} мин | ID: ${q.id}`;
+    });
+    await bot.sendMessage(parentId, reply);
+    return;
+  }
+
+  // /assign <subject>: <description>
+  if (text.startsWith('/assign ')) {
+    const rest = text.slice('/assign '.length).trim();
+    const colonIdx = rest.indexOf(':');
+    if (colonIdx === -1) {
+      await bot.sendMessage(parentId, 'Формат: /assign Lengua: прочитать параграф 12');
+      return;
+    }
+    const subject = rest.slice(0, colonIdx).trim();
+    const description = rest.slice(colonIdx + 1).trim();
+    if (!subject || !description) {
+      await bot.sendMessage(parentId, 'Формат: /assign Lengua: прочитать параграф 12');
+      return;
+    }
+    storage.addHomeworkTask({ subject, description, due: '' });
+    await bot.sendMessage(parentId, '✅ Задание добавлено. Макс передаст его сыну на следующей сессии.');
+    return;
+  }
+
+  // /quest <subject> "<description>" +<minutes>мин
+  if (text.startsWith('/quest ')) {
+    const rest = text.slice('/quest '.length).trim();
+    const m = rest.match(/^(\S+)\s+"([^"]+)"\s+\+(\d+)мин$/i);
+    if (!m) {
+      await bot.sendMessage(parentId, 'Формат: /quest Inglés "описание задания" +30мин');
+      return;
+    }
+    const [, subject, description, minutesStr] = m;
+    const reward_minutes = parseInt(minutesStr, 10);
+    const id = storage.addQuest({ subject, description, reward_minutes });
+    await bot.sendMessage(parentId,
+      `🎯 Квест создан!\n\n${subject}: ${description}\nНаграда: +${reward_minutes} мин\n\nМакс расскажет сыну о квесте при следующей сессии.`
+    );
+    console.log('[Max] Quest created by parent:', id, subject);
+    return;
+  }
+
+  // /cancelquest <id>
+  if (text.startsWith('/cancelquest ')) {
+    const id = text.slice('/cancelquest '.length).trim();
+    const ok = storage.cancelQuest(id);
+    await bot.sendMessage(parentId, ok ? 'Квест отменён.' : 'Квест не найден.');
+    return;
+  }
+
+  // /progress — общий прогресс по предметам
+  if (text === '/progress') {
+    const md = storage.readProgress();
+    if (!md) {
+      await bot.sendMessage(parentId, 'Прогресс пока не накоплен — сессий не было.');
+    } else {
+      await sendLongMessage(parentId, md);
+    }
+    return;
+  }
+
+  // /sessions [дата] — сессии за конкретный день или список дат
+  if (text === '/sessions' || text.startsWith('/sessions ')) {
+    const arg = text.slice('/sessions'.length).trim();
+    if (!arg) {
+      // Без даты — показываем список всех дат с сессиями
+      const dates = storage.listSessionDates();
+      if (dates.length === 0) {
+        await bot.sendMessage(parentId, 'Сессий ещё не было.');
+      } else {
+        await bot.sendMessage(parentId, `Даты сессий:\n${dates.join('\n')}\n\nИспользуй /sessions ГГГГ-ММ-ДД чтобы посмотреть конкретный день.`);
+      }
+    } else {
+      const md = storage.readSessionReport(arg);
+      if (!md) {
+        await bot.sendMessage(parentId, `Сессий за ${arg} не найдено.`);
+      } else {
+        await sendLongMessage(parentId, md);
+      }
+    }
+    return;
+  }
+
+  // /help — справка по командам
+  if (text === '/help') {
+    await bot.sendMessage(parentId,
+      'Команды для родителя:\n\n' +
+      '/report — сессия сегодня\n' +
+      '/sessions — список всех дат сессий\n' +
+      '/sessions ГГГГ-ММ-ДД — сессии за конкретный день\n' +
+      '/week — недельный дайджест\n' +
+      '/progress — прогресс по предметам\n' +
+      '/schedule — расписание сына\n' +
+      '/homework — домашние задания\n' +
+      '/balance — баланс TimeGuard\n' +
+      '/quests — активные квесты\n' +
+      '/assign Предмет: задание\n' +
+      '/quest Предмет "описание" +30мин\n' +
+      '/cancelquest <id>\n\n' +
+      'Или просто напиши вопрос — например: "Как он учится?" или "Что было на прошлой неделе?"'
+    );
+    return;
+  }
+
+  // Неизвестная команда — показываем help
+  if (text.startsWith('/')) {
+    await bot.sendMessage(parentId,
+      'Неизвестная команда. Напиши /help чтобы увидеть список команд.\n\nИли напиши вопрос без "/" — я отвечу развёрнуто.'
+    );
+    return;
+  }
+
+  // Свободный вопрос родителя — отвечает Claude с контекстом сессий и прогресса
+  try {
+    await bot.sendChatAction(parentId, 'typing');
+    const answer = await askParent(text);
+    await sendLongMessage(parentId, answer);
+  } catch (e) {
+    console.error('[Max] askParent error:', e.message);
+    await bot.sendMessage(parentId, 'Не удалось обработать запрос. Попробуй ещё раз.');
+  }
+}
+
 // ── Commands ──────────────────────────────────────────────────────────────────
 
 async function handleCommand(msg, text) {
@@ -308,6 +560,9 @@ async function handleCommand(msg, text) {
       await bot.sendChatAction(chatId, 'typing');
       const summary = await report.generateSessionSummary(data);
       await sendLongMessage(chatId, '¡Buen trabajo! 💪 Aquí tienes el resumen:\n\n' + summary);
+      await notifyParent('📚 Сессия завершена\n\n' + summary);
+      const stuckFlag = report.checkStuckTopic(data);
+      if (stuckFlag) await notifyParent(stuckFlag);
     } catch (e) {
       console.error('[Max] Failed to generate session summary:', e.message);
       await bot.sendMessage(chatId, '¡Sesión terminada! 💪 Hasta la próxima.');
@@ -380,8 +635,20 @@ async function handleCommand(msg, text) {
 // ── Message handler ───────────────────────────────────────────────────────────
 
 bot.on('message', async (msg) => {
-  if (!isAllowed(msg)) return;
   if (!msg.text) return; // voice/photo handled separately
+
+  // Route parent messages before student flow
+  if (isParent(msg)) {
+    const text = msg.text.trim();
+    try {
+      await handleParentCommand(msg, text);
+    } catch (e) {
+      console.error('[Max] Parent command error:', e.message);
+    }
+    return;
+  }
+
+  if (!isAllowed(msg)) return;
 
   const chatId = msg.chat.id;
 
@@ -411,8 +678,8 @@ bot.on('message', async (msg) => {
       return;
     }
 
-    // Check if schedule exists — if not, start onboarding
-    if (!storage.loadSchedule()) {
+    // Check if schedule is filled — if not, start onboarding
+    if (!storage.isScheduleComplete()) {
       const reply = startOnboarding();
       await sendLongMessage(chatId, reply);
       return;
@@ -448,10 +715,24 @@ bot.on('message', async (msg) => {
     const pending = storage.loadHomework().tasks.filter(t => !t.done);
     const reply = await askMax(history, context, pending, 'text');
 
-    // Извлекаем маркеры выполненных ДЗ и отмечаем их в storage
-    const { cleanText, doneIds } = extractDoneMarkers(reply);
+    // Извлекаем маркеры выполненных ДЗ
+    const { cleanText: noHwMarkers, doneIds } = extractDoneMarkers(reply);
     for (const id of doneIds) {
       storage.markHomeworkDone(id);
+    }
+
+    // Извлекаем маркеры выполненных квестов
+    const { cleanText, questIds } = extractQuestDoneMarkers(noHwMarkers);
+    for (const qid of questIds) {
+      const result = storage.completeQuest(qid);
+      if (result) {
+        const { quest } = result;
+        storage.addBalance(quest.reward_minutes);
+        const bal = storage.loadBalance();
+        await notifyParent(
+          `🏆 Квест выполнен!\n\n${quest.subject}: ${quest.description}\nНаграда: +${quest.reward_minutes} мин добавлено к балансу\nБаланс теперь: ${formatBalance(bal.balance_minutes)}`
+        );
+      }
     }
 
     session.addMessage('assistant', cleanText);
@@ -548,7 +829,7 @@ bot.on('voice', async (msg) => {
       return;
     }
 
-    if (!storage.loadSchedule()) {
+    if (!storage.isScheduleComplete()) {
       const reply = startOnboarding();
       await sendLongMessage(chatId, reply);
       return;
@@ -580,9 +861,22 @@ bot.on('voice', async (msg) => {
     const pending = storage.loadHomework().tasks.filter(t => !t.done);
     const reply = await askMax(history, context, pending, 'voice');
 
-    const { cleanText, doneIds } = extractDoneMarkers(reply);
-    for (const id of doneIds) {
+    const { cleanText: noHwMarkersV, doneIds: doneIdsV } = extractDoneMarkers(reply);
+    for (const id of doneIdsV) {
       storage.markHomeworkDone(id);
+    }
+
+    const { cleanText, questIds: questIdsV } = extractQuestDoneMarkers(noHwMarkersV);
+    for (const qid of questIdsV) {
+      const result = storage.completeQuest(qid);
+      if (result) {
+        const { quest } = result;
+        storage.addBalance(quest.reward_minutes);
+        const bal = storage.loadBalance();
+        await notifyParent(
+          `🏆 Квест выполнен!\n\n${quest.subject}: ${quest.description}\nНаграда: +${quest.reward_minutes} мин добавлено к балансу\nБаланс теперь: ${formatBalance(bal.balance_minutes)}`
+        );
+      }
     }
 
     session.addMessage('assistant', cleanText);
@@ -641,12 +935,14 @@ async function main() {
     claude: { askMax, askMaxOneShot },
     report,
     sendLongMessage,
-    setAwaitingHomework
+    setAwaitingHomework,
+    startOnboarding
   });
+
+  const STARTUP_COOLDOWN_MS = 4 * 60 * 60 * 1000;
 
   if (appState.chatId) {
     // M-6: Жора может перезапускать сервис несколько раз — отправляем приветствие не чаще раза в 4 часа
-    const STARTUP_COOLDOWN_MS = 4 * 60 * 60 * 1000;
     const lastSent = appState.lastStartupAt || 0;
     if (Date.now() - lastSent > STARTUP_COOLDOWN_MS) {
       try {
@@ -666,6 +962,25 @@ async function main() {
     }
   } else {
     console.log('[Max] No chatId saved — will save on first message');
+  }
+
+  // Startup message to parent (same 4hr cooldown)
+  if (process.env.PARENT_CHAT_ID) {
+    const lastParentSent = appState.lastParentStartupAt || 0;
+    if (Date.now() - lastParentSent > STARTUP_COOLDOWN_MS) {
+      try {
+        await bot.sendMessage(process.env.PARENT_CHAT_ID,
+          '👋 Макс запущен. Напиши /report, /quests или /assign чтобы взаимодействовать.'
+        );
+        appState.lastParentStartupAt = Date.now();
+        saveState();
+        console.log('[Max] Startup message sent to parent:', process.env.PARENT_CHAT_ID);
+      } catch (e) {
+        console.error('[Max] Failed to send parent startup message:', e.message);
+      }
+    } else {
+      console.log('[Max] Parent startup message skipped (cooldown)');
+    }
   }
 
   console.log('[Max] Ready and listening.');

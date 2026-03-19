@@ -68,6 +68,54 @@
       "description": "Жора докладывает: все системы в норме",
       "enabled": true,
       "service": "zhora"
+    },
+    {
+      "id": "tutor_week_greeting",
+      "name": "Приветствие новой недели (Max)",
+      "cron": "0 8 * * 1",
+      "description": "Объявляет язык недели (испанский/русский) сыну",
+      "enabled": true,
+      "service": "tutor"
+    },
+    {
+      "id": "tutor_afternoon_checkin",
+      "name": "Дневной чек-ин (Max)",
+      "cron": "0 15 * * 1-5",
+      "description": "Спрашивает как прошёл день и какое ДЗ — следующее сообщение ученика парсится как список ДЗ",
+      "enabled": true,
+      "service": "tutor"
+    },
+    {
+      "id": "tutor_evening_reminder",
+      "name": "Вечернее напоминание (Max)",
+      "cron": "0 21 * * 1-5",
+      "description": "Показывает ДЗ на завтра + что сделано/не сделано",
+      "enabled": true,
+      "service": "tutor"
+    },
+    {
+      "id": "tutor_daily_summary",
+      "name": "Дневной итог (Max)",
+      "cron": "30 20 * * *",
+      "description": "Обновляет progress.md на основе сессий за день",
+      "enabled": true,
+      "service": "tutor"
+    },
+    {
+      "id": "tutor_weekly_digest",
+      "name": "Недельный дайджест (Max)",
+      "cron": "0 18 * * 0",
+      "description": "Генерирует weekly digest, проверяет избегание предметов (5+ школьных дней без занятий) и уведомляет родителя при необходимости",
+      "enabled": true,
+      "service": "tutor"
+    },
+    {
+      "id": "tutor_session_autoclose",
+      "name": "Автозакрытие сессии (Max)",
+      "cron": "*/5 * * * *",
+      "description": "Закрывает брошенные сессии после 30 мин простоя; отправляет итог сессии ученику и родителю; проверяет повторяющиеся трудности (stuck-topic flag)",
+      "enabled": true,
+      "service": "tutor"
     }
   ]
 }

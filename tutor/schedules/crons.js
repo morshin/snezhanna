@@ -6,6 +6,11 @@ const langWeek = require('../lib/lang-week');
 const TIMEZONE = 'Europe/Madrid';
 const DAYS_ES = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
 
+function getTodayDay() {
+  const dayName = new Date().toLocaleDateString('es-ES', { weekday: 'long', timeZone: TIMEZONE });
+  return dayName.toLowerCase();
+}
+
 function getTomorrowDay() {
   const tomorrow = new Date();
   tomorrow.setDate(tomorrow.getDate() + 1);
@@ -21,8 +26,16 @@ function getTodayStr() {
 // Двуязычные тексты для автоматических сообщений
 const T = {
   afternoonGreeting: {
-    es: '¡Ey! 👋 ¿Cómo fue el cole hoy?\n¿Qué deberes te han puesto? Dímelos todos 📝',
-    ru: 'Эй! 👋 Как сегодня в школе?\nЧто задали? Расскажи всё 📝'
+    es: (subjects) => subjects.length > 0
+      ? `¡Ey! 👋 ¿Cómo fue el cole?\nHoy tenías: ${subjects.join(', ')}.\n¿Qué deberes te han puesto? Dímelo por cada asignatura 📝`
+      : '¡Ey! 👋 ¿Cómo fue el cole hoy?\n¿Qué deberes te han puesto? Dímelos todos 📝',
+    ru: (subjects) => subjects.length > 0
+      ? `Эй! 👋 Как школа?\nСегодня у тебя было: ${subjects.join(', ')}.\nЧто задали? Скажи по каждому предмету 📝`
+      : 'Эй! 👋 Как сегодня в школе?\nЧто задали? Расскажи всё 📝'
+  },
+  scheduleIncomplete: {
+    es: '¡Ey! 👋 Todavía no tengo tu horario. ¡Vamos a rellenarlo!',
+    ru: 'Эй! 👋 У меня ещё нет твоего расписания. Давай заполним!'
   },
   tomorrowHas: {
     es: 'Mañana tienes:',
@@ -77,7 +90,7 @@ function t(key, ...args) {
   return typeof val === 'function' ? val(...args) : val;
 }
 
-function setupSchedules({ bot, chatId, storage, session, claude, report, sendLongMessage, setAwaitingHomework }) {
+function setupSchedules({ bot, chatId, storage, session, claude, report, sendLongMessage, setAwaitingHomework, startOnboarding }) {
 
   // Понедельничное приветствие с объявлением языка недели — пн 08:00
   cron.schedule('0 8 * * 1', async () => {
@@ -95,15 +108,28 @@ function setupSchedules({ bot, chatId, storage, session, claude, report, sendLon
   cron.schedule('0 15 * * 1-5', async () => {
     if (!chatId()) return;
     try {
-      const schedule = storage.loadSchedule();
-      if (!schedule) return;
+      // Если расписание не заполнено — напомнить и запустить онбординг
+      if (!storage.isScheduleComplete()) {
+        const lang = langWeek.getCurrentLang();
+        await bot.sendMessage(chatId(), T.scheduleIncomplete[lang]);
+        if (startOnboarding) {
+          const onboardingMsg = startOnboarding();
+          await bot.sendMessage(chatId(), onboardingMsg);
+        }
+        return;
+      }
 
+      const schedule = storage.loadSchedule();
+      const todayDay = getTodayDay();
+      const todayLessons = schedule[todayDay] || [];
       const tomorrowDay = getTomorrowDay();
       const tomorrowLessons = schedule[tomorrowDay] || [];
       const hw = storage.loadHomework();
       const pending = hw.tasks.filter(task => !task.done);
+      const lang = langWeek.getCurrentLang();
 
-      let msg = t('afternoonGreeting');
+      // Вопрос про ДЗ — с перечислением сегодняшних предметов
+      let msg = T.afternoonGreeting[lang](todayLessons);
 
       if (tomorrowLessons.length > 0) {
         const numbered = tomorrowLessons.map((l, i) => `  ${i + 1}. ${l}`).join('\n');
@@ -191,6 +217,16 @@ function setupSchedules({ bot, chatId, storage, session, claude, report, sendLon
   cron.schedule('0 18 * * 0', async () => {
     try {
       await report.generateWeeklySummary();
+      // Check for subject avoidance and notify parent if found
+      const parentId = process.env.PARENT_CHAT_ID;
+      if (parentId) {
+        const avoidanceFlag = report.checkSubjectAvoidance();
+        if (avoidanceFlag) {
+          await bot.sendMessage(parentId, avoidanceFlag).catch(e => {
+            console.error('[Cron] Failed to send avoidance flag to parent:', e.message);
+          });
+        }
+      }
     } catch (e) {
       console.error('[Cron] weekly digest error:', e.message);
     }
@@ -207,6 +243,19 @@ function setupSchedules({ bot, chatId, storage, session, claude, report, sendLon
         try {
           const summary = await report.generateSessionSummary(data);
           await sendLongMessage(chatId(), t('sessionTimeout') + summary);
+          // Notify parent
+          const parentId = process.env.PARENT_CHAT_ID;
+          if (parentId) {
+            await bot.sendMessage(parentId, '📚 Сессия завершена\n\n' + summary).catch(e => {
+              console.error('[Cron] Failed to send session summary to parent:', e.message);
+            });
+            const stuckFlag = report.checkStuckTopic(data);
+            if (stuckFlag) {
+              await bot.sendMessage(parentId, stuckFlag).catch(e => {
+                console.error('[Cron] Failed to send stuck flag to parent:', e.message);
+              });
+            }
+          }
         } catch (e) {
           console.error('[Cron] Failed to generate session summary:', e.message);
           await bot.sendMessage(chatId(), t('sessionClosed')).catch(() => {});
