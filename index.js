@@ -528,7 +528,7 @@ bot.on('message', async (msg) => {
       try {
         await bot.sendChatAction(chatId, 'record_voice');
         const audio = await whisper.tts(reply);
-        await bot.sendVoice(chatId, audio);
+        await bot.sendVoice(chatId, audio, {}, { filename: 'voice.mp3', contentType: 'audio/mpeg' });
         return;
       } catch (ttsErr) {
         console.error('[TTS] Error, falling back to text:', ttsErr.message);
