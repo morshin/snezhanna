@@ -1025,39 +1025,44 @@ ${chatSection}`;
   });
 
   // Email check — every 30 minutes
-  // Храним ID уже обработанных писем в памяти, чтобы не присылать дубли между запусками крона.
-  // При перезапуске бота сет очищается — это нормально: первый запуск даст свежий дайджест.
-  const seenEmailIds = new Set();
-  // Флаг первого запуска: на старте только заполняем seenEmailIds без уведомления,
-  // чтобы не захламлять чат накопившимися письмами при рестарте бота
-  let emailCheckFirstRun = true;
+  const MAX_EMAIL_DIGEST_SEEN = 2000;
+  function trimEmailDigestSeenIds(ids) {
+    if (ids.length <= MAX_EMAIL_DIGEST_SEEN) return ids;
+    return ids.slice(ids.length - MAX_EMAIL_DIGEST_SEEN);
+  }
+  function persistEmailDigestSeen(seenSet) {
+    appState.emailDigestSeenIds = trimEmailDigestSeenIds([...seenSet]);
+    state.save(appState);
+  }
 
   cron.schedule('*/30 * * * *', async () => {
     if (!appState.chatId || !google.isAuthorized()) return;
     try {
       const messages = await google.getGmailMessages(20, true);
-      const newMessages = messages.filter(m => !seenEmailIds.has(m.id));
+      const seenEmailIds = new Set(appState.emailDigestSeenIds || []);
 
-      // Помечаем все текущие ID как виденные
-      messages.forEach(m => seenEmailIds.add(m.id));
-
-      if (emailCheckFirstRun) {
-        // На первом запуске просто запоминаем текущие письма, не уведомляем
-        emailCheckFirstRun = false;
-        console.log(`[Schedule] email_check first run: seeded ${messages.length} existing unread email(s)`);
+      // Только при самой первой установке (пустой state): запоминаем хвост непрочитанного без спама в чат
+      if (!appState.emailDigestBootstrapped) {
+        messages.forEach((m) => seenEmailIds.add(m.id));
+        appState.emailDigestBootstrapped = true;
+        persistEmailDigestSeen(seenEmailIds);
+        console.log(`[Schedule] email_check bootstrap: seeded ${messages.length} existing unread email(s), no digest`);
         return;
       }
 
+      const newMessages = messages.filter((m) => !seenEmailIds.has(m.id));
       if (newMessages.length === 0) return;
 
       console.log(`[Schedule] email_check: ${newMessages.length} new unread email(s)`);
 
-      // Получаем полный текст каждого нового письма (getMessageById авто-помечает как прочитанное)
+      // Полный текст (getMessageById помечает как прочитанное). ID в seen — только после успешной загрузки,
+      // иначе следующий тик повторит попытку.
       const fullMessages = [];
       for (const m of newMessages.slice(0, 10)) {
         try {
           const full = await google.getMessageById(m.id);
           fullMessages.push(full);
+          seenEmailIds.add(m.id);
         } catch (e) {
           console.error('[Schedule] email_check: failed to get message', m.id, e.message);
         }
@@ -1082,6 +1087,7 @@ ${emailsText}`;
 
       const reply = await askClaudeOneShot(prompt);
       await sendToVova(reply);
+      persistEmailDigestSeen(seenEmailIds);
     } catch (e) {
       console.error('[Schedule] email_check error:', e.message);
     }
