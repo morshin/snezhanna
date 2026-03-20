@@ -4,7 +4,7 @@ Review all recent changes to the codebase and update all project documentation t
 
 ## Steps
 
-1. Run `git diff HEAD~1 HEAD` (or `git diff --staged` if there are staged changes) to see what changed.
+1. Inspect what changed using **`git diff`** and **`git status`** (working tree + staged). Use `git diff HEAD~1 HEAD` only when you need the last *committed* commit; after a new feature, changes are often still uncommitted, so the working-tree diff is the source of truth.
 2. Read the current `CLAUDE.md` to understand what's already documented.
 
 ### CLAUDE.md

@@ -19,9 +19,9 @@ sudo systemctl restart zhora       # watchdog
 ## Steps
 
 1. Restart the target service(s).
-2. Wait 3 seconds, then check status:
+2. Wait 3 seconds, then check status. **Do not use `sudo` here** — on this host `systemctl status` is allowed for user `vova`; `sudo` would require NOPASSWD rules for every argv variant (`--no-pager`, unit list). Use `--no-pager` for non-interactive output:
    ```bash
-   sudo systemctl status snezhanna tutor zhora
+   systemctl status snezhanna tutor zhora --no-pager
    ```
 3. Show the last 30 log lines for the restarted service(s):
    ```bash

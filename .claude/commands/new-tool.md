@@ -39,6 +39,6 @@ Tools are NOT split into separate files. The implementation logic usually lives 
      return await myModule.doSomething(input.param);
    ```
 
-6. **Update docs** — Run `/update-docs` to update `CLAUDE.md`, `identity/IDENTITY.md`, and any relevant `skills/*.md`.
+6. **Update docs (required, same turn)** — Follow `.claude/commands/update-docs.md` in this session (working-tree `git diff` / `git status`); update `CLAUDE.md`, `identity/IDENTITY.md`, `docs/snezhanna-tz.md` if applicable, and any relevant `skills/*.md` / `docs/tz-*.md`. Do not skip or defer to a separate `/update-docs` only.
 
 7. **Test instructions** — Tell me how to test the tool manually by sending a message to Snezhanna.

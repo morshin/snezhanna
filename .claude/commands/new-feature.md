@@ -23,6 +23,6 @@ Guide me through developing a new feature for Snezhanna end-to-end.
    - Add them to `.env` (the service reads it automatically via `EnvironmentFile=` in snezhanna.service).
    - Add the same variable names (with empty values) to `.env.example` so the template stays up to date.
 
-6. **Update docs** — Run `/update-docs` to update `CLAUDE.md`, `identity/IDENTITY.md`, `docs/snezhanna-tz.md`, and any relevant `skills/*.md` files.
+6. **Update docs (required, same turn)** — Do **not** defer this to a separate `/update-docs` invocation. Follow the full checklist in `.claude/commands/update-docs.md` in this session: refresh `git diff` / `git status` against the working tree (not only `HEAD~1`), then update every doc that the change actually touches — at minimum check `CLAUDE.md` (Key files table, Architecture, env vars), `identity/IDENTITY.md` if users see new behavior, `docs/snezhanna-tz.md` for structure/infra/cron/env, `schedules/heartbeats.json` if schedules changed, matching `skills/*.md`, and any relevant `docs/tz-*.md` spec.
 
 7. **Summary** — Report what was created/modified and how to test it, then run `/deploy` to restart the service and verify it started cleanly.
