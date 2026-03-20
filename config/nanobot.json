@@ -26,6 +26,9 @@
     "max_size_kb": 51200,
     "max_age_years": 3
   },
+  "mini_app": {
+    "port": 3001
+  },
   "chat_monitor": {
     "chats": [
       { "chat_id": 8271850037, "name": "Рома Моршин (сын)", "type": "personal", "category": "kids" },

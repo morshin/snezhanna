@@ -21,6 +21,7 @@ const chatMonitor = require('./lib/chat-monitor');
 const strava = require('./lib/strava');
 const workload = require('./lib/workload');
 const { logTokens } = require('./lib/token-log');
+const api = require('./lib/api');
 
 // ── Config & Identity ─────────────────────────────────────────────────────────
 
@@ -1095,6 +1096,7 @@ async function main() {
   console.log('[Snezhanna] Starting...');
 
   yadiskDirs.ensureDirs();
+  api.start();
   setupSchedules();
 
   if (appState.chatId) {
