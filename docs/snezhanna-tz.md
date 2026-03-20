@@ -81,6 +81,7 @@ Examples:
 | Disk storage | Yandex.Disk via WebDAV (davfs2) |
 | Scheduled tasks | `node-cron` |
 | HTTP client | `axios` |
+| HTTP server (Mini App) | Node.js built-in `http` module — serves Mini App API + static files |
 | Process manager | systemd |
 | Runtime | Node.js 22.x |
 | Package manager | npm 10.x |
@@ -121,16 +122,20 @@ snezhanna/
   │   ├── state.js          # Persist chatId to .nanobot/state.json
   │   ├── strava.js         # Strava API: weekly sync, fitness digest
   │   ├── tasks.js          # Task tracking (Eisenhower matrix)
+  │   ├── api.js            # HTTP API server for Tasks Mini App (initData validation, task CRUD)
   │   ├── tools.js          # All Claude tool definitions + executeTool dispatcher
   │   ├── vision.js         # Photo: download from Telegram, base64, image blocks
   │   ├── whisper.js        # OpenAI Whisper transcription + TTS
   │   ├── yadisk-dirs.js    # Ensure agent subdirs; project/doc CRUD
   │   └── yadisk.js         # Yandex.Disk WebDAV read/write helpers
+  ├── mini-app/
+  │   └── index.html        # Telegram Mini App frontend (single-file HTML/JS/CSS)
   ├── docs/
   │   ├── snezhanna-tz.md           # This document
   │   ├── tutor-bot-tz.md           # Max tutor bot spec
   │   ├── tz-strava.md              # Strava integration spec
   │   ├── tz-task-tracking.md       # Task tracking spec
+  │   ├── tz-tasks-mini-app.md     # Tasks Mini App spec
   │   ├── tz-calendar-metadata.md   # Calendar metadata spec
   │   ├── snezhanna-workload-scoring-tz.md  # Workload scoring spec (WIP)
   │   └── backlog.md                # Future improvements backlog
@@ -315,7 +320,20 @@ Added to `/etc/fstab` for auto-mount on reboot.
 - Evening check-in sends native Telegram checklist (Vova can check off tasks in-app)
 - See `docs/tz-task-tracking.md` for full spec
 
-### 7. Chat Monitoring
+### 7. Tasks Mini App
+
+- Telegram Mini App accessible via the bot's Menu Button
+- Mobile-first touch-friendly UI for reviewing and completing tasks
+- Frontend: single-file `mini-app/index.html` using Telegram theme variables (`var(--tg-theme-*)`)
+- Backend: `lib/api.js` — lightweight HTTP server using Node's built-in `http` module (no new dependencies)
+- API validates Telegram `initData` via HMAC-SHA256 using `TELEGRAM_BOT_TOKEN`
+- API routes: `GET /api/tasks`, `POST /api/tasks/:id/complete`, `PATCH /api/tasks/:id`, `DELETE /api/tasks/:id`
+- All mutations go through `lib/tasks.js` — no direct file access
+- Port configured in `config/nanobot.json → mini_app.port` (default 3001)
+- Requires HTTPS reverse proxy (nginx/caddy) for Telegram Mini App requirement
+- See `docs/tz-tasks-mini-app.md` for full spec
+
+### 8. Chat Monitoring
 
 - Snezhanna passively monitors specified Telegram chats (family + work)
 - Monitored chats configured in `config/nanobot.json → chat_monitor.chats`
@@ -323,7 +341,7 @@ Added to `/etc/fstab` for auto-mount on reboot.
 - Messages available to Claude as context when Vova asks about them
 - Evening check-in includes summary of disk write operations (via `lib/disk-log.js`)
 
-### 8. Web Search
+### 9. Web Search
 
 - Anthropic native web search tool (`web_search_20250305`)
 - Server-side, no local execution needed
@@ -717,6 +735,9 @@ Single source of truth for runtime settings:
     "exclude_folders": ["..."],
     "max_size_kb": 51200,
     "max_age_years": 3
+  },
+  "mini_app": {
+    "port": 3001
   },
   "chat_monitor": {
     "chats": [

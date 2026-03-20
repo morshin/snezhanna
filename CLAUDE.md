@@ -55,7 +55,7 @@ node lib/indexer.js --incremental # incremental update
 - Prompt caching enabled (`betas: ['prompt-caching-2024-07-31']`): identity block marked with `cache_control: { type: 'ephemeral' }` to reduce input token usage and avoid rate limits; cache hits logged as `[Cache] hit: N tokens cached`
 - Anthropic native web search (`web_search_20250305`) enabled as a server-side tool — Claude can search the web for current info (rates, news, weather) without any local execution
 - Auto-fetches Google Calendar / Gmail context when keywords are detected in user messages (Russian keywords: "календар", "встреч", "сегодня", "почт", etc.)
-- On startup: calls `yadiskDirs.ensureDirs()` to create any missing agent subdirs (`index/`, `memory/`, `projects/`, `fitness/`, `drafts/`, `digests/`)
+- On startup: calls `yadiskDirs.ensureDirs()` to create any missing agent subdirs (`index/`, `memory/`, `projects/`, `fitness/`, `drafts/`, `digests/`), then starts the Mini App HTTP API server (`lib/api.js`) on the port from `config.mini_app.port` (default 3001)
 - Scheduled tasks via `node-cron`: morning briefing (08:00), workload weekly check-in (Monday 09:00), evening check-in (19:00), weekly digest (Sunday 10:00), calendar reminders every 10 min (fires at 30-min mark)
 - Workload & Wellbeing scoring: weekly life-balance score (0–10) across 4 domains (work, family, health, personal). Monday 09:00 check-in collects self-reported data, then `lib/workload.js` aggregates Calendar/Gmail/Tasks/Strava data and runs a standalone Claude scoring call. Morning briefing appends an overload coach block when score ≤ 5. On-demand via phrases like "мой скор", "как я справляюсь". History persisted to `/mnt/yadisk-agent/workload-history.json` (last 12 weeks)
 - Evening check-in includes a summary of all Yandex Disk write operations logged during the day (via `lib/disk-log.js`); log is cleared after sending
@@ -105,6 +105,8 @@ node lib/indexer.js --incremental # incremental update
 | `docs/snezhanna-workload-scoring-tz.md` | Technical specification for the Workload & Wellbeing Scoring feature |
 | `lib/indexer.js` | Walk Yandex Disk and build JSON file index |
 | `lib/yadisk-dirs.js` | Ensure agent subdirs exist; project CRUD (`create_project`, `list_projects`, `read_project_file`, `write_project_file`) and project docs (`list_project_docs`, `read_project_doc`, `write_project_doc`) |
+| `lib/api.js` | HTTP API server for Tasks Mini App; validates Telegram initData, serves static files from `mini-app/`, exposes task CRUD endpoints |
+| `mini-app/index.html` | Telegram Mini App frontend — single-file HTML/JS/CSS, Eisenhower task list with tap-to-complete and action sheets |
 | `lib/disk-log.js` | In-memory log of Yandex Disk write operations; flushed after evening check-in |
 | `identity/IDENTITY.md` | Snezhanna's system prompt (personality, capabilities, prompt injection defense) |
 | `config/nanobot.json` | Model, token limits, timezone, history window, Yandex Disk mount paths and indexer rules |
@@ -119,6 +121,7 @@ node lib/indexer.js --incremental # incremental update
 | `tutor/identity/IDENTITY.md` | Max's system prompt (personality, pedagogical rules, language policy, quest awareness) |
 | `docs/tutor-bot-tz.md` | Technical specification for Max tutor bot |
 | `docs/tutor-parent-interface-tz.md` | Technical specification for Max Parent Interface feature |
+| `docs/tz-tasks-mini-app.md` | Technical specification for Tasks Mini App |
 
 ### State & credentials
 
@@ -158,6 +161,7 @@ All cron schedules use `Europe/Madrid`. Dates/times shown to Vova are localized 
 - `timezone`: Europe/Madrid
 - `yadisk.*`: mount paths and index file location
 - `index.*`: which folders/extensions to include/exclude when indexing Yandex Disk
+- `mini_app.port`: HTTP port for the Tasks Mini App API server (default 3001)
 
 ## Required environment variables
 
