@@ -136,6 +136,7 @@ snezhanna/
   │   ├── tz-strava.md              # Strava integration spec
   │   ├── tz-task-tracking.md       # Task tracking spec
   │   ├── tz-tasks-mini-app.md     # Tasks Mini App spec
+  │   ├── tz-miniapp-calendar-tab.md  # Calendar tab spec
   │   ├── tz-calendar-metadata.md   # Calendar metadata spec
   │   ├── snezhanna-workload-scoring-tz.md  # Workload scoring spec (WIP)
   │   └── backlog.md                # Future improvements backlog
@@ -320,18 +321,19 @@ Added to `/etc/fstab` for auto-mount on reboot.
 - Evening check-in sends native Telegram checklist (Vova can check off tasks in-app)
 - See `docs/tz-task-tracking.md` for full spec
 
-### 7. Tasks Mini App
+### 7. Mini App (Tasks + Calendar)
 
 - Telegram Mini App accessible via the bot's Menu Button
-- Mobile-first touch-friendly UI for reviewing and completing tasks
+- Two-tab interface: **Tasks** (Eisenhower task list) and **Calendar** (day timeline / week list)
 - Frontend: single-file `mini-app/index.html` using Telegram theme variables (`var(--tg-theme-*)`)
 - Backend: `lib/api.js` — lightweight HTTP server using Node's built-in `http` module (no new dependencies)
 - API validates Telegram `initData` via HMAC-SHA256 using `TELEGRAM_BOT_TOKEN`
-- API routes: `GET /api/tasks`, `POST /api/tasks/:id/complete`, `PATCH /api/tasks/:id`, `DELETE /api/tasks/:id`
-- All mutations go through `lib/tasks.js` — no direct file access
+- Task API routes: `GET /api/tasks`, `POST /api/tasks/:id/complete`, `PATCH /api/tasks/:id`, `DELETE /api/tasks/:id`
+- Calendar API routes: `GET /api/calendar/day`, `GET /api/calendar/week` — reads from `lib/google.js`
+- All task mutations go through `lib/tasks.js` — no direct file access
 - Port configured in `config/nanobot.json → mini_app.port` (default 3001)
 - Requires HTTPS reverse proxy (nginx/caddy) for Telegram Mini App requirement
-- See `docs/tz-tasks-mini-app.md` for full spec
+- See `docs/tz-tasks-mini-app.md` and `docs/tz-miniapp-calendar-tab.md` for specs
 
 ### 8. Chat Monitoring
 

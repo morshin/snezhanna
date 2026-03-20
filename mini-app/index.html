@@ -2,19 +2,97 @@
 <html lang="ru">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>Tasks</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Snezhanna</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 
+  /*
+   * iOS Telegram: если задать html высоту = viewportStableHeight, корень часто короче
+   * реальной области WebView, а таббар остаётся position:fixed у низа экрана → между
+   * ними чёрная полоса. Решение: одна оболочка inset:0 + скролл внутри, табы в потоке.
+   */
+  html {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: var(--tg-theme-bg-color, #fff);
+  }
+
   body {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    overflow: hidden;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     background: var(--tg-theme-bg-color, #fff);
     color: var(--tg-theme-text-color, #000);
-    min-height: 100vh;
-    overflow-x: hidden;
   }
+
+  #appShell {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    z-index: 1;
+    background: var(--tg-theme-bg-color, #fff);
+  }
+
+  #appScroll {
+    flex: 1;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-y: contain;
+    background: var(--tg-theme-bg-color, #fff);
+  }
+
+  /* ── Bottom tab bar (в потоке под скроллом — без зазора у низа WebView) ─ */
+
+  .bottom-tabs {
+    flex-shrink: 0;
+    display: flex;
+    width: 100%;
+    background: var(--tg-theme-bg-color, #fff);
+    border-top: 1px solid var(--tg-theme-secondary-bg-color, #e0e0e0);
+    padding-bottom: env(safe-area-inset-bottom, 0);
+  }
+
+  .bottom-tab {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 8px 0 6px;
+    border: none;
+    background: none;
+    cursor: pointer;
+    color: var(--tg-theme-hint-color, #999);
+    font-size: 11px;
+    font-weight: 600;
+    gap: 2px;
+    font-family: inherit;
+    transition: color 0.15s;
+  }
+
+  .bottom-tab.active {
+    color: var(--tg-theme-button-color, #3390ec);
+  }
+
+  .bottom-tab svg {
+    width: 24px;
+    height: 24px;
+    fill: currentColor;
+  }
+
+  /* ── Screens ─────────────────────────────────────────────────────────── */
+
+  .screen { display: none; }
+  .screen.active { display: block; }
+
+  /* ── Tasks screen (existing styles) ──────────────────────────────────── */
 
   .sticky-header {
     position: sticky;
@@ -39,13 +117,8 @@
     scrollbar-width: none;
   }
 
-  .project-bar.visible {
-    display: flex;
-  }
-
-  .project-bar::-webkit-scrollbar {
-    display: none;
-  }
+  .project-bar.visible { display: flex; }
+  .project-bar::-webkit-scrollbar { display: none; }
 
   .project-chip {
     flex-shrink: 0;
@@ -62,9 +135,7 @@
     transition: background 0.15s, color 0.15s;
   }
 
-  .project-chip:active {
-    opacity: 0.85;
-  }
+  .project-chip:active { opacity: 0.85; }
 
   .project-chip.active {
     background: var(--tg-theme-button-color, #3390ec);
@@ -83,6 +154,7 @@
     transition: background 0.15s, color 0.15s;
     background: var(--tg-theme-secondary-bg-color, #f0f0f0);
     color: var(--tg-theme-hint-color, #999);
+    font-family: inherit;
   }
 
   .tab.active {
@@ -105,25 +177,12 @@
     border-radius: 14px;
   }
 
-  .quadrant-section.q1 {
-    background: rgba(211, 47, 47, 0.11);
-  }
+  .quadrant-section.q1 { background: rgba(211, 47, 47, 0.11); }
+  .quadrant-section.q2 { background: rgba(245, 124, 0, 0.11); }
+  .quadrant-section.q3 { background: rgba(25, 118, 210, 0.11); }
+  .quadrant-section.q4 { background: rgba(100, 100, 100, 0.09); }
 
-  .quadrant-section.q2 {
-    background: rgba(245, 124, 0, 0.11);
-  }
-
-  .quadrant-section.q3 {
-    background: rgba(25, 118, 210, 0.11);
-  }
-
-  .quadrant-section.q4 {
-    background: rgba(100, 100, 100, 0.09);
-  }
-
-  .task-list {
-    padding: 0 0 100px;
-  }
+  .task-list { padding: 0 0 20px; }
 
   .task-row {
     display: flex;
@@ -138,9 +197,7 @@
     transition: transform 0.2s ease, opacity 0.3s ease;
   }
 
-  .task-row:active {
-    background: var(--tg-theme-secondary-bg-color, #f5f5f5);
-  }
+  .task-row:active { background: var(--tg-theme-secondary-bg-color, #f5f5f5); }
 
   .task-check {
     width: 28px;
@@ -171,16 +228,9 @@
     margin-bottom: 2px;
   }
 
-  .task-content {
-    flex: 1;
-    min-width: 0;
-  }
+  .task-content { flex: 1; min-width: 0; }
 
-  .task-title {
-    font-size: 15px;
-    line-height: 1.3;
-    word-break: break-word;
-  }
+  .task-title { font-size: 15px; line-height: 1.3; word-break: break-word; }
 
   .task-meta {
     font-size: 12px;
@@ -194,19 +244,9 @@
   .task-meta .overdue { color: #e53935; }
   .task-meta .today { color: var(--tg-theme-button-color, #3390ec); }
 
-  .task-flags {
-    display: flex;
-    gap: 4px;
-    margin-right: 4px;
-  }
+  .task-flags { display: flex; gap: 4px; margin-right: 4px; }
 
-  .flag {
-    font-size: 11px;
-    padding: 1px 5px;
-    border-radius: 4px;
-    font-weight: 600;
-  }
-
+  .flag { font-size: 11px; padding: 1px 5px; border-radius: 4px; font-weight: 600; }
   .flag.urgent { background: #ffebee; color: #c62828; }
   .flag.important { background: #e3f2fd; color: #1565c0; }
 
@@ -225,11 +265,16 @@
     border-radius: 50%;
   }
 
-  .task-menu-btn:active {
-    background: var(--tg-theme-secondary-bg-color, #eee);
+  .task-menu-btn:active { background: var(--tg-theme-secondary-bg-color, #eee); }
+
+  .task-row.removing {
+    opacity: 0;
+    transform: translateX(-100%);
+    transition: opacity 0.3s, transform 0.3s;
   }
 
-  /* Action sheet */
+  /* ── Action sheet / overlay / snackbar ───────────────────────────────── */
+
   .overlay {
     position: fixed;
     inset: 0;
@@ -240,10 +285,7 @@
     transition: opacity 0.2s;
   }
 
-  .overlay.visible {
-    opacity: 1;
-    pointer-events: auto;
-  }
+  .overlay.visible { opacity: 1; pointer-events: auto; }
 
   .action-sheet {
     position: fixed;
@@ -253,14 +295,19 @@
     background: var(--tg-theme-bg-color, #fff);
     border-radius: 16px 16px 0 0;
     z-index: 101;
-    transform: translateY(100%);
+    /* 100% высоты самой шторки недостаточно, если внутри только handle — на десктопе «торчит» полоска */
+    transform: translateY(105vh);
     transition: transform 0.25s ease;
     padding: 8px 16px calc(env(safe-area-inset-bottom, 16px) + 8px);
     max-height: 70vh;
     overflow-y: auto;
+    pointer-events: none;
   }
 
-  .action-sheet.visible { transform: translateY(0); }
+  .action-sheet.visible {
+    transform: translateY(0);
+    pointer-events: auto;
+  }
 
   .action-sheet .handle {
     width: 36px;
@@ -296,12 +343,7 @@
   .action-btn.danger { color: #e53935; }
   .action-btn .icon { font-size: 20px; width: 28px; text-align: center; }
 
-  /* Priority toggles in sheet */
-  .priority-row {
-    display: flex;
-    gap: 8px;
-    padding: 8px 0 12px;
-  }
+  .priority-row { display: flex; gap: 8px; padding: 8px 0 12px; }
 
   .priority-toggle {
     flex: 1;
@@ -323,7 +365,6 @@
     color: var(--tg-theme-button-text-color, #fff);
   }
 
-  /* Date picker */
   .date-input {
     width: 100%;
     padding: 12px;
@@ -333,16 +374,17 @@
     background: var(--tg-theme-bg-color, #fff);
     color: var(--tg-theme-text-color, #000);
     margin: 8px 0;
+    font-family: inherit;
   }
 
-  /* Snackbar */
   .snackbar {
     position: fixed;
-    bottom: calc(env(safe-area-inset-bottom, 16px) + 16px);
+    bottom: calc(env(safe-area-inset-bottom, 16px) + 70px);
     left: 16px;
     right: 16px;
-    background: var(--tg-theme-text-color, #333);
-    color: var(--tg-theme-bg-color, #fff);
+    /* Не брать text_color как фон: в тёмной теме это белый → «вечная» белая полоса */
+    background: rgba(32, 32, 32, 0.94);
+    color: #fff;
     padding: 14px 16px;
     border-radius: 12px;
     display: flex;
@@ -350,11 +392,16 @@
     justify-content: space-between;
     z-index: 200;
     font-size: 14px;
-    transform: translateY(120%);
+    /* 120% от своей высоты почти не уводит блок за экран — полоска остаётся над табами */
+    transform: translateY(150vh);
     transition: transform 0.25s ease;
+    pointer-events: none;
   }
 
-  .snackbar.visible { transform: translateY(0); }
+  .snackbar.visible {
+    transform: translateY(0);
+    pointer-events: auto;
+  }
 
   .snackbar button {
     background: none;
@@ -366,7 +413,8 @@
     padding: 4px 8px;
   }
 
-  /* Empty state */
+  /* ── Shared ──────────────────────────────────────────────────────────── */
+
   .empty-state {
     display: flex;
     flex-direction: column;
@@ -379,12 +427,7 @@
   .empty-state .emoji { font-size: 48px; margin-bottom: 12px; }
   .empty-state .text { font-size: 16px; color: var(--tg-theme-hint-color, #999); }
 
-  /* Loading */
-  .loading {
-    display: flex;
-    justify-content: center;
-    padding: 60px 0;
-  }
+  .loading { display: flex; justify-content: center; padding: 60px 0; }
 
   .spinner {
     width: 28px;
@@ -397,27 +440,242 @@
 
   @keyframes spin { to { transform: rotate(360deg); } }
 
-  .task-row.removing {
-    opacity: 0;
-    transform: translateX(-100%);
-    transition: opacity 0.3s, transform 0.3s;
+  /* ── Calendar screen ─────────────────────────────────────────────────── */
+
+  .cal-header {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: var(--tg-theme-bg-color, #fff);
+    padding: 12px 16px 8px;
+  }
+
+  .cal-segmented {
+    display: flex;
+    background: var(--tg-theme-secondary-bg-color, #f0f0f0);
+    border-radius: 8px;
+    padding: 2px;
+  }
+
+  .cal-seg-btn {
+    flex: 1;
+    padding: 7px 0;
+    text-align: center;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 600;
+    border: none;
+    cursor: pointer;
+    background: none;
+    color: var(--tg-theme-hint-color, #999);
+    font-family: inherit;
+    transition: all 0.15s;
+  }
+
+  .cal-seg-btn.active {
+    background: var(--tg-theme-bg-color, #fff);
+    color: var(--tg-theme-text-color, #000);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  }
+
+  /* Day timeline */
+  .timeline {
+    position: relative;
+    margin: 8px 16px 20px;
+    min-height: 200px;
+  }
+
+  .timeline-hour {
+    position: relative;
+    height: 60px;
+    border-top: 1px solid var(--tg-theme-secondary-bg-color, #e8e8e8);
+  }
+
+  .timeline-hour-label {
+    position: absolute;
+    top: -8px;
+    left: 0;
+    font-size: 11px;
+    color: var(--tg-theme-hint-color, #999);
+    width: 38px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .timeline-events {
+    position: absolute;
+    top: 0;
+    left: 50px;
+    right: 0;
+    bottom: 0;
+  }
+
+  .timeline-event {
+    position: absolute;
+    left: 0;
+    right: 0;
+    background: var(--tg-theme-button-color, #3390ec);
+    color: var(--tg-theme-button-text-color, #fff);
+    border-radius: 8px;
+    padding: 6px 10px;
+    font-size: 13px;
+    overflow: hidden;
+    min-height: 24px;
+    cursor: default;
+  }
+
+  .timeline-event-title {
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .timeline-event-time {
+    font-size: 11px;
+    opacity: 0.85;
+    margin-top: 1px;
+  }
+
+  .timeline-now {
+    position: absolute;
+    left: 38px;
+    right: 0;
+    height: 2px;
+    background: #e53935;
+    z-index: 5;
+  }
+
+  .timeline-now::before {
+    content: '';
+    position: absolute;
+    left: 4px;
+    top: -4px;
+    width: 10px;
+    height: 10px;
+    background: #e53935;
+    border-radius: 50%;
+  }
+
+  .all-day-bar {
+    margin: 0 16px 8px;
+    padding: 10px 12px;
+    background: var(--tg-theme-secondary-bg-color, #f0f0f0);
+    border-radius: 10px;
+    font-size: 14px;
+  }
+
+  .all-day-label {
+    font-size: 11px;
+    color: var(--tg-theme-hint-color, #999);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 4px;
+  }
+
+  .all-day-item {
+    padding: 2px 0;
+    font-weight: 500;
+  }
+
+  /* Week view */
+  .week-list { padding: 0 16px 20px; }
+
+  .week-day-header {
+    font-size: 14px;
+    font-weight: 700;
+    padding: 14px 0 6px;
+    color: var(--tg-theme-text-color, #000);
+  }
+
+  .week-day-header.is-today {
+    color: var(--tg-theme-button-color, #3390ec);
+  }
+
+  .week-event {
+    display: flex;
+    align-items: center;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--tg-theme-secondary-bg-color, #f0f0f0);
+    gap: 12px;
+  }
+
+  .week-event:last-child { border-bottom: none; }
+
+  .week-event-time {
+    font-size: 13px;
+    color: var(--tg-theme-hint-color, #999);
+    min-width: 52px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .week-event-title {
+    font-size: 15px;
+    flex: 1;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .week-event-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--tg-theme-button-color, #3390ec);
+    flex-shrink: 0;
   }
 </style>
 </head>
 <body>
 
-<div class="sticky-header">
-  <div class="tabs">
-    <button class="tab active" data-filter="today">Today</button>
-    <button class="tab" data-filter="all">All</button>
+<div id="appShell">
+<div id="appScroll">
+
+<!-- ── Tasks screen ──────────────────────────────────────────────────── -->
+<div class="screen active" id="screenTasks">
+  <div class="sticky-header">
+    <div class="tabs">
+      <button class="tab active" data-filter="today">Today</button>
+      <button class="tab" data-filter="all">All</button>
+    </div>
+    <div class="project-bar" id="projectBar" aria-label="Filter by project"></div>
   </div>
-  <div class="project-bar" id="projectBar" aria-label="Filter by project"></div>
+  <div id="taskContent">
+    <div class="loading"><div class="spinner"></div></div>
+  </div>
 </div>
 
-<div id="content">
-  <div class="loading"><div class="spinner"></div></div>
+<!-- ── Calendar screen ───────────────────────────────────────────────── -->
+<div class="screen" id="screenCalendar">
+  <div class="cal-header">
+    <div class="cal-segmented">
+      <button class="cal-seg-btn active" data-view="day">Day</button>
+      <button class="cal-seg-btn" data-view="week">Week</button>
+    </div>
+  </div>
+  <div id="calContent">
+    <div class="loading"><div class="spinner"></div></div>
+  </div>
 </div>
 
+</div>
+
+<!-- ── Bottom tab bar ────────────────────────────────────────────────── -->
+<div class="bottom-tabs">
+  <button class="bottom-tab active" data-screen="tasks">
+    <svg viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-9 14l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
+    <span>Tasks</span>
+  </button>
+  <button class="bottom-tab" data-screen="calendar">
+    <svg viewBox="0 0 24 24"><path d="M19 4h-1V2h-2v2H8V2H6v2H5c-1.11 0-1.99.9-1.99 2L3 20c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V10h14v10zm0-12H5V6h14v2z"/></svg>
+    <span>Calendar</span>
+  </button>
+</div>
+
+</div>
+
+<!-- ── Shared overlays ───────────────────────────────────────────────── -->
 <div class="overlay" id="overlay"></div>
 <div class="action-sheet" id="actionSheet">
   <div class="handle"></div>
@@ -434,14 +692,38 @@
   'use strict';
 
   const tg = window.Telegram && window.Telegram.WebApp;
+
+  /** Подогнать цвет области вокруг WebView под тему. */
+  function syncTelegramSurroundColors() {
+    if (!tg || !tg.themeParams) return;
+    try {
+      if (tg.themeParams.bg_color && typeof tg.setBackgroundColor === 'function') {
+        tg.setBackgroundColor(tg.themeParams.bg_color);
+      }
+      if (tg.themeParams.secondary_bg_color && typeof tg.setBottomBarColor === 'function') {
+        tg.setBottomBarColor(tg.themeParams.secondary_bg_color);
+      }
+    } catch (e) { /* ignore */ }
+  }
+
   if (tg) {
     tg.ready();
     tg.expand();
+    if (tg.MainButton && typeof tg.MainButton.hide === 'function') tg.MainButton.hide();
+    if (tg.SecondaryButton && typeof tg.SecondaryButton.hide === 'function') tg.SecondaryButton.hide();
+    syncTelegramSurroundColors();
+    if (typeof tg.onEvent === 'function') {
+      tg.onEvent('themeChanged', syncTelegramSurroundColors);
+    }
   }
 
   const API_BASE = '';
   const initData = tg ? tg.initData : '';
+  const TZ = 'Europe/Madrid';
 
+  // ── State ─────────────────────────────────────────────────────────────
+
+  let currentScreen = 'tasks';
   let currentFilter = 'today';
   let selectedProject = null;
   let allTasks = [];
@@ -449,7 +731,12 @@
   let undoTask = null;
   let activeSheetTaskId = null;
 
-  // ── API ───────────────────────────────────────────────────────────────────
+  let calView = 'day';
+  let calDayEvents = null;
+  let calWeekEvents = null;
+  let calNowTimer = null;
+
+  // ── API ───────────────────────────────────────────────────────────────
 
   async function api(method, path, body) {
     const opts = {
@@ -464,23 +751,42 @@
     return res.json();
   }
 
+  // ── Screen switching ──────────────────────────────────────────────────
+
+  function switchScreen(name) {
+    if (currentScreen === name) return;
+    currentScreen = name;
+
+    closeSheet();
+
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    document.querySelectorAll('.bottom-tab').forEach(t => t.classList.remove('active'));
+
+    if (name === 'tasks') {
+      document.getElementById('screenTasks').classList.add('active');
+      document.querySelector('.bottom-tab[data-screen="tasks"]').classList.add('active');
+      if (calNowTimer) { clearInterval(calNowTimer); calNowTimer = null; }
+    } else {
+      document.getElementById('screenCalendar').classList.add('active');
+      document.querySelector('.bottom-tab[data-screen="calendar"]').classList.add('active');
+      loadCalendar();
+    }
+  }
+
+  // ══════════════════════════════════════════════════════════════════════
+  // TASKS
+  // ══════════════════════════════════════════════════════════════════════
+
   async function loadTasks() {
     const pb = document.getElementById('projectBar');
     pb.classList.remove('visible');
     pb.innerHTML = '';
     const data = await api('GET', `/api/tasks?filter=${currentFilter}`);
     allTasks = data.tasks || [];
-    render();
+    renderTasks();
   }
 
-  // ── Rendering ─────────────────────────────────────────────────────────────
-
-  const QUADRANT_LABELS = {
-    1: 'Urgent & Important',
-    2: 'Urgent',
-    3: 'Important',
-    4: 'Backlog'
-  };
+  const QUADRANT_LABELS = { 1: 'Urgent & Important', 2: 'Urgent', 3: 'Important', 4: 'Backlog' };
 
   function quadrant(t) {
     if (t.urgent && t.important) return 1;
@@ -491,19 +797,57 @@
 
   function formatDue(dateStr) {
     if (!dateStr) return null;
-    const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Madrid' });
+    const today = new Date().toLocaleDateString('sv-SE', { timeZone: TZ });
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
-    const tomorrowStr = tomorrow.toLocaleDateString('sv-SE', { timeZone: 'Europe/Madrid' });
-
+    const tomorrowStr = tomorrow.toLocaleDateString('sv-SE', { timeZone: TZ });
     if (dateStr < today) return { text: dateStr, cls: 'overdue' };
     if (dateStr === today) return { text: 'today', cls: 'today' };
     if (dateStr === tomorrowStr) return { text: 'tomorrow', cls: '' };
     return { text: dateStr, cls: '' };
   }
 
-  function render() {
-    const content = document.getElementById('content');
+  function esc(s) {
+    if (!s) return '';
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  function escAttr(s) {
+    if (!s) return '';
+    return s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  /** Одинаковые numeric id в tasks.json и в каталогах projects (по файлу на проект) — различаем по project. */
+  function normProject(p) {
+    return p == null || p === '' ? '' : String(p);
+  }
+
+  function findTask(id, project) {
+    return allTasks.find(
+      t => Number(t.id) === Number(id) && normProject(t.project) === normProject(project)
+    );
+  }
+
+  function projectApiValue(project) {
+    return normProject(project) === '' ? null : normProject(project);
+  }
+
+  function projectQueryParam(project) {
+    return normProject(project) === '' ? '?project=' : `?project=${encodeURIComponent(normProject(project))}`;
+  }
+
+  function taskRowSelector(id, project) {
+    const p = normProject(project);
+    const idStr = String(id);
+    if (p === '') {
+      return `.task-row[data-id="${idStr}"][data-project=""]`;
+    }
+    const pe = typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(p) : p.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+    return `.task-row[data-id="${idStr}"][data-project="${pe}"]`;
+  }
+
+  function renderTasks() {
+    const content = document.getElementById('taskContent');
     const projectBar = document.getElementById('projectBar');
     const active = allTasks.filter(t => t.status !== 'done' && t.status !== 'cancelled');
 
@@ -511,37 +855,29 @@
       a.localeCompare(b, undefined, { sensitivity: 'base' })
     );
 
-    if (selectedProject && !projectNames.includes(selectedProject)) {
-      selectedProject = null;
-    }
+    if (selectedProject && !projectNames.includes(selectedProject)) selectedProject = null;
 
     if (projectNames.length === 0) {
       projectBar.classList.remove('visible');
       projectBar.innerHTML = '';
     } else {
       projectBar.classList.add('visible');
-      let chips =
-        `<button type="button" class="project-chip${selectedProject === null ? ' active' : ''}" data-project="__all__">All projects</button>`;
+      let chips = `<button type="button" class="project-chip${selectedProject === null ? ' active' : ''}" data-project="__all__">All projects</button>`;
       for (const p of projectNames) {
-        const activeCls = selectedProject === p ? ' active' : '';
-        chips += `<button type="button" class="project-chip${activeCls}" data-project="${escAttr(p)}">${esc(p)}</button>`;
+        chips += `<button type="button" class="project-chip${selectedProject === p ? ' active' : ''}" data-project="${escAttr(p)}">${esc(p)}</button>`;
       }
       projectBar.innerHTML = chips;
     }
 
     if (active.length === 0) {
-      content.innerHTML =
-        '<div class="empty-state"><div class="emoji">&#127881;</div><div class="text">All done!</div></div>';
+      content.innerHTML = '<div class="empty-state"><div class="emoji">&#127881;</div><div class="text">All done!</div></div>';
       return;
     }
 
-    const filtered = selectedProject
-      ? active.filter(t => t.project === selectedProject)
-      : active;
+    const filtered = selectedProject ? active.filter(t => t.project === selectedProject) : active;
 
     if (filtered.length === 0) {
-      content.innerHTML =
-        '<div class="empty-state"><div class="emoji">&#128193;</div><div class="text">No tasks in this project</div></div>';
+      content.innerHTML = '<div class="empty-state"><div class="emoji">&#128193;</div><div class="text">No tasks in this project</div></div>';
       return;
     }
 
@@ -555,13 +891,13 @@
     let html = '<div class="task-list">';
     for (const q of [1, 2, 3, 4]) {
       if (!groups[q]) continue;
-      html += `<div class="quadrant-section q${q}">`;
-      html += `<div class="section-header">${QUADRANT_LABELS[q]}</div>`;
+      html += `<div class="quadrant-section q${q}"><div class="section-header">${QUADRANT_LABELS[q]}</div>`;
       for (const t of groups[q]) {
         const due = formatDue(t.due_date);
+        const dp = escAttr(normProject(t.project));
         html += `
-          <div class="task-row" data-id="${t.id}">
-            <div class="task-check" data-id="${t.id}"></div>
+          <div class="task-row" data-id="${t.id}" data-project="${dp}">
+            <div class="task-check"></div>
             <div class="task-content">
               <div class="task-title">${esc(t.title)}</div>
               <div class="task-meta">
@@ -569,7 +905,7 @@
                 ${due ? `<span class="${due.cls}">${due.text}</span>` : ''}
               </div>
             </div>
-            <button class="task-menu-btn" data-id="${t.id}">&ctdot;</button>
+            <button type="button" class="task-menu-btn">&ctdot;</button>
           </div>`;
       }
       html += '</div>';
@@ -578,84 +914,69 @@
     content.innerHTML = html;
   }
 
-  function esc(s) {
-    if (!s) return '';
-    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  }
+  // ── Task actions ──────────────────────────────────────────────────────
 
-  function escAttr(s) {
-    if (!s) return '';
-    return s
-      .replace(/&/g, '&amp;')
-      .replace(/"/g, '&quot;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;');
-  }
-
-  // ── Actions ───────────────────────────────────────────────────────────────
-
-  async function completeTask(id) {
-    const row = document.querySelector(`.task-row[data-id="${id}"]`);
+  async function completeTask(id, project) {
+    const row = document.querySelector(taskRowSelector(id, project));
     const check = row && row.querySelector('.task-check');
     if (check) check.classList.add('completing');
-
     if (tg && tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
-
-    setTimeout(async () => {
+    setTimeout(() => {
       if (row) row.classList.add('removing');
       setTimeout(async () => {
-        await api('POST', `/api/tasks/${id}/complete`);
-        allTasks = allTasks.filter(t => t.id !== id);
-        render();
+        await api('POST', `/api/tasks/${id}/complete${projectQueryParam(project)}`);
+        allTasks = allTasks.filter(
+          t => !(Number(t.id) === Number(id) && normProject(t.project) === normProject(project))
+        );
+        renderTasks();
       }, 300);
     }, 200);
   }
 
-  async function deleteTask(id) {
-    const task = allTasks.find(t => t.id === id);
+  async function deleteTask(id, project) {
+    const task = findTask(id, project);
     if (!task) return;
-
-    // Optimistic removal
-    allTasks = allTasks.filter(t => t.id !== id);
-    render();
+    allTasks = allTasks.filter(
+      t => !(Number(t.id) === Number(id) && normProject(t.project) === normProject(project))
+    );
+    renderTasks();
     closeSheet();
-
-    // Show undo snackbar
     undoTask = task;
     showSnackbar('Task deleted', 'Undo', () => {
-      // Undo: re-add to local list and re-render (task not deleted on server yet)
       clearTimeout(undoTimer);
       allTasks.push(undoTask);
       allTasks = sortTasks(allTasks);
       undoTask = null;
-      render();
+      renderTasks();
       hideSnackbar();
     });
-
-    // Actually delete after 3 seconds
     undoTimer = setTimeout(async () => {
-      await api('DELETE', `/api/tasks/${id}`);
+      await api('DELETE', `/api/tasks/${id}${projectQueryParam(project)}`);
       undoTask = null;
       hideSnackbar();
     }, 3000);
   }
 
-  async function updatePriority(id, urgent, important) {
-    await api('PATCH', `/api/tasks/${id}`, { urgent, important });
-    const t = allTasks.find(t => t.id === id);
-    if (t) {
-      t.urgent = urgent;
-      t.important = important;
-    }
+  async function updatePriority(id, project, urgent, important) {
+    await api('PATCH', `/api/tasks/${id}`, {
+      urgent,
+      important,
+      project: projectApiValue(project)
+    });
+    const t = findTask(id, project);
+    if (t) { t.urgent = urgent; t.important = important; }
     allTasks = sortTasks(allTasks);
-    render();
+    renderTasks();
   }
 
-  async function updateDueDate(id, dueDate) {
-    await api('PATCH', `/api/tasks/${id}`, { due_date: dueDate || null });
-    const t = allTasks.find(t => t.id === id);
+  async function updateDueDate(id, project, dueDate) {
+    await api('PATCH', `/api/tasks/${id}`, {
+      due_date: dueDate || null,
+      project: projectApiValue(project)
+    });
+    const t = findTask(id, project);
     if (t) t.due_date = dueDate || null;
-    render();
+    renderTasks();
     closeSheet();
   }
 
@@ -663,13 +984,12 @@
     return [...tasks].sort((a, b) => quadrant(a) - quadrant(b));
   }
 
-  // ── Action Sheet ──────────────────────────────────────────────────────────
+  // ── Action sheet ──────────────────────────────────────────────────────
 
-  function openSheet(taskId) {
+  function openSheet(taskId, taskProject) {
     activeSheetTaskId = taskId;
-    const task = allTasks.find(t => t.id === taskId);
+    const task = findTask(taskId, taskProject);
     if (!task) return;
-
     const sheet = document.getElementById('sheetContent');
     sheet.innerHTML = `
       <div class="sheet-title">${esc(task.title)}</div>
@@ -684,63 +1004,45 @@
       <button class="action-btn danger" id="btnDelete">
         <span class="icon">&#128465;</span>
         <span>Delete</span>
-      </button>
-    `;
-
+      </button>`;
     document.getElementById('overlay').classList.add('visible');
     document.getElementById('actionSheet').classList.add('visible');
 
-    // Priority toggles
     document.getElementById('toggleUrgent').onclick = () => {
-      const newUrgent = !task.urgent;
-      task.urgent = newUrgent;
-      document.getElementById('toggleUrgent').classList.toggle('on', newUrgent);
-      updatePriority(taskId, newUrgent, task.important);
+      task.urgent = !task.urgent;
+      document.getElementById('toggleUrgent').classList.toggle('on', task.urgent);
+      updatePriority(task.id, task.project, task.urgent, task.important);
     };
-
     document.getElementById('toggleImportant').onclick = () => {
-      const newImportant = !task.important;
-      task.important = newImportant;
-      document.getElementById('toggleImportant').classList.toggle('on', newImportant);
-      updatePriority(taskId, task.urgent, newImportant);
+      task.important = !task.important;
+      document.getElementById('toggleImportant').classList.toggle('on', task.important);
+      updatePriority(task.id, task.project, task.urgent, task.important);
     };
-
-    // Deadline
     document.getElementById('btnDeadline').onclick = () => {
-      const sheet = document.getElementById('sheetContent');
       sheet.innerHTML = `
         <div class="sheet-title">Set deadline</div>
         <input type="date" class="date-input" id="datePicker" value="${task.due_date || ''}">
-        <button class="action-btn" id="btnSaveDate">
-          <span class="icon">&#10003;</span>
-          <span>Save</span>
-        </button>
-        <button class="action-btn" id="btnClearDate">
-          <span class="icon">&#10005;</span>
-          <span>Remove deadline</span>
-        </button>
-      `;
-      document.getElementById('btnSaveDate').onclick = () => {
-        updateDueDate(taskId, document.getElementById('datePicker').value);
-      };
-      document.getElementById('btnClearDate').onclick = () => {
-        updateDueDate(taskId, null);
-      };
+        <button class="action-btn" id="btnSaveDate"><span class="icon">&#10003;</span><span>Save</span></button>
+        <button class="action-btn" id="btnClearDate"><span class="icon">&#10005;</span><span>Remove deadline</span></button>`;
+      document.getElementById('btnSaveDate').onclick = () =>
+        updateDueDate(task.id, task.project, document.getElementById('datePicker').value);
+      document.getElementById('btnClearDate').onclick = () => updateDueDate(task.id, task.project, null);
     };
-
-    // Delete
-    document.getElementById('btnDelete').onclick = () => {
-      deleteTask(taskId);
-    };
+    document.getElementById('btnDelete').onclick = () => deleteTask(task.id, task.project);
   }
 
   function closeSheet() {
     document.getElementById('overlay').classList.remove('visible');
     document.getElementById('actionSheet').classList.remove('visible');
+    const sheet = document.getElementById('sheetContent');
+    sheet.innerHTML = '';
+    if (document.activeElement && typeof document.activeElement.blur === 'function') {
+      document.activeElement.blur();
+    }
     activeSheetTaskId = null;
   }
 
-  // ── Snackbar ──────────────────────────────────────────────────────────────
+  // ── Snackbar ──────────────────────────────────────────────────────────
 
   function showSnackbar(text, actionLabel, actionFn) {
     document.getElementById('snackbarText').textContent = text;
@@ -754,46 +1056,233 @@
     document.getElementById('snackbar').classList.remove('visible');
   }
 
-  // ── Event Listeners ───────────────────────────────────────────────────────
+  // ══════════════════════════════════════════════════════════════════════
+  // CALENDAR
+  // ══════════════════════════════════════════════════════════════════════
 
+  async function loadCalendar() {
+    const content = document.getElementById('calContent');
+    content.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+
+    if (calView === 'day') {
+      if (!calDayEvents) {
+        const data = await api('GET', '/api/calendar/day');
+        calDayEvents = data.events || [];
+      }
+      renderDayTimeline(calDayEvents);
+    } else {
+      if (!calWeekEvents) {
+        const data = await api('GET', '/api/calendar/week');
+        calWeekEvents = data.events || [];
+      }
+      renderWeekList(calWeekEvents);
+    }
+  }
+
+  function madridHHMM(isoStr) {
+    const d = new Date(isoStr);
+    return d.toLocaleTimeString('ru-RU', { timeZone: TZ, hour: '2-digit', minute: '2-digit', hour12: false });
+  }
+
+  function madridHour(isoStr) {
+    return new Date(isoStr).toLocaleString('en-US', { timeZone: TZ, hour: 'numeric', hour12: false });
+  }
+
+  function nowMadrid() {
+    const s = new Date().toLocaleString('en-US', { timeZone: TZ, hour: 'numeric', minute: 'numeric', hour12: false });
+    const [h, m] = s.split(':').map(Number);
+    return { h, m };
+  }
+
+  function renderDayTimeline(events) {
+    const content = document.getElementById('calContent');
+    const allDay = events.filter(e => e.allDay);
+    const timed = events.filter(e => !e.allDay);
+
+    // Determine hour range
+    let startHour = 7;
+    let endHour = 23;
+    for (const e of timed) {
+      const h = Number(madridHour(e.start));
+      if (h < startHour) startHour = h;
+    }
+    const totalHours = endHour - startHour;
+
+    let html = '';
+
+    // All-day events bar
+    if (allDay.length > 0) {
+      html += '<div class="all-day-bar"><div class="all-day-label">All day</div>';
+      for (const e of allDay) {
+        html += `<div class="all-day-item">${esc(e.title)}</div>`;
+      }
+      html += '</div>';
+    }
+
+    if (timed.length === 0 && allDay.length === 0) {
+      content.innerHTML = '<div class="empty-state"><div class="emoji">&#128197;</div><div class="text">No events today</div></div>';
+      return;
+    }
+
+    // Timeline
+    html += '<div class="timeline" style="height:' + (totalHours * 60) + 'px">';
+
+    // Hour lines
+    for (let h = startHour; h <= endHour; h++) {
+      const top = (h - startHour) * 60;
+      html += `<div class="timeline-hour" style="position:absolute;top:${top}px;left:0;right:0;height:60px;border-top:1px solid var(--tg-theme-secondary-bg-color,#e8e8e8)">`;
+      html += `<span class="timeline-hour-label">${String(h).padStart(2, '0')}:00</span>`;
+      html += '</div>';
+    }
+
+    // Events area
+    html += '<div class="timeline-events">';
+    for (const e of timed) {
+      const sH = Number(madridHour(e.start));
+      const sM = Number(new Date(e.start).toLocaleString('en-US', { timeZone: TZ, minute: 'numeric' }));
+      const eH = Number(madridHour(e.end));
+      const eM = Number(new Date(e.end).toLocaleString('en-US', { timeZone: TZ, minute: 'numeric' }));
+
+      const topPx = (sH - startHour) * 60 + sM;
+      let heightPx = (eH - sH) * 60 + (eM - sM);
+      if (heightPx < 24) heightPx = 24;
+
+      const timeStr = madridHHMM(e.start) + '–' + madridHHMM(e.end);
+      html += `<div class="timeline-event" style="top:${topPx}px;height:${heightPx}px">`;
+      html += `<div class="timeline-event-title">${esc(e.title)}</div>`;
+      if (heightPx >= 36) html += `<div class="timeline-event-time">${timeStr}</div>`;
+      html += '</div>';
+    }
+    html += '</div>';
+
+    // Current time line
+    const now = nowMadrid();
+    if (now.h >= startHour && now.h <= endHour) {
+      const nowTop = (now.h - startHour) * 60 + now.m;
+      html += `<div class="timeline-now" id="timelineNow" style="top:${nowTop}px"></div>`;
+    }
+
+    html += '</div>';
+    content.innerHTML = html;
+
+    // Auto-scroll to current time
+    const nowLine = document.getElementById('timelineNow');
+    if (nowLine) {
+      nowLine.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    }
+
+    // Update current time line every minute
+    if (calNowTimer) clearInterval(calNowTimer);
+    calNowTimer = setInterval(() => {
+      const el = document.getElementById('timelineNow');
+      if (!el) return;
+      const n = nowMadrid();
+      if (n.h >= startHour && n.h <= endHour) {
+        el.style.top = ((n.h - startHour) * 60 + n.m) + 'px';
+      }
+    }, 60000);
+  }
+
+  function renderWeekList(events) {
+    const content = document.getElementById('calContent');
+
+    if (events.length === 0) {
+      content.innerHTML = '<div class="empty-state"><div class="emoji">&#128197;</div><div class="text">No events this week</div></div>';
+      return;
+    }
+
+    // Group by date
+    const todayStr = new Date().toLocaleDateString('sv-SE', { timeZone: TZ });
+    const byDay = {};
+    for (const e of events) {
+      const dateStr = e.allDay ? e.start : new Date(e.start).toLocaleDateString('sv-SE', { timeZone: TZ });
+      if (!byDay[dateStr]) byDay[dateStr] = [];
+      byDay[dateStr].push(e);
+    }
+
+    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const sortedDays = Object.keys(byDay).sort();
+
+    let html = '<div class="week-list">';
+    for (const day of sortedDays) {
+      const d = new Date(day + 'T12:00:00');
+      const dayName = dayNames[d.getDay()];
+      const dateLabel = d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
+      const isToday = day === todayStr;
+
+      html += `<div class="week-day-header${isToday ? ' is-today' : ''}">${dayName}, ${dateLabel}${isToday ? ' &mdash; today' : ''}</div>`;
+
+      for (const e of byDay[day]) {
+        const timeStr = e.allDay ? 'all day' : madridHHMM(e.start);
+        html += `<div class="week-event">
+          <div class="week-event-dot"></div>
+          <div class="week-event-time">${timeStr}</div>
+          <div class="week-event-title">${esc(e.title)}</div>
+        </div>`;
+      }
+    }
+    html += '</div>';
+    content.innerHTML = html;
+  }
+
+  // ══════════════════════════════════════════════════════════════════════
+  // EVENT LISTENERS
+  // ══════════════════════════════════════════════════════════════════════
+
+  // Bottom tab bar
+  document.querySelectorAll('.bottom-tab').forEach(tab => {
+    tab.addEventListener('click', () => switchScreen(tab.dataset.screen));
+  });
+
+  // Task filter tabs
+  document.querySelectorAll('#screenTasks .tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('#screenTasks .tab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      currentFilter = tab.dataset.filter;
+      document.getElementById('taskContent').innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+      loadTasks();
+    });
+  });
+
+  // Calendar view toggle
+  document.querySelectorAll('.cal-seg-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.cal-seg-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      calView = btn.dataset.view;
+      loadCalendar();
+    });
+  });
+
+  // Project bar
   document.getElementById('projectBar').addEventListener('click', (e) => {
     const chip = e.target.closest('.project-chip');
     if (!chip) return;
     const p = chip.dataset.project;
     selectedProject = p === '__all__' || p === undefined ? null : p;
-    render();
-  });
-
-  // Tab switching
-  document.querySelectorAll('.tab').forEach(tab => {
-    tab.addEventListener('click', () => {
-      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-      tab.classList.add('active');
-      currentFilter = tab.dataset.filter;
-      document.getElementById('content').innerHTML = '<div class="loading"><div class="spinner"></div></div>';
-      loadTasks();
-    });
+    renderTasks();
   });
 
   // Task interactions (delegated)
-  document.getElementById('content').addEventListener('click', (e) => {
-    const check = e.target.closest('.task-check');
-    if (check) {
-      completeTask(Number(check.dataset.id));
+  document.getElementById('taskContent').addEventListener('click', (e) => {
+    const row = e.target.closest('.task-row');
+    if (!row) return;
+    const id = Number(row.dataset.id);
+    const project = row.dataset.project != null ? row.dataset.project : '';
+    if (e.target.closest('.task-check')) {
+      completeTask(id, project);
       return;
     }
-
-    const menuBtn = e.target.closest('.task-menu-btn');
-    if (menuBtn) {
-      openSheet(Number(menuBtn.dataset.id));
-      return;
+    if (e.target.closest('.task-menu-btn')) {
+      openSheet(id, project);
     }
   });
 
   // Overlay click to close sheet
   document.getElementById('overlay').addEventListener('click', closeSheet);
 
-  // ── Init ──────────────────────────────────────────────────────────────────
+  // ── Init ──────────────────────────────────────────────────────────────
 
   loadTasks();
 

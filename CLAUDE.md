@@ -105,8 +105,8 @@ node lib/indexer.js --incremental # incremental update
 | `docs/snezhanna-workload-scoring-tz.md` | Technical specification for the Workload & Wellbeing Scoring feature |
 | `lib/indexer.js` | Walk Yandex Disk and build JSON file index |
 | `lib/yadisk-dirs.js` | Ensure agent subdirs exist; project CRUD (`create_project`, `list_projects`, `read_project_file`, `write_project_file`) and project docs (`list_project_docs`, `read_project_doc`, `write_project_doc`) |
-| `lib/api.js` | HTTP API server for Tasks Mini App; validates Telegram initData, serves static files from `mini-app/`, exposes task CRUD endpoints |
-| `mini-app/index.html` | Telegram Mini App frontend — single-file HTML/JS/CSS, Eisenhower task list with tap-to-complete and action sheets |
+| `lib/api.js` | HTTP API server for Mini App; validates Telegram initData, serves static files from `mini-app/`, exposes task CRUD + calendar endpoints |
+| `mini-app/index.html` | Telegram Mini App frontend — two-tab (Tasks + Calendar) single-file HTML/JS/CSS |
 | `lib/disk-log.js` | In-memory log of Yandex Disk write operations; flushed after evening check-in |
 | `identity/IDENTITY.md` | Snezhanna's system prompt (personality, capabilities, prompt injection defense) |
 | `config/nanobot.json` | Model, token limits, timezone, history window, Yandex Disk mount paths and indexer rules |
@@ -122,6 +122,7 @@ node lib/indexer.js --incremental # incremental update
 | `docs/tutor-bot-tz.md` | Technical specification for Max tutor bot |
 | `docs/tutor-parent-interface-tz.md` | Technical specification for Max Parent Interface feature |
 | `docs/tz-tasks-mini-app.md` | Technical specification for Tasks Mini App |
+| `docs/tz-miniapp-calendar-tab.md` | Technical specification for Calendar tab in Mini App |
 
 ### State & credentials
 
