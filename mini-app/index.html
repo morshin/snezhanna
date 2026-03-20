@@ -16,14 +16,59 @@
     overflow-x: hidden;
   }
 
+  .sticky-header {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: var(--tg-theme-bg-color, #fff);
+    padding-bottom: 4px;
+  }
+
   .tabs {
     display: flex;
     padding: 12px 16px 8px;
     gap: 8px;
-    position: sticky;
-    top: 0;
-    background: var(--tg-theme-bg-color, #fff);
-    z-index: 10;
+  }
+
+  .project-bar {
+    display: none;
+    gap: 8px;
+    overflow-x: auto;
+    padding: 0 16px 8px;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+
+  .project-bar.visible {
+    display: flex;
+  }
+
+  .project-bar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .project-chip {
+    flex-shrink: 0;
+    padding: 8px 14px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 600;
+    border: none;
+    background: var(--tg-theme-secondary-bg-color, #f0f0f0);
+    color: var(--tg-theme-text-color, #000);
+    cursor: pointer;
+    white-space: nowrap;
+    font-family: inherit;
+    transition: background 0.15s, color 0.15s;
+  }
+
+  .project-chip:active {
+    opacity: 0.85;
+  }
+
+  .project-chip.active {
+    background: var(--tg-theme-button-color, #3390ec);
+    color: var(--tg-theme-button-text-color, #fff);
   }
 
   .tab {
@@ -46,7 +91,7 @@
   }
 
   .section-header {
-    padding: 6px 16px 4px;
+    padding: 4px 4px 6px;
     font-size: 12px;
     font-weight: 600;
     text-transform: uppercase;
@@ -54,8 +99,30 @@
     color: var(--tg-theme-hint-color, #999);
   }
 
+  .quadrant-section {
+    margin: 0 8px 10px;
+    padding: 10px 8px 6px;
+    border-radius: 14px;
+  }
+
+  .quadrant-section.q1 {
+    background: rgba(211, 47, 47, 0.11);
+  }
+
+  .quadrant-section.q2 {
+    background: rgba(245, 124, 0, 0.11);
+  }
+
+  .quadrant-section.q3 {
+    background: rgba(25, 118, 210, 0.11);
+  }
+
+  .quadrant-section.q4 {
+    background: rgba(100, 100, 100, 0.09);
+  }
+
   .task-list {
-    padding: 0 8px 100px;
+    padding: 0 0 100px;
   }
 
   .task-row {
@@ -339,9 +406,12 @@
 </head>
 <body>
 
-<div class="tabs">
-  <button class="tab active" data-filter="today">Today</button>
-  <button class="tab" data-filter="all">All</button>
+<div class="sticky-header">
+  <div class="tabs">
+    <button class="tab active" data-filter="today">Today</button>
+    <button class="tab" data-filter="all">All</button>
+  </div>
+  <div class="project-bar" id="projectBar" aria-label="Filter by project"></div>
 </div>
 
 <div id="content">
@@ -373,6 +443,7 @@
   const initData = tg ? tg.initData : '';
 
   let currentFilter = 'today';
+  let selectedProject = null;
   let allTasks = [];
   let undoTimer = null;
   let undoTask = null;
@@ -394,6 +465,9 @@
   }
 
   async function loadTasks() {
+    const pb = document.getElementById('projectBar');
+    pb.classList.remove('visible');
+    pb.innerHTML = '';
     const data = await api('GET', `/api/tasks?filter=${currentFilter}`);
     allTasks = data.tasks || [];
     render();
@@ -430,16 +504,49 @@
 
   function render() {
     const content = document.getElementById('content');
+    const projectBar = document.getElementById('projectBar');
     const active = allTasks.filter(t => t.status !== 'done' && t.status !== 'cancelled');
 
+    const projectNames = [...new Set(active.map(t => t.project).filter(Boolean))].sort((a, b) =>
+      a.localeCompare(b, undefined, { sensitivity: 'base' })
+    );
+
+    if (selectedProject && !projectNames.includes(selectedProject)) {
+      selectedProject = null;
+    }
+
+    if (projectNames.length === 0) {
+      projectBar.classList.remove('visible');
+      projectBar.innerHTML = '';
+    } else {
+      projectBar.classList.add('visible');
+      let chips =
+        `<button type="button" class="project-chip${selectedProject === null ? ' active' : ''}" data-project="__all__">All projects</button>`;
+      for (const p of projectNames) {
+        const activeCls = selectedProject === p ? ' active' : '';
+        chips += `<button type="button" class="project-chip${activeCls}" data-project="${escAttr(p)}">${esc(p)}</button>`;
+      }
+      projectBar.innerHTML = chips;
+    }
+
     if (active.length === 0) {
-      content.innerHTML = '<div class="empty-state"><div class="emoji">&#127881;</div><div class="text">All done!</div></div>';
+      content.innerHTML =
+        '<div class="empty-state"><div class="emoji">&#127881;</div><div class="text">All done!</div></div>';
       return;
     }
 
-    // Group by quadrant
+    const filtered = selectedProject
+      ? active.filter(t => t.project === selectedProject)
+      : active;
+
+    if (filtered.length === 0) {
+      content.innerHTML =
+        '<div class="empty-state"><div class="emoji">&#128193;</div><div class="text">No tasks in this project</div></div>';
+      return;
+    }
+
     const groups = {};
-    for (const t of active) {
+    for (const t of filtered) {
       const q = quadrant(t);
       if (!groups[q]) groups[q] = [];
       groups[q].push(t);
@@ -448,6 +555,7 @@
     let html = '<div class="task-list">';
     for (const q of [1, 2, 3, 4]) {
       if (!groups[q]) continue;
+      html += `<div class="quadrant-section q${q}">`;
       html += `<div class="section-header">${QUADRANT_LABELS[q]}</div>`;
       for (const t of groups[q]) {
         const due = formatDue(t.due_date);
@@ -464,6 +572,7 @@
             <button class="task-menu-btn" data-id="${t.id}">&ctdot;</button>
           </div>`;
       }
+      html += '</div>';
     }
     html += '</div>';
     content.innerHTML = html;
@@ -472,6 +581,15 @@
   function esc(s) {
     if (!s) return '';
     return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  function escAttr(s) {
+    if (!s) return '';
+    return s
+      .replace(/&/g, '&amp;')
+      .replace(/"/g, '&quot;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
   }
 
   // ── Actions ───────────────────────────────────────────────────────────────
@@ -637,6 +755,14 @@
   }
 
   // ── Event Listeners ───────────────────────────────────────────────────────
+
+  document.getElementById('projectBar').addEventListener('click', (e) => {
+    const chip = e.target.closest('.project-chip');
+    if (!chip) return;
+    const p = chip.dataset.project;
+    selectedProject = p === '__all__' || p === undefined ? null : p;
+    render();
+  });
 
   // Tab switching
   document.querySelectorAll('.tab').forEach(tab => {
