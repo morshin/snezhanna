@@ -72,7 +72,7 @@ Ask for confirmation before writing any code.
 
 After confirmation:
 ```bash
-git fetch origin && git checkout main && git pull origin main
+git fetch origin && git checkout master && git pull origin master
 ```
 
 Make the changes exactly as described in the issue. Follow project conventions: Tailwind, Russian UI strings, Spanish for learning content.
@@ -101,7 +101,7 @@ Use `feat:` prefix for new features, `fix:` for bug fixes.
 ### 10. Push
 
 ```bash
-git push origin main
+git push origin master
 ```
 
 ### 11. Close the issue

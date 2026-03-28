@@ -22,7 +22,7 @@ git status
 git log --oneline -5
 ```
 
-Make sure the working tree is clean (no uncommitted changes) and we're on `main`. If not — stop and tell the user.
+Make sure the working tree is clean (no uncommitted changes) and we're on `master`. If not — stop and tell the user.
 
 ### 2. Determine new version
 
@@ -59,7 +59,7 @@ Update the `"version"` field to the new version string.
 git add CHANGELOG.md package.json
 git commit -m "chore: release v<new-version>"
 git tag v<new-version>
-git push origin main
+git push origin master
 git push origin v<new-version>
 ```
 
