@@ -25,4 +25,10 @@ Guide me through developing a new feature for Snezhanna end-to-end.
 
 6. **Update docs (required, same turn)** — Do **not** defer this to a separate `/update-docs` invocation. Follow the full checklist in `.claude/commands/update-docs.md` in this session: refresh `git diff` / `git status` against the working tree (not only `HEAD~1`), then update every doc that the change actually touches — at minimum check `CLAUDE.md` (Key files table, Architecture, env vars), `identity/IDENTITY.md` if users see new behavior, `docs/snezhanna-tz.md` for structure/infra/cron/env, `schedules/heartbeats.json` if schedules changed, matching `skills/*.md`, and any relevant `docs/tz-*.md` spec.
 
-7. **Summary** — Report what was created/modified and how to test it, then run `/deploy` to restart the service and verify it started cleanly.
+7. **Update CHANGELOG (required, same turn)** — Append one line to `CHANGELOG.md` under `## [Unreleased]` → `### Added` (or `### Changed` if appropriate):
+   ```
+   - <One-sentence description of what was added> (#<issue or branch ref>)
+   ```
+   If `## [Unreleased]` or the `### Added` section does not exist yet, create it.
+
+8. **Summary** — Report what was created/modified and how to test it, then run `/deploy` to restart the service and verify it started cleanly.
