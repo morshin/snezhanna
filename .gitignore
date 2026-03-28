@@ -3,6 +3,7 @@ credentials.json
 node_modules/
 *.log
 .nanobot/
+.davfs2/
 token.json
 *.key
 *.pem
