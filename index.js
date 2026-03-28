@@ -33,6 +33,15 @@ const identity = fs.readFileSync(path.join(__dirname, 'identity/IDENTITY.md'), '
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 let history = [];
 
+// Мьютекс для сериализации вызовов askClaude: предотвращает race condition,
+// когда два параллельных запроса видят историю с осиротевшим tool_use.
+let messageLock = Promise.resolve();
+function withMessageLock(fn) {
+  const next = messageLock.then(fn);
+  messageLock = next.catch(() => {});
+  return next;
+}
+
 // Одноразовый вызов Claude без использования глобальной истории разговора.
 // Используется для крон-задач: у них изолированный локальный контекст,
 // они не загрязняют историю чата и не ломаются от "отравленной" истории.
@@ -110,6 +119,10 @@ async function askClaudeOneShot(userMessage, requestType = 'scheduled') {
 }
 
 async function askClaude(userMessage, requestType = 'text') {
+  return withMessageLock(() => _askClaude(userMessage, requestType));
+}
+
+async function _askClaude(userMessage, requestType = 'text') {
   // Сохраняем снимок истории до вызова — восстановим при ошибке,
   // чтобы не оставлять в истории осиротевшие tool_use / tool_result блоки
   const historyBeforeCall = [...history];
