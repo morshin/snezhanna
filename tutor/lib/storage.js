@@ -242,6 +242,141 @@ function getActiveQuests() {
   return data.quests.filter(q => q.status === 'active');
 }
 
+// ── Prize Codes ───────────────────────────────────────────────────────────────
+
+const CODES_FILE_RE = /^codes_(\d{8})\.md$/;
+
+function findLatestCodesFile() {
+  try {
+    if (!fs.existsSync(KIDS_DIR)) return null;
+    const files = fs.readdirSync(KIDS_DIR).filter(f => CODES_FILE_RE.test(f));
+    if (files.length === 0) return null;
+    // Sort descending by DDMMYYYY → convert to YYYYMMDD for comparison
+    const toSortable = s => {
+      const m = s.match(CODES_FILE_RE);
+      return m ? m[1].slice(4) + m[1].slice(2, 4) + m[1].slice(0, 2) : '';
+    };
+    files.sort((a, b) => toSortable(b).localeCompare(toSortable(a)));
+    return path.join(KIDS_DIR, files[0]);
+  } catch (e) {
+    console.error('[Storage] findLatestCodesFile error:', e.message);
+    return null;
+  }
+}
+
+function loadCodes(filePath) {
+  try {
+    if (!fs.existsSync(filePath)) return [];
+    const lines = fs.readFileSync(filePath, 'utf8').split('\n');
+    const codes = [];
+    for (const line of lines) {
+      if (!line.startsWith('|')) continue;
+      const parts = line.split('|').map(p => p.trim()).filter(Boolean);
+      if (parts.length < 2) continue;
+      const [code, used, usedAt, quest] = parts;
+      // Skip header rows
+      if (!code || code === 'Code' || code.startsWith('---')) continue;
+      codes.push({ code, used: used === 'true', usedAt: usedAt || '', quest: quest || '' });
+    }
+    return codes;
+  } catch (e) {
+    console.error('[Storage] loadCodes error:', e.message);
+    return [];
+  }
+}
+
+function saveCodes(filePath, codes) {
+  try {
+    const m = path.basename(filePath).match(CODES_FILE_RE);
+    const dateStr = m ? `${m[1].slice(0, 2)}.${m[1].slice(2, 4)}.${m[1].slice(4)}` : '';
+    let content = `# Prize Codes — ${dateStr}\n\n| Code | Used | Used At | Quest |\n|------|------|---------|-------|\n`;
+    for (const c of codes) {
+      content += `| ${c.code} | ${c.used} | ${c.usedAt || ''} | ${c.quest || ''} |\n`;
+    }
+    fs.writeFileSync(filePath, content, 'utf8');
+  } catch (e) {
+    console.error('[Storage] saveCodes error:', e.message);
+    throw e;
+  }
+}
+
+function getNextCode(filePath) {
+  if (!filePath) return null;
+  try {
+    const codes = loadCodes(filePath);
+    const next = codes.find(c => !c.used);
+    return next ? { code: next.code, filePath } : null;
+  } catch (e) {
+    console.error('[Storage] getNextCode error:', e.message);
+    return null;
+  }
+}
+
+function markCodeUsed(filePath, code, questDescription) {
+  try {
+    const codes = loadCodes(filePath);
+    const c = codes.find(entry => entry.code === code);
+    if (!c) return;
+    c.used = true;
+    c.usedAt = new Date().toISOString().slice(0, 10);
+    c.quest = questDescription || '';
+    saveCodes(filePath, codes);
+    console.log('[Storage] Code marked used:', code);
+  } catch (e) {
+    console.error('[Storage] markCodeUsed error:', e.message);
+    throw e;
+  }
+}
+
+function countRemainingCodes(filePath) {
+  if (!filePath) return 0;
+  try {
+    return loadCodes(filePath).filter(c => !c.used).length;
+  } catch (e) {
+    console.error('[Storage] countRemainingCodes error:', e.message);
+    return 0;
+  }
+}
+
+function generateUniqueCodes(n) {
+  const known = new Set();
+  try {
+    if (fs.existsSync(KIDS_DIR)) {
+      const files = fs.readdirSync(KIDS_DIR).filter(f => CODES_FILE_RE.test(f));
+      for (const file of files) {
+        for (const c of loadCodes(path.join(KIDS_DIR, file))) known.add(c.code);
+      }
+    }
+  } catch (e) {
+    console.error('[Storage] generateUniqueCodes: error scanning existing codes:', e.message);
+  }
+
+  const CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  const generated = [];
+  while (generated.length < n) {
+    let code = '';
+    for (let i = 0; i < 10; i++) code += CHARS[Math.floor(Math.random() * CHARS.length)];
+    if (!known.has(code)) {
+      known.add(code);
+      generated.push(code);
+    }
+  }
+  return generated;
+}
+
+// Writes codes_DDMMYYYY.md to KIDS_DIR; returns prize txt content as string (not written to disk)
+function writePrizeFiles(codes, dateStr) {
+  const mdFilePath = path.join(KIDS_DIR, `codes_${dateStr}.md`);
+  const formattedDate = `${dateStr.slice(0, 2)}.${dateStr.slice(2, 4)}.${dateStr.slice(4)}`;
+  let mdContent = `# Prize Codes — ${formattedDate}\n\n| Code | Used | Used At | Quest |\n|------|------|---------|-------|\n`;
+  for (const code of codes) {
+    mdContent += `| ${code} | false |  |  |\n`;
+  }
+  fs.writeFileSync(mdFilePath, mdContent, 'utf8');
+  console.log('[Storage] Codes file written:', mdFilePath);
+  return codes.map(code => `${code}*30*0*0*0*0`).join('\n');
+}
+
 // ── Balance ───────────────────────────────────────────────────────────────────
 
 function computeHmac(balance_minutes, last_updated) {
@@ -290,5 +425,7 @@ module.exports = {
   readProgress, writeProgress,
   writeWeeklyDigest,
   loadQuests, saveQuests, addQuest, completeQuest, cancelQuest, getActiveQuests,
+  findLatestCodesFile, loadCodes, saveCodes, getNextCode, markCodeUsed, countRemainingCodes,
+  generateUniqueCodes, writePrizeFiles,
   loadBalance, saveBalance, addBalance
 };

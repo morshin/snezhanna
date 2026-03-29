@@ -414,6 +414,58 @@ async function handleParentCommand(msg, text) {
     return;
   }
 
+  // /codes — текущий пул кодов
+  if (text === '/codes') {
+    const codesFile = storage.findLatestCodesFile();
+    if (!codesFile) {
+      await bot.sendMessage(parentId, '📦 Нет файла с кодами. Используй /gencodes чтобы создать новый.');
+      return;
+    }
+    const filename = path.basename(codesFile);
+    const codes = storage.loadCodes(codesFile);
+    const remaining = codes.filter(c => !c.used).length;
+    await bot.sendMessage(parentId, `📦 Коды призового времени\n\nФайл: ${filename}\nОсталось: ${remaining} из ${codes.length}`);
+    return;
+  }
+
+  // /gencodes [N] — генерация новой партии кодов
+  if (/^\/gencodes(?:\s+\d+)?$/.test(text)) {
+    const m = text.match(/^\/gencodes(?:\s+(\d+))?$/);
+    const n = m[1] ? Math.min(500, Math.max(1, parseInt(m[1], 10))) : 100;
+    try {
+      await bot.sendChatAction(parentId, 'typing');
+      // Count existing files before generation (for stats message)
+      const kidsDir = process.env.KIDS_DATA_DIR || '/mnt/yadisk-agent/kids';
+      let prevFilesCount = 0;
+      let prevKnownCount = 0;
+      if (fs.existsSync(kidsDir)) {
+        const prevFiles = fs.readdirSync(kidsDir).filter(f => /^codes_\d{8}\.md$/.test(f));
+        prevFilesCount = prevFiles.length;
+        for (const f of prevFiles) {
+          prevKnownCount += storage.loadCodes(path.join(kidsDir, f)).length;
+        }
+      }
+      const codes = storage.generateUniqueCodes(n);
+      const madridDateStr = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Madrid' });
+      const [y, mo, dd] = madridDateStr.split('-');
+      const dateStr = dd + mo + y;
+      const txtContent = storage.writePrizeFiles(codes, dateStr);
+      await bot.sendDocument(parentId, Buffer.from(txtContent, 'utf8'), {
+        caption: 'Импортируй этот файл в Time Boss Cloud. Коды уже сохранены в Максе.'
+      }, {
+        filename: `prize_${dateStr}.txt`,
+        contentType: 'text/plain'
+      });
+      await bot.sendMessage(parentId,
+        `✅ Сгенерировано ${n} кодов\n\nФайл prize_${dateStr}.txt — загрузи в Time Boss Cloud\nКоды сохранены в kids/codes_${dateStr}.md\nПредыдущих файлов проверено: ${prevFilesCount} (всего известных кодов: ${prevKnownCount})`
+      );
+    } catch (e) {
+      console.error('[Max] /gencodes error:', e.message);
+      await bot.sendMessage(parentId, 'Ошибка при генерации кодов: ' + e.message);
+    }
+    return;
+  }
+
   // /assign <subject>: <description>
   if (text.startsWith('/assign ')) {
     const rest = text.slice('/assign '.length).trim();
@@ -505,6 +557,8 @@ async function handleParentCommand(msg, text) {
       '/homework — домашние задания\n' +
       '/balance — баланс TimeGuard\n' +
       '/quests — активные квесты\n' +
+      '/codes — статус пула призовых кодов\n' +
+      '/gencodes [N] — сгенерировать N кодов (по умолчанию 100)\n' +
       '/assign Предмет: задание\n' +
       '/quest Предмет "описание" +30мин\n' +
       '/cancelquest <id>\n\n' +
@@ -723,20 +777,31 @@ bot.on('message', async (msg) => {
 
     // Извлекаем маркеры выполненных квестов
     const { cleanText, questIds } = extractQuestDoneMarkers(noHwMarkers);
+    let finalText = cleanText;
     for (const qid of questIds) {
       const result = storage.completeQuest(qid);
       if (result) {
         const { quest } = result;
         storage.addBalance(quest.reward_minutes);
-        const bal = storage.loadBalance();
-        await notifyParent(
-          `🏆 Квест выполнен!\n\n${quest.subject}: ${quest.description}\nНаграда: +${quest.reward_minutes} мин добавлено к балансу\nБаланс теперь: ${formatBalance(bal.balance_minutes)}`
-        );
+        const codesFile = storage.findLatestCodesFile();
+        const nextCode = codesFile ? storage.getNextCode(codesFile) : null;
+        if (nextCode) {
+          storage.markCodeUsed(codesFile, nextCode.code, quest.description);
+          finalText += `\n\n🏆 ¡Misión completada!\n\n${quest.subject}: ${quest.description}\n¡Has ganado ${quest.reward_minutes} minutos extra de ordenador!\n\nTu código premio: **${nextCode.code}**\nIntrodúcelo en Time Boss para activar tu tiempo 🎮`;
+          const remaining = storage.countRemainingCodes(codesFile);
+          await notifyParent(`🏆 Квест выполнен!\n\n${quest.subject}: ${quest.description}\nСыну выдан код: ${nextCode.code} (+${quest.reward_minutes} мин)\nОсталось кодов: ${remaining}`);
+          if (remaining <= 10) {
+            await notifyParent(`⚠️ Коды призового времени заканчиваются\n\nОсталось: ${remaining} кодов\nПора сгенерировать новую партию и загрузить в Time Boss Cloud.`);
+          }
+        } else {
+          finalText += '\n\n🏆 ¡Misión completada! Papá te dará tu premio pronto 🎁';
+          await notifyParent(`🏆 Квест выполнен, но коды закончились!\n\n${quest.subject}: ${quest.description}\nЗагрузи новую партию в Time Boss Cloud.`);
+        }
       }
     }
 
-    session.addMessage('assistant', cleanText);
-    await sendLongMessage(chatId, cleanText);
+    session.addMessage('assistant', finalText);
+    await sendLongMessage(chatId, finalText);
 
   } catch (err) {
     console.error('[Max] Error:', err.message);
@@ -867,20 +932,31 @@ bot.on('voice', async (msg) => {
     }
 
     const { cleanText, questIds: questIdsV } = extractQuestDoneMarkers(noHwMarkersV);
+    let finalTextV = cleanText;
     for (const qid of questIdsV) {
       const result = storage.completeQuest(qid);
       if (result) {
         const { quest } = result;
         storage.addBalance(quest.reward_minutes);
-        const bal = storage.loadBalance();
-        await notifyParent(
-          `🏆 Квест выполнен!\n\n${quest.subject}: ${quest.description}\nНаграда: +${quest.reward_minutes} мин добавлено к балансу\nБаланс теперь: ${formatBalance(bal.balance_minutes)}`
-        );
+        const codesFile = storage.findLatestCodesFile();
+        const nextCode = codesFile ? storage.getNextCode(codesFile) : null;
+        if (nextCode) {
+          storage.markCodeUsed(codesFile, nextCode.code, quest.description);
+          finalTextV += `\n\n🏆 ¡Misión completada!\n\n${quest.subject}: ${quest.description}\n¡Has ganado ${quest.reward_minutes} minutos extra de ordenador!\n\nTu código premio: **${nextCode.code}**\nIntrodúcelo en Time Boss para activar tu tiempo 🎮`;
+          const remaining = storage.countRemainingCodes(codesFile);
+          await notifyParent(`🏆 Квест выполнен!\n\n${quest.subject}: ${quest.description}\nСыну выдан код: ${nextCode.code} (+${quest.reward_minutes} мин)\nОсталось кодов: ${remaining}`);
+          if (remaining <= 10) {
+            await notifyParent(`⚠️ Коды призового времени заканчиваются\n\nОсталось: ${remaining} кодов\nПора сгенерировать новую партию и загрузить в Time Boss Cloud.`);
+          }
+        } else {
+          finalTextV += '\n\n🏆 ¡Misión completada! Papá te dará tu premio pronto 🎁';
+          await notifyParent(`🏆 Квест выполнен, но коды закончились!\n\n${quest.subject}: ${quest.description}\nЗагрузи новую партию в Time Boss Cloud.`);
+        }
       }
     }
 
-    session.addMessage('assistant', cleanText);
-    await sendLongMessage(chatId, cleanText);
+    session.addMessage('assistant', finalTextV);
+    await sendLongMessage(chatId, finalTextV);
 
   } catch (err) {
     console.error('[Max] Voice error:', err.message);
@@ -970,7 +1046,7 @@ async function main() {
     if (Date.now() - lastParentSent > STARTUP_COOLDOWN_MS) {
       try {
         await bot.sendMessage(process.env.PARENT_CHAT_ID,
-          '👋 Макс запущен. Напиши /report, /quests или /assign чтобы взаимодействовать.'
+          '👋 Макс запущен. Напиши /report, /quests, /gencodes или /assign чтобы взаимодействовать.'
         );
         appState.lastParentStartupAt = Date.now();
         saveState();

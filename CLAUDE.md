@@ -73,8 +73,9 @@ node lib/indexer.js --incremental # incremental update
 - Voice support via shared `lib/whisper.js` with `language='es'`
 - Prompt caching enabled (same as Snezhanna): identity cached, cache hits logged
 - Homework tracking: afternoon checkin (15:00) asks "what homework?", next reply auto-parsed via `askMaxOneShot` and saved to `homework.json`; Claude marks completed homework with `[DONE:ID]` markers stripped before display
-- **Quest system**: parent assigns quests via `/quest`; active quests injected into Claude context; Claude appends `[QUEST_DONE:id]` when objective met; index.js strips markers, calls `completeQuest()`, updates HMAC-signed `balance.json`, notifies parent
-- **Parent commands**: `/report` (today's session), `/week` (weekly digest), `/homework`, `/balance`, `/quests`, `/assign <subject>: <task>`, `/quest <subject> "<desc>" +Nмин`, `/cancelquest <id>`
+- **Quest system**: parent assigns quests via `/quest`; active quests injected into Claude context; Claude appends `[QUEST_DONE:id]` when objective met; index.js strips markers, calls `completeQuest()`, issues next unused prize code from `codes_DDMMYYYY.md`, sends code to son in Spanish + parent notification; updates HMAC-signed `balance.json`; warns parent when ≤10 codes remain
+- **Prize code pool**: parent runs `/gencodes [N]` → generates N unique 10-char alphanumeric codes, writes `codes_DDMMYYYY.md` to `KIDS_DIR`, sends `prize_DDMMYYYY.txt` via `bot.sendDocument()` for import into Time Boss Cloud; `/codes` shows remaining count
+- **Parent commands**: `/report` (today's session), `/week` (weekly digest), `/homework`, `/balance`, `/quests`, `/codes` (code pool status), `/gencodes [N]` (generate prize codes), `/assign <subject>: <task>`, `/quest <subject> "<desc>" +Nмин`, `/cancelquest <id>`
 - **Parent notifications**: post-session summary after every session end (student `/done`, auto-close), quest completion alert, subject avoidance flag (weekly), stuck-topic flag (repeated stuck points across sessions)
 - Message processing mutex (`withLock`) prevents race conditions on rapid messages
 - Startup message cooldown (4 hours) for both student and parent, to avoid spam on Zhora restarts
@@ -114,7 +115,7 @@ node lib/indexer.js --incremental # incremental update
 | `docs/snezhanna-tz.md` | Technical specification (TZ) — infrastructure, integrations, architecture decisions |
 | `skills/*.md` | Capability descriptions (documentation only, not loaded at runtime) |
 | `tutor/index.js` | Max tutor bot entrypoint |
-| `tutor/lib/storage.js` | Yandex Disk I/O for `/mnt/yadisk-agent/kids/`; quest CRUD; HMAC-signed balance |
+| `tutor/lib/storage.js` | Yandex Disk I/O for `/mnt/yadisk-agent/kids/`; quest CRUD; prize code pool CRUD (`codes_DDMMYYYY.md`); HMAC-signed balance |
 | `tutor/lib/session.js` | In-memory tutoring session state |
 | `tutor/lib/claude.js` | Anthropic API wrapper for Max; injects active quests into system context |
 | `tutor/lib/report.js` | Session/daily/weekly report generation; `checkSubjectAvoidance()`; `checkStuckTopic()` |
