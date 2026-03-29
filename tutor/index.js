@@ -496,6 +496,11 @@ async function handleParentCommand(msg, text) {
     const [, subject, description, minutesStr] = m;
     const reward_minutes = parseInt(minutesStr, 10);
     const id = storage.addQuest({ subject, description, reward_minutes });
+    // If a session is already active, inject an explicit notification so Claude announces it immediately
+    if (session.isActive()) {
+      session.addMessage('user', `[Sistema: el padre ha añadido una nueva misión ahora mismo: ${subject}: ${description} (+${reward_minutes} min). Anúnciasela al alumno en tu próxima respuesta.]`);
+      console.log('[Max] Quest injected into active session:', id, subject);
+    }
     await bot.sendMessage(parentId,
       `🎯 Квест создан!\n\n${subject}: ${description}\nНаграда: +${reward_minutes} мин\n\nМакс расскажет сыну о квесте при следующей сессии.`
     );
