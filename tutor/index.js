@@ -29,6 +29,10 @@ function setAwaitingHomework(value) {
   console.log('[Max] awaitingHomework =', value);
 }
 
+// Черновик нового квеста — многошаговый диалог с родителем
+// step: 'subject' | 'description' | 'confirmation' | 'reward'
+let parentQuestDraft = null;
+
 // C-4: мьютекс на обработку входящих сообщений — предотвращает гонку при быстрой отправке
 // Для каждого chatId держим цепочку промисов: новое сообщение ждёт пока предыдущее не обработается
 const processingLocks = new Map();
@@ -290,6 +294,29 @@ function extractQuestDoneMarkers(text) {
   return { cleanText, questIds };
 }
 
+// ── Quest dialog helpers ───────────────────────────────────────────────────────
+
+async function refineQuestDescription(subject, rawDescription, previousRefined, clarification) {
+  const subjectCtx = subject ? `Предмет: ${subject}.` : 'Без привязки к предмету.';
+  let userPrompt;
+  if (previousRefined && clarification) {
+    userPrompt = `${subjectCtx}\nПредыдущий вариант задания: "${previousRefined}"\nУточнение от папы: "${clarification}"\nСформулируй новый улучшенный вариант.`;
+  } else {
+    userPrompt = `${subjectCtx}\nОписание от папы: "${rawDescription}"`;
+  }
+  return askMaxOneShot(
+    'Ты помогаешь папе сформулировать учебный квест для сына (13 лет, испанская школа в Мадриде). ' +
+    'Получив описание задания, напиши чёткое, конкретное, педагогически грамотное описание квеста на русском языке. ' +
+    '1–3 предложения — только суть задания, без упоминания наград и без названия предмета. ' +
+    'Не добавляй ничего лишнего — только текст задания.',
+    userPrompt,
+    'parent_quest_refine'
+  );
+}
+
+const CONFIRM_RE = /^(да|ок|ладно|принять|принимаю|подтверждаю|yes|ok|хорошо|супер|отлично|годится|сойдёт|пойдёт)\.?$/i;
+const REWARD_RE = /^\+?(\d+)\s*мин?\.?$/i;
+
 // ── Parent helpers ─────────────────────────────────────────────────────────────
 
 function isParent(msg) {
@@ -327,6 +354,80 @@ function getISOWeekStr() {
 
 async function handleParentCommand(msg, text) {
   const parentId = process.env.PARENT_CHAT_ID;
+
+  // ── Multi-step quest draft dialog ──────────────────────────────────────────
+  if (parentQuestDraft) {
+    const draft = parentQuestDraft;
+
+    // Allow /cancelquest (or any slash command) to abort the draft
+    if (text.startsWith('/') && text !== '/quest') {
+      parentQuestDraft = null;
+      console.log('[Max] Quest draft cancelled by command');
+      // Fall through to normal command handling below
+    } else if (draft.step === 'subject') {
+      const raw = text.trim();
+      draft.subject = /^(без предмета|нет|—|-|нет предмета|без)$/i.test(raw) ? '' : raw;
+      draft.step = 'description';
+      const promptText = draft.subject
+        ? `Предмет: ${draft.subject}.\n\nОпиши задание подробнее — что именно должен сделать сын?`
+        : 'Опиши задание — что именно должен сделать сын?';
+      await bot.sendMessage(parentId, promptText);
+      return;
+    } else if (draft.step === 'description') {
+      draft.rawDescription = text.trim();
+      draft.step = 'confirmation';
+      await bot.sendChatAction(parentId, 'typing');
+      try {
+        draft.refined = await refineQuestDescription(draft.subject, draft.rawDescription, null, null);
+      } catch (e) {
+        console.error('[Max] refineQuestDescription error:', e.message);
+        draft.refined = draft.rawDescription;
+      }
+      const subjectLine = draft.subject ? `Предмет: ${draft.subject}\n` : '';
+      await bot.sendMessage(parentId,
+        `Предлагаю такое задание:\n\n${subjectLine}${draft.refined}\n\nПодтвердить? Или напиши уточнения.`
+      );
+      return;
+    } else if (draft.step === 'confirmation') {
+      if (CONFIRM_RE.test(text.trim())) {
+        draft.step = 'reward';
+        await bot.sendMessage(parentId, 'Задание принято! Сколько минут компьютерного времени за выполнение? (например: 30)');
+      } else {
+        // Clarification — re-refine
+        await bot.sendChatAction(parentId, 'typing');
+        try {
+          draft.refined = await refineQuestDescription(draft.subject, draft.rawDescription, draft.refined, text.trim());
+        } catch (e) {
+          console.error('[Max] refineQuestDescription error:', e.message);
+        }
+        const subjectLine = draft.subject ? `Предмет: ${draft.subject}\n` : '';
+        await bot.sendMessage(parentId,
+          `Обновлённый вариант:\n\n${subjectLine}${draft.refined}\n\nПодтвердить? Или напиши ещё уточнения.`
+        );
+      }
+      return;
+    } else if (draft.step === 'reward') {
+      const m = text.trim().match(REWARD_RE) || text.trim().match(/^(\d+)$/);
+      if (!m) {
+        await bot.sendMessage(parentId, 'Напиши число минут, например: 30 или +30мин');
+        return;
+      }
+      const reward_minutes = parseInt(m[1], 10);
+      const subject = draft.subject || 'Общее';
+      const description = draft.refined;
+      parentQuestDraft = null;
+      const id = storage.addQuest({ subject, description, reward_minutes });
+      if (session.isActive()) {
+        session.addMessage('user', `[Sistema: el padre ha añadido una nueva misión ahora mismo: ${subject}: ${description} (+${reward_minutes} min). Anúnciasela al alumno en tu próxima respuesta.]`);
+        console.log('[Max] Quest injected into active session:', id, subject);
+      }
+      await bot.sendMessage(parentId,
+        `🎯 Квест создан!\n\n${subject}: ${description}\nНаграда: +${reward_minutes} мин\n\nМакс расскажет сыну о квесте при следующей сессии.`
+      );
+      console.log('[Max] Quest created via dialog:', id, subject);
+      return;
+    }
+  }
 
   // /report — сессия за сегодня
   if (text === '/report') {
@@ -485,26 +586,30 @@ async function handleParentCommand(msg, text) {
     return;
   }
 
-  // /quest <subject> "<description>" +<minutes>мин
-  if (text.startsWith('/quest ')) {
-    const rest = text.slice('/quest '.length).trim();
-    const m = rest.match(/^(\S+)\s+"([^"]+)"\s+\+(\d+)мин$/i);
-    if (!m) {
-      await bot.sendMessage(parentId, 'Формат: /quest Inglés "описание задания" +30мин');
+  // /quest — start multi-step dialog; OR fast path: /quest Subject "desc" +Nмин
+  if (text === '/quest' || text.startsWith('/quest ')) {
+    const rest = text.slice('/quest'.length).trim();
+    // Fast path: old one-liner format still supported
+    const fastMatch = rest.match(/^(\S+)\s+"([^"]+)"\s+\+(\d+)мин$/i);
+    if (fastMatch) {
+      const [, subject, description, minutesStr] = fastMatch;
+      const reward_minutes = parseInt(minutesStr, 10);
+      const id = storage.addQuest({ subject, description, reward_minutes });
+      if (session.isActive()) {
+        session.addMessage('user', `[Sistema: el padre ha añadido una nueva misión ahora mismo: ${subject}: ${description} (+${reward_minutes} min). Anúnciasela al alumno en tu próxima respuesta.]`);
+        console.log('[Max] Quest injected into active session:', id, subject);
+      }
+      await bot.sendMessage(parentId,
+        `🎯 Квест создан!\n\n${subject}: ${description}\nНаграда: +${reward_minutes} мин\n\nМакс расскажет сыну о квесте при следующей сессии.`
+      );
+      console.log('[Max] Quest created (fast path):', id, subject);
       return;
     }
-    const [, subject, description, minutesStr] = m;
-    const reward_minutes = parseInt(minutesStr, 10);
-    const id = storage.addQuest({ subject, description, reward_minutes });
-    // If a session is already active, inject an explicit notification so Claude announces it immediately
-    if (session.isActive()) {
-      session.addMessage('user', `[Sistema: el padre ha añadido una nueva misión ahora mismo: ${subject}: ${description} (+${reward_minutes} min). Anúnciasela al alumno en tu próxima respuesta.]`);
-      console.log('[Max] Quest injected into active session:', id, subject);
-    }
+    // Start dialog flow
+    parentQuestDraft = { step: 'subject', subject: '', rawDescription: '', refined: '' };
     await bot.sendMessage(parentId,
-      `🎯 Квест создан!\n\n${subject}: ${description}\nНаграда: +${reward_minutes} мин\n\nМакс расскажет сыну о квесте при следующей сессии.`
+      'Для какого предмета квест? (Например: Lengua, Inglés, Matemáticas)\nИли напиши «без предмета».'
     );
-    console.log('[Max] Quest created by parent:', id, subject);
     return;
   }
 
@@ -565,7 +670,7 @@ async function handleParentCommand(msg, text) {
       '/codes — статус пула призовых кодов\n' +
       '/gencodes [N] — сгенерировать N кодов (по умолчанию 100)\n' +
       '/assign Предмет: задание\n' +
-      '/quest Предмет "описание" +30мин\n' +
+      '/quest — создать квест (диалог)\n' +
       '/cancelquest <id>\n\n' +
       'Или просто напиши вопрос — например: "Как он учится?" или "Что было на прошлой неделе?"'
     );
