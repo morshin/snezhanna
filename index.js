@@ -17,10 +17,10 @@ const yadiskDirs = require('./lib/yadisk-dirs');
 const vision = require('./lib/vision');
 const diskLog = require('./lib/disk-log');
 const tasks = require('./lib/tasks');
+const tasksMerge = require('./lib/tasks-merge');
 const chatMonitor = require('./lib/chat-monitor');
 const strava = require('./lib/strava');
 const workload = require('./lib/workload');
-const github = require('./lib/github');
 const { logTokens } = require('./lib/token-log');
 const api = require('./lib/api');
 
@@ -218,10 +218,11 @@ async function _askClaude(userMessage, requestType = 'text') {
         }
 
       // Add tool results as user message.
-      // Большие tool_result-ы обрезаем перед сохранением в историю:
-      // Claude уже обработал полный ответ в этом раунде, а история нужна
-      // только для контекста — хранить сырой дамп на 10 000 символов нет смысла.
-      const MAX_TOOL_RESULT_CHARS = 2000;
+      // Обрезаем только очень большие ответы, чтобы не раздувать историю.
+      // Важно: этот же объект уходит в СЛЕДУЮЩИЙ запрос к API — модель ещё не
+      // «видела» результат инструмента. Слишком маленький лимит ломал list_tasks
+      // (обрезанный JSON → галлюцинации заголовков и номеров задач).
+      const MAX_TOOL_RESULT_CHARS = 48000;
       const toolResultsForHistory = toolResults.map(r => {
         if (typeof r.content === 'string' && r.content.length > MAX_TOOL_RESULT_CHARS) {
           return {
@@ -773,7 +774,9 @@ function formatTasksForBriefing(taskList) {
   ];
 
   for (const t of taskList) {
-    const proj = t.project ? ` [${t.project}]` : '';
+    const proj = t.source === 'github'
+      ? (t.github_repo ? ` [GH: ${t.github_repo}]` : ' [GitHub]')
+      : (t.project ? ` [${t.project}]` : '');
     let dateStr = '';
     if (t.due_date) {
       if (t.due_date < today)       dateStr = ' ⚠️ просрочено';
@@ -813,34 +816,18 @@ function setupSchedules() {
       }
       let tasksText = '• Задач нет';
       try {
-        const todayTasks = tasks.getTodayTasks();
+        const todayTasks = await tasksMerge.getTodayTasksWithGithub();
         tasksText = formatTasksForBriefing(todayTasks);
       } catch (e) {
         console.error('[Schedule] Failed to load tasks for briefing:', e.message);
-      }
-
-      let githubText = '';
-      if (github.isConfigured()) {
-        try {
-          const issues = await github.getAllOpenIssues();
-          if (issues.length > 0) {
-            githubText = '\n\nОткрытые GitHub Issues:\n' +
-              issues.map(i => {
-                const proj = i.project ? ` [${i.project}]` : ` [${i.repo}]`;
-                return `• #${i.id} ${i.title}${proj}`;
-              }).join('\n');
-          }
-        } catch (e) {
-          console.error('[Schedule] Failed to load github issues for briefing:', e.message);
-        }
       }
 
       const prompt = `Составь утренний брифинг для Вовочки. Сегодня ${todayStr()}.
 События в Calendar:
 ${eventsText}
 
-Задачи на ближайшие дни (уже отсортированы по приоритету — вставь их точно в таком виде, без таблиц и переформатирования):
-${tasksText}${githubText}
+Задачи на ближайшие дни — локальный трекер и открытые GitHub Issues (уже отсортированы по приоритету — вставь их точно в таком виде, без таблиц и переформатирования):
+${tasksText}
 
 Кратко прокомментируй день и выдели 1-2 самые важные вещи. Будь живым и тёплым.`;
       let briefingText = await askClaudeOneShot(prompt);
@@ -867,7 +854,7 @@ ${tasksText}${githubText}
             });
           }
           let openTasks = [];
-          try { openTasks = tasks.getTodayTasks(); } catch (_) {}
+          try { openTasks = await tasksMerge.getTodayTasksWithGithub(); } catch (_) {}
           const overloadBlock = await workload.buildOverloadBlock(lastScore, todayEvents, tomorrowEvents, openTasks);
           if (overloadBlock) {
             briefingText += '\n\n---\n\n' + overloadBlock;
