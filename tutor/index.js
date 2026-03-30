@@ -420,9 +420,18 @@ async function handleParentCommand(msg, text) {
       if (session.isActive()) {
         session.addMessage('user', `[Sistema: el padre ha añadido una nueva misión ahora mismo: ${subject}: ${description} (+${reward_minutes} min). Anúnciasela al alumno en tu próxima respuesta.]`);
         console.log('[Max] Quest injected into active session:', id, subject);
+      } else {
+        const studentChatId = getChatId();
+        if (studentChatId) {
+          await bot.sendMessage(studentChatId,
+            `¡Hola! Tu papá te ha asignado una nueva misión 🎯\n\n*${subject}*: ${description}\nRecompensa: +${reward_minutes} minutos de ordenador\n\n¿Cuándo estás listo para empezar?`,
+            { parse_mode: 'Markdown' }
+          );
+          console.log('[Max] Quest announced to student:', id, subject);
+        }
       }
       await bot.sendMessage(parentId,
-        `🎯 Квест создан!\n\n${subject}: ${description}\nНаграда: +${reward_minutes} мин\n\nМакс расскажет сыну о квесте при следующей сессии.`
+        `🎯 Квест создан!\n\n${subject}: ${description}\nНаграда: +${reward_minutes} мин\n\n${getChatId() ? 'Макс уже написал сыну о квесте.' : 'Макс расскажет сыну о квесте при следующей сессии.'}`
       );
       console.log('[Max] Quest created via dialog:', id, subject);
       return;
@@ -598,9 +607,18 @@ async function handleParentCommand(msg, text) {
       if (session.isActive()) {
         session.addMessage('user', `[Sistema: el padre ha añadido una nueva misión ahora mismo: ${subject}: ${description} (+${reward_minutes} min). Anúnciasela al alumno en tu próxima respuesta.]`);
         console.log('[Max] Quest injected into active session:', id, subject);
+      } else {
+        const studentChatId = getChatId();
+        if (studentChatId) {
+          await bot.sendMessage(studentChatId,
+            `¡Hola! Tu papá te ha asignado una nueva misión 🎯\n\n*${subject}*: ${description}\nRecompensa: +${reward_minutes} minutos de ordenador\n\n¿Cuándo estás listo para empezar?`,
+            { parse_mode: 'Markdown' }
+          );
+          console.log('[Max] Quest announced to student:', id, subject);
+        }
       }
       await bot.sendMessage(parentId,
-        `🎯 Квест создан!\n\n${subject}: ${description}\nНаграда: +${reward_minutes} мин\n\nМакс расскажет сыну о квесте при следующей сессии.`
+        `🎯 Квест создан!\n\n${subject}: ${description}\nНаграда: +${reward_minutes} мин\n\n${getChatId() ? 'Макс уже написал сыну о квесте.' : 'Макс расскажет сыну о квесте при следующей сессии.'}`
       );
       console.log('[Max] Quest created (fast path):', id, subject);
       return;
