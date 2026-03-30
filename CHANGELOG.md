@@ -21,6 +21,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), [Semantic Vers
 ### Fixed
 
 - Fix domain scores showing "undefined" in weekly workload report when Claude returns flat numbers instead of nested objects (fixes #6)
+- Max now accepts voice messages in Russian, Spanish, and English via Whisper auto-detection (fixes #8)
 - Max now immediately messages the student when a new quest is assigned outside an active session (fixes #3)
 - Max now detects likely AI/copy-paste answers and gently suggests completing the task on paper with a photo (fixes #4)
 - Max now announces a new quest immediately when it is created mid-session, and always responds about active quests when the student explicitly asks, regardless of current subject (fixes #2)

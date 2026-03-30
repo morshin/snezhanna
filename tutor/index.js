@@ -1009,7 +1009,7 @@ bot.on('voice', async (msg) => {
     const file = await bot.getFile(msg.voice.file_id);
     const fileUrl = `https://api.telegram.org/file/bot${process.env.TUTOR_BOT_TOKEN}/${file.file_path}`;
     const audioRes = await axios.get(fileUrl, { responseType: 'arraybuffer' });
-    const text = await whisper.transcribe(Buffer.from(audioRes.data), 'voice.ogg', 'es');
+    const text = await whisper.transcribe(Buffer.from(audioRes.data), 'voice.ogg', null);
 
     // M-4: без экранирования Markdown-символы в тексте транскрипции вызывают ошибку API
     const escapedText = text.replace(/[_*`\[]/g, '\\$&');
