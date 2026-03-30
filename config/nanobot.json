@@ -31,7 +31,9 @@
   },
   "github": {
     "repos": [
-      { "repo": "morshin/snezhanna", "project": "snezhanna" }
+      { "repo": "morshin/snezhanna", "project": "snezhanna" },
+      { "repo": "morshin/QueTal", "project": "Que-tal" },
+      { "repo": "morshin/ai-lytics", "project": "AI-lytics" }
     ]
   },
   "chat_monitor": {
