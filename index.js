@@ -20,6 +20,7 @@ const tasks = require('./lib/tasks');
 const chatMonitor = require('./lib/chat-monitor');
 const strava = require('./lib/strava');
 const workload = require('./lib/workload');
+const github = require('./lib/github');
 const { logTokens } = require('./lib/token-log');
 const api = require('./lib/api');
 
@@ -818,12 +819,28 @@ function setupSchedules() {
         console.error('[Schedule] Failed to load tasks for briefing:', e.message);
       }
 
+      let githubText = '';
+      if (github.isConfigured()) {
+        try {
+          const issues = await github.getAllOpenIssues();
+          if (issues.length > 0) {
+            githubText = '\n\nОткрытые GitHub Issues:\n' +
+              issues.map(i => {
+                const proj = i.project ? ` [${i.project}]` : ` [${i.repo}]`;
+                return `• #${i.id} ${i.title}${proj}`;
+              }).join('\n');
+          }
+        } catch (e) {
+          console.error('[Schedule] Failed to load github issues for briefing:', e.message);
+        }
+      }
+
       const prompt = `Составь утренний брифинг для Вовочки. Сегодня ${todayStr()}.
 События в Calendar:
 ${eventsText}
 
 Задачи на ближайшие дни (уже отсортированы по приоритету — вставь их точно в таком виде, без таблиц и переформатирования):
-${tasksText}
+${tasksText}${githubText}
 
 Кратко прокомментируй день и выдели 1-2 самые важные вещи. Будь живым и тёплым.`;
       let briefingText = await askClaudeOneShot(prompt);

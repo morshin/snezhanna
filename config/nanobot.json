@@ -29,6 +29,11 @@
   "mini_app": {
     "port": 3001
   },
+  "github": {
+    "repos": [
+      { "repo": "morshin/snezhanna", "project": "snezhanna" }
+    ]
+  },
   "chat_monitor": {
     "chats": [
       { "chat_id": 8271850037, "name": "Рома Моршин (сын)", "type": "personal", "category": "kids" },

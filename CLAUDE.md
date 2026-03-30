@@ -106,7 +106,8 @@ node lib/indexer.js --incremental # incremental update
 | `docs/snezhanna-workload-scoring-tz.md` | Technical specification for the Workload & Wellbeing Scoring feature |
 | `lib/indexer.js` | Walk Yandex Disk and build JSON file index |
 | `lib/yadisk-dirs.js` | Ensure agent subdirs exist; project CRUD (`create_project`, `list_projects`, `read_project_file`, `write_project_file`) and project docs (`list_project_docs`, `read_project_doc`, `write_project_doc`) |
-| `lib/api.js` | HTTP API server for Mini App; validates Telegram initData, serves static files from `mini-app/`, exposes task CRUD + calendar endpoints |
+| `lib/github.js` | GitHub Issues integration: fetches open issues from repos in `config.github.repos`; used in workload scoring, morning briefing, and Mini App API |
+| `lib/api.js` | HTTP API server for Mini App; validates Telegram initData, serves static files from `mini-app/`, exposes task CRUD + calendar + GitHub issues endpoints |
 | `mini-app/index.html` | Telegram Mini App frontend — two-tab (Tasks + Calendar) single-file HTML/JS/CSS |
 | `lib/disk-log.js` | In-memory log of Yandex Disk write operations; flushed after evening check-in |
 | `identity/IDENTITY.md` | Snezhanna's system prompt (personality, capabilities, prompt injection defense) |
@@ -164,6 +165,7 @@ All cron schedules use `Europe/Madrid`. Dates/times shown to Vova are localized 
 - `yadisk.*`: mount paths and index file location
 - `index.*`: which folders/extensions to include/exclude when indexing Yandex Disk
 - `mini_app.port`: HTTP port for the Tasks Mini App API server (default 3001)
+- `github.repos`: list of `{ repo: "owner/repo", project: "ProjectName" }` objects for GitHub Issues integration; `project` is optional and links issues to existing project names used in the task tracker
 
 ## Required environment variables
 
@@ -182,4 +184,5 @@ TUTOR_ALLOWED_USER_ID    # Son's numeric Telegram ID
 KIDS_DATA_DIR            # /mnt/yadisk-agent/kids (default if unset)
 PARENT_CHAT_ID           # Vova's numeric Telegram ID (same as TELEGRAM_ALLOWED_USER_ID); receives parent notifications via Max's bot
 QUEST_HMAC_SECRET        # 64-char hex secret for HMAC-signing balance.json (shared with TimeGuard)
+GITHUB_TOKEN             # (optional) GitHub personal access token; scopes: public_repo or repo
 ```
