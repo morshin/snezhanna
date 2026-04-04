@@ -7,3 +7,4 @@ node_modules/
 token.json
 *.key
 *.pem
+data/

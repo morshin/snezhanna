@@ -10,6 +10,7 @@ const cron = require('node-cron');
 const axios = require('axios');
 
 const state = require('./lib/state');
+const db = require('./lib/db');
 const google = require('./lib/google');
 const whisper = require('./lib/whisper');
 const { getAvailableTools, executeTool } = require('./lib/tools');
@@ -1107,6 +1108,39 @@ ${emailsText}`;
       persistEmailDigestSeen(seenEmailIds);
     } catch (e) {
       console.error('[Schedule] email_check error:', e.message);
+    }
+  }, { timezone: config.timezone });
+
+  // Database backup — 03:30 daily (after incremental indexer at 02:00)
+  cron.schedule('30 3 * * *', async () => {
+    const AGENT_MOUNT = config.yadisk.agent_mount;
+    const backupsDir = path.join(AGENT_MOUNT, 'backups');
+    if (!fs.existsSync(AGENT_MOUNT)) {
+      console.warn('[Schedule] database_backup: Yandex.Disk not mounted, skipping');
+      return;
+    }
+    try {
+      if (!fs.existsSync(backupsDir)) fs.mkdirSync(backupsDir, { recursive: true });
+
+      const dateSuffix = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+      const backupPath = path.join(backupsDir, `snezhanna_${dateSuffix}.db`);
+      await db.backup(backupPath);
+      console.log(`[Schedule] database_backup: saved to ${backupPath}`);
+      diskLog.log('Бэкап базы данных', `backups/snezhanna_${dateSuffix}.db`);
+
+      // Keep only the 7 most recent backups
+      const files = fs.readdirSync(backupsDir)
+        .filter(f => f.match(/^snezhanna_\d{8}\.db$/))
+        .sort();
+      if (files.length > 7) {
+        const toDelete = files.slice(0, files.length - 7);
+        for (const f of toDelete) {
+          fs.unlinkSync(path.join(backupsDir, f));
+          console.log(`[Schedule] database_backup: removed old backup ${f}`);
+        }
+      }
+    } catch (e) {
+      console.error('[Schedule] database_backup error:', e.message);
     }
   }, { timezone: config.timezone });
 

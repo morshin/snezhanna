@@ -11,6 +11,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), [Semantic Vers
 
 ### Added
 
+- Migrate task and project storage from JSON files on Yandex.Disk to local SQLite (`data/snezhanna.db`); adds subtasks (`parent_id`), task dependencies (`task_deps`), daily DB backup to Yandex.Disk at 03:30, and new tools `add_task_dependency` / `get_task_with_subtasks`
 - GitHub Issues integration: Snezhanna reads open issues from configured repos, includes them in morning briefings, workload scoring, and exposes `GET /api/github/issues` for the Mini App; `list_github_issues` tool added for on-demand queries (#7)
 - Max Parent Interface: prize code pool (`/gencodes`, `/codes`), code issuance on quest completion with Time Boss Cloud integration, and low-codes warning to parent
 

@@ -55,8 +55,9 @@ node lib/indexer.js --incremental # incremental update
 - Prompt caching enabled (`betas: ['prompt-caching-2024-07-31']`): identity block marked with `cache_control: { type: 'ephemeral' }` to reduce input token usage and avoid rate limits; cache hits logged as `[Cache] hit: N tokens cached`
 - Anthropic native web search (`web_search_20250305`) enabled as a server-side tool — Claude can search the web for current info (rates, news, weather) without any local execution
 - Auto-fetches Google Calendar / Gmail context when keywords are detected in user messages (Russian keywords: "календар", "встреч", "сегодня", "почт", etc.)
-- On startup: calls `yadiskDirs.ensureDirs()` to create any missing agent subdirs (`index/`, `memory/`, `projects/`, `fitness/`, `drafts/`, `digests/`), then starts the Mini App HTTP API server (`lib/api.js`) on the port from `config.mini_app.port` (default 3001)
-- Scheduled tasks via `node-cron`: morning briefing (08:00), workload weekly check-in (Monday 09:00), evening check-in (19:00), weekly digest (Sunday 10:00), calendar reminders every 10 min (fires at 30-min mark)
+- On startup: initialises SQLite DB (`lib/db.js`, creates `data/snezhanna.db` if missing), calls `yadiskDirs.ensureDirs()` to create any missing agent subdirs (`index/`, `memory/`, `fitness/`, `drafts/`, `digests/`, `backups/`), then starts the Mini App HTTP API server (`lib/api.js`) on the port from `config.mini_app.port` (default 3001)
+- Task and project storage: local SQLite (`data/snezhanna.db`) via `better-sqlite3` (synchronous). Tasks have subtasks (`parent_id`) and dependencies (`task_deps` table). New tools: `add_task_dependency`, `get_task_with_subtasks`. Daily DB backup to `/mnt/yadisk-agent/backups/snezhanna_YYYYMMDD.db` at 03:30 (keep 7).
+- Scheduled tasks via `node-cron`: morning briefing (08:00), workload weekly check-in (Monday 09:00), evening check-in (19:00), weekly digest (Sunday 10:00), calendar reminders every 10 min (fires at 30-min mark), DB backup (03:30)
 - Workload & Wellbeing scoring: weekly life-balance score (0–10) across 4 domains (work, family, health, personal). Monday 09:00 check-in collects self-reported data, then `lib/workload.js` aggregates Calendar/Gmail/Tasks/Strava data and runs a standalone Claude scoring call. Morning briefing appends an overload coach block when score ≤ 5. On-demand via phrases like "мой скор", "как я справляюсь". History persisted to `/mnt/yadisk-agent/workload-history.json` (last 12 weeks)
 - Evening check-in includes a summary of all Yandex Disk write operations logged during the day (via `lib/disk-log.js`); log is cleared after sending
 - Bot commands: `/reset` (clear history), `/status`, `/auth <code>` (Google OAuth callback)
@@ -104,14 +105,17 @@ node lib/indexer.js --incremental # incremental update
 | `lib/workload-scoring-prompt.md` | System prompt for the workload scoring Claude call (JSON output schema, domain weights, tone rules) |
 | `lib/briefing-overload-prompt.md` | System prompt for the morning briefing overload coach block |
 | `docs/snezhanna-workload-scoring-tz.md` | Technical specification for the Workload & Wellbeing Scoring feature |
+| `lib/db.js` | better-sqlite3 initialisation, WAL mode, schema creation (tasks, projects, project_log, project_notes, project_docs, task_deps) |
 | `lib/indexer.js` | Walk Yandex Disk and build JSON file index |
-| `lib/yadisk-dirs.js` | Ensure agent subdirs exist; project CRUD (`create_project`, `list_projects`, `read_project_file`, `write_project_file`) and project docs (`list_project_docs`, `read_project_doc`, `write_project_doc`) |
+| `lib/yadisk-dirs.js` | Ensure agent subdirs exist; project CRUD backed by SQLite (`create_project`, `list_projects`, `read_project_file`, `write_project_file`) and project docs (`list_project_docs`, `read_project_doc`, `write_project_doc`); `saveFile()` still writes to Yandex.Disk |
 | `lib/github.js` | GitHub Issues integration: fetches open issues from repos in `config.github.repos`; used in workload scoring, morning briefing, and Mini App API |
+| `scripts/migrate-to-sqlite.js` | One-time migration script: reads existing JSON/MD on Yandex.Disk, imports into SQLite; `--dry-run` flag available |
+| `data/snezhanna.db` | SQLite database (gitignored) — tasks, projects, docs, logs |
 | `lib/api.js` | HTTP API server for Mini App; validates Telegram initData, serves static files from `mini-app/`, exposes task CRUD + calendar + GitHub issues endpoints |
 | `mini-app/index.html` | Telegram Mini App frontend — two-tab (Tasks + Calendar) single-file HTML/JS/CSS |
 | `lib/disk-log.js` | In-memory log of Yandex Disk write operations; flushed after evening check-in |
 | `identity/IDENTITY.md` | Snezhanna's system prompt (personality, capabilities, prompt injection defense) |
-| `config/nanobot.json` | Model, token limits, timezone, history window, Yandex Disk mount paths and indexer rules |
+| `config/nanobot.json` | Model, token limits, timezone, history window, Yandex Disk mount paths, indexer rules, `database.path` |
 | `schedules/heartbeats.json` | Documentation of all scheduled tasks (not loaded at runtime) |
 | `docs/snezhanna-tz.md` | Technical specification (TZ) — infrastructure, integrations, architecture decisions |
 | `skills/*.md` | Capability descriptions (documentation only, not loaded at runtime) |

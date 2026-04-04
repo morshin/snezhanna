@@ -39,6 +39,13 @@
       "command": "node /opt/snezhanna/lib/indexer.js --incremental"
     },
     {
+      "id": "database_backup",
+      "name": "Бэкап SQLite",
+      "cron": "30 3 * * *",
+      "description": "Backup SQLite DB to /mnt/yadisk-agent/backups/; keep 7 most recent",
+      "enabled": true
+    },
+    {
       "id": "index_full",
       "name": "Полный реиндекс",
       "cron": "0 3 * * 0",

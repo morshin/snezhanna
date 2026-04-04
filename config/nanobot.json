@@ -29,6 +29,9 @@
   "mini_app": {
     "port": 3001
   },
+  "database": {
+    "path": "data/snezhanna.db"
+  },
   "github": {
     "repos": [
       { "repo": "morshin/snezhanna", "project": "snezhanna" },
