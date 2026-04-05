@@ -776,7 +776,7 @@ function formatTasksForBriefing(taskList) {
 
   for (const t of taskList) {
     const proj = t.source === 'github'
-      ? (t.github_repo ? ` [GH: ${t.github_repo}]` : ' [GitHub]')
+      ? (t.github_repo ? ` [GH milestone: ${t.github_repo}]` : ' [GitHub milestone]')
       : (t.project ? ` [${t.project}]` : '');
     let dateStr = '';
     if (t.due_date) {
@@ -817,7 +817,7 @@ function setupSchedules() {
       }
       let tasksText = '• Задач нет';
       try {
-        const todayTasks = await tasksMerge.getTodayTasksWithGithub();
+        const todayTasks = await tasksMerge.getTodayTasksWithGithub(2, { wideGithubWindow: true });
         tasksText = formatTasksForBriefing(todayTasks);
       } catch (e) {
         console.error('[Schedule] Failed to load tasks for briefing:', e.message);
@@ -827,7 +827,7 @@ function setupSchedules() {
 События в Calendar:
 ${eventsText}
 
-Задачи на ближайшие дни — локальный трекер и открытые GitHub Issues (уже отсортированы по приоритету — вставь их точно в таком виде, без таблиц и переформатирования):
+Задачи на ближайшие дни — локальный трекер и GitHub Milestones с дедлайном в ближайшие дни (уже отсортированы по приоритету — вставь их точно в таком виде, без таблиц и переформатирования):
 ${tasksText}
 
 Кратко прокомментируй день и выдели 1-2 самые важные вещи. Будь живым и тёплым.`;
@@ -855,7 +855,7 @@ ${tasksText}
             });
           }
           let openTasks = [];
-          try { openTasks = await tasksMerge.getTodayTasksWithGithub(); } catch (_) {}
+          try { openTasks = await tasksMerge.getTodayTasksWithGithub(2, { wideGithubWindow: true }); } catch (_) {}
           const overloadBlock = await workload.buildOverloadBlock(lastScore, todayEvents, tomorrowEvents, openTasks);
           if (overloadBlock) {
             briefingText += '\n\n---\n\n' + overloadBlock;

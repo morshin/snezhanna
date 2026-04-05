@@ -228,7 +228,7 @@
     margin-bottom: 2px;
   }
 
-  /* GitHub issues: круг — открыть issue в браузере, не локальное завершение */
+  /* GitHub milestones: круг — открыть веху в браузере, не локальное завершение */
   .task-row.github-row .task-check {
     border-style: dashed;
     opacity: 0.92;
@@ -926,8 +926,9 @@
         const due = formatDue(t.due_date);
         const dp = escAttr(normProject(t.project));
         const gh = t.source === 'github';
+        const ghLabel = gh && t.github_kind === 'milestone' ? 'Milestone' : (gh ? 'GitHub' : '');
         const metaProject = gh
-          ? `<span class="gh-badge">GitHub</span>${t.github_repo ? `<span>${esc(t.github_repo)}</span>` : ''}`
+          ? `<span class="gh-badge">${ghLabel}</span>${t.github_repo ? `<span>${esc(t.github_repo)}</span>` : ''}`
           : (t.project ? `<span>${esc(t.project)}</span>` : '');
         html += `
           <div class="task-row${gh ? ' github-row' : ''}" data-id="${t.id}" data-project="${dp}" data-source="${gh ? 'github' : 'local'}">
@@ -1036,11 +1037,11 @@
     document.getElementById('actionSheet').classList.add('visible');
 
     if (task.source === 'github' && task.github_url) {
-      const repoLine = task.github_repo ? `<div class="sheet-hint">${esc(task.github_repo)} · #${task.id}</div>` : '';
+      const repoLine = task.github_repo ? `<div class="sheet-hint">${esc(task.github_repo)} · milestone #${task.id}</div>` : '';
       sheet.innerHTML = `
         <div class="sheet-title">${esc(task.title)}</div>
         ${repoLine}
-        <p class="sheet-hint">Issue on GitHub — close or edit it there.</p>
+        <p class="sheet-hint">GitHub milestone — close or edit it on GitHub.</p>
         <button class="action-btn" id="btnGhOpen"><span class="icon">&#8599;</span><span>Open in GitHub</span></button>`;
       document.getElementById('btnGhOpen').onclick = () => {
         if (tg && tg.openLink) tg.openLink(task.github_url);

@@ -108,10 +108,10 @@ node lib/indexer.js --incremental # incremental update
 | `lib/db.js` | better-sqlite3 initialisation, WAL mode, schema creation (tasks, projects, project_log, project_notes, project_docs, task_deps) |
 | `lib/indexer.js` | Walk Yandex Disk and build JSON file index |
 | `lib/yadisk-dirs.js` | Ensure agent subdirs exist; project CRUD backed by SQLite (`create_project`, `list_projects`, `read_project_file`, `write_project_file`) and project docs (`list_project_docs`, `read_project_doc`, `write_project_doc`); `saveFile()` still writes to Yandex.Disk |
-| `lib/github.js` | GitHub Issues integration: fetches open issues from repos in `config.github.repos`; used in workload scoring, morning briefing, and Mini App API |
+| `lib/github.js` | GitHub Milestones: open milestones with `due_on` in the configured window (`github.milestone_due_within_days`, default 14 calendar days in `timezone`, including overdue); used in workload scoring, morning briefing, Mini App API |
 | `scripts/migrate-to-sqlite.js` | One-time migration script: reads existing JSON/MD on Yandex.Disk, imports into SQLite; `--dry-run` flag available |
 | `data/snezhanna.db` | SQLite database (gitignored) — tasks, projects, docs, logs |
-| `lib/api.js` | HTTP API server for Mini App; validates Telegram initData, serves static files from `mini-app/`, exposes task CRUD + calendar + GitHub issues endpoints |
+| `lib/api.js` | HTTP API server for Mini App; validates Telegram initData, serves static files from `mini-app/`, exposes task CRUD + calendar + `GET /api/github/milestones` (legacy `/api/github/issues` same JSON) |
 | `mini-app/index.html` | Telegram Mini App frontend — two-tab (Tasks + Calendar) single-file HTML/JS/CSS |
 | `lib/disk-log.js` | In-memory log of Yandex Disk write operations; flushed after evening check-in |
 | `identity/IDENTITY.md` | Snezhanna's system prompt (personality, capabilities, prompt injection defense) |
@@ -169,7 +169,7 @@ All cron schedules use `Europe/Madrid`. Dates/times shown to Vova are localized 
 - `yadisk.*`: mount paths and index file location
 - `index.*`: which folders/extensions to include/exclude when indexing Yandex Disk
 - `mini_app.port`: HTTP port for the Tasks Mini App API server (default 3001)
-- `github.repos`: list of `{ repo: "owner/repo", project: "ProjectName" }` objects for GitHub Issues integration; `project` is optional and links issues to existing project names used in the task tracker
+- `github.repos`: list of `{ repo: "owner/repo", project: "ProjectName" }` for GitHub Milestones; `project` is optional and links milestones to task-tracker project names; `github.milestone_due_within_days`: show milestones due within this many days or already overdue (default 14)
 
 ## Required environment variables
 

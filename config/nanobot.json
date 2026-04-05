@@ -33,6 +33,7 @@
     "path": "data/snezhanna.db"
   },
   "github": {
+    "milestone_due_within_days": 14,
     "repos": [
       { "repo": "morshin/snezhanna", "project": "snezhanna" },
       { "repo": "morshin/QueTal", "project": "Que-tal" },

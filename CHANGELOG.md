@@ -9,6 +9,14 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), [Semantic Vers
 <!-- Format: - <One-sentence description> (#<issue or branch ref>) -->
 <!-- Categories: Added | Changed | Fixed | Security | Removed -->
 
+### Changed
+
+- **GitHub:** integration now surfaces **milestones** with a set due date only—open milestones that are overdue or due within `github.milestone_due_within_days` (default 14, in `config.timezone`), instead of all open issues; merged into tasks / Mini App as `github_kind: "milestone"`.
+- **API:** `GET /api/github/milestones` added; `GET /api/github/issues` kept as a legacy alias and returns `{ milestones }` (no `issues` key).
+- **Tools:** `list_github_issues` replaced by `list_github_milestones` (returns `milestones`, `count`).
+- **Workload scoring:** payload field `github_issues` replaced by `github_milestones` (count, by repo, per-milestone due metadata); scoring prompt updated accordingly.
+- **Morning briefing** uses `getTodayTasksWithGithub(2, { wideGithubWindow: true })` so local tasks stay on a 2-day horizon while milestones use the full configured window; Mini App `filter=today` keeps milestones within the same `daysAhead` as local tasks.
+
 ## [1.1.0] — 2026-04-04
 
 ### Added
