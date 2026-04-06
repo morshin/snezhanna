@@ -94,6 +94,16 @@ function markHomeworkDone(taskId) {
   }
 }
 
+function removeHomeworkTask(taskId) {
+  const hw = loadHomework();
+  const idx = hw.tasks.findIndex(t => t.id === taskId);
+  if (idx === -1) return null;
+  const [removed] = hw.tasks.splice(idx, 1);
+  saveHomework(hw);
+  console.log('[Storage] Homework removed:', taskId, removed.subject);
+  return removed;
+}
+
 // ── Session reports ───────────────────────────────────────────────────────────
 
 function appendSessionReport(dateStr, md) {
@@ -419,7 +429,7 @@ function addBalance(minutes) {
 module.exports = {
   ensureDirs,
   loadSchedule, saveSchedule,
-  loadHomework, saveHomework, addHomeworkTask, markHomeworkDone,
+  loadHomework, saveHomework, addHomeworkTask, markHomeworkDone, removeHomeworkTask,
   isScheduleComplete,
   appendSessionReport, readSessionReport, listSessionDates,
   readProgress, writeProgress,

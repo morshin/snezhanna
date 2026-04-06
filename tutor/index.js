@@ -7,7 +7,7 @@ const path = require('path');
 const axios = require('axios');
 
 const { bot, ALLOWED, isAllowed, sendLongMessage } = require('./lib/telegram');
-const { askMax, askMaxOneShot, askParent } = require('./lib/claude');
+const { askMax, askMaxOneShot, askMaxOneShotWithImage, askParent } = require('./lib/claude');
 const session = require('./lib/session');
 const storage = require('./lib/storage');
 const report = require('./lib/report');
@@ -15,6 +15,7 @@ const { setupSchedules } = require('./schedules/crons');
 const langWeek = require('./lib/lang-week');
 const vision = require('../lib/vision');
 const whisper = require('../lib/whisper');
+const { buildReplyContext } = require('../lib/reply-chain');
 
 // ── State ─────────────────────────────────────────────────────────────────────
 
@@ -24,6 +25,9 @@ let appState = { chatId: null };
 // Флаг: бот ждёт ответа на вопрос "Что задали?" (15:00 чекин)
 let awaitingHomework = false;
 
+// Timestamp последнего напоминания о ДЗ (антиспам для hourly reminder)
+let lastHomeworkReminder = null;
+
 function setAwaitingHomework(value) {
   awaitingHomework = value;
   console.log('[Max] awaitingHomework =', value);
@@ -32,6 +36,10 @@ function setAwaitingHomework(value) {
 // Черновик нового квеста — многошаговый диалог с родителем
 // step: 'subject' | 'description' | 'confirmation' | 'reward'
 let parentQuestDraft = null;
+
+// Черновик свободного /assign — ожидание подтверждения от родителя
+// { tasks: [...], rawText: '...' }
+let parentAssignDraft = null;
 
 // C-4: мьютекс на обработку входящих сообщений — предотвращает гонку при быстрой отправке
 // Для каждого chatId держим цепочку промисов: новое сообщение ждёт пока предыдущее не обработается
@@ -317,6 +325,25 @@ async function refineQuestDescription(subject, rawDescription, previousRefined, 
 const CONFIRM_RE = /^(да|ок|ладно|принять|принимаю|подтверждаю|yes|ok|хорошо|супер|отлично|годится|сойдёт|пойдёт)\.?$/i;
 const REWARD_RE = /^\+?(\d+)\s*мин?\.?$/i;
 
+// ── Day name mapping (Russian / Spanish shorthand → schedule.json key) ────────
+
+const DAY_NAME_MAP = {
+  'пн': 'lunes', 'понедельник': 'lunes', 'lunes': 'lunes', 'lun': 'lunes',
+  'вт': 'martes', 'вторник': 'martes', 'martes': 'martes', 'mar': 'martes',
+  'ср': 'miércoles', 'среда': 'miércoles', 'miércoles': 'miércoles', 'miercoles': 'miércoles', 'mié': 'miércoles', 'mie': 'miércoles',
+  'чт': 'jueves', 'четверг': 'jueves', 'jueves': 'jueves', 'jue': 'jueves',
+  'пт': 'viernes', 'пятница': 'viernes', 'viernes': 'viernes', 'vie': 'viernes'
+};
+const DAY_LABELS_RU_SHORT = { lunes: 'Пн', martes: 'Вт', miércoles: 'Ср', jueves: 'Чт', viernes: 'Пт' };
+
+function resolveDayName(input) {
+  return DAY_NAME_MAP[input.toLowerCase().trim()] || null;
+}
+
+// Черновик пошагового редактирования расписания родителем
+// step: 0..4 (по числу дней), schedule: {}
+let parentScheduleDraft = null;
+
 // ── Parent helpers ─────────────────────────────────────────────────────────────
 
 function isParent(msg) {
@@ -438,6 +465,130 @@ async function handleParentCommand(msg, text) {
     }
   }
 
+  // ── Multi-step schedule reset dialog ────────────────────────────────────────
+  if (parentScheduleDraft) {
+    const draft = parentScheduleDraft;
+    if (text.startsWith('/') && text !== '/resetschedule') {
+      parentScheduleDraft = null;
+      console.log('[Max] Schedule draft cancelled by command');
+    } else {
+      const day = WEEKDAYS[draft.step];
+      const dayLabel = DAY_LABELS_RU_SHORT[day];
+      const FREE_RE = /^(—|-|выходной|свободный|libre|nada|нет уроков|нет)$/i;
+      let subjects;
+      if (FREE_RE.test(text.trim())) {
+        subjects = [];
+      } else {
+        await bot.sendChatAction(parentId, 'typing');
+        try {
+          const parsed = await askMaxOneShot(
+            'Eres un parser. El padre te dice las asignaturas para un día. Devuelve SOLO un JSON array de strings con los nombres de las asignaturas en español correcto (con mayúscula). Ejemplo: ["Matemáticas", "Lengua", "Inglés"]. Sin explicaciones, solo el JSON array.',
+            `Asignaturas: "${text}"`
+          );
+          const match = parsed.match(/\[[\s\S]*?\]/);
+          subjects = match ? JSON.parse(match[0]) : text.split(/[,;]+/).map(s => s.trim()).filter(Boolean);
+        } catch (e) {
+          console.error('[Max] /resetschedule parse error:', e.message);
+          subjects = text.split(/[,;]+/).map(s => s.trim()).filter(Boolean);
+        }
+      }
+      draft.schedule[day] = subjects;
+      draft.step++;
+      const display = subjects.length > 0 ? subjects.join(', ') : '— (выходной)';
+      if (draft.step < WEEKDAYS.length) {
+        const nextDay = WEEKDAYS[draft.step];
+        const nextLabel = DAY_LABELS_RU_SHORT[nextDay];
+        await bot.sendMessage(parentId, `✅ ${dayLabel}: ${display}\n\nТеперь ${nextLabel} — напиши предметы через запятую (или «—» если выходной):`);
+      } else {
+        storage.saveSchedule(draft.schedule);
+        parentScheduleDraft = null;
+        let summary = `✅ ${dayLabel}: ${display}\n\n📅 Расписание сохранено:\n`;
+        for (const d of WEEKDAYS) {
+          const label = DAY_LABELS_RU_SHORT[d];
+          const subjs = draft.schedule[d] || [];
+          summary += `\n${label}: ${subjs.length > 0 ? subjs.join(', ') : '—'}`;
+        }
+        await bot.sendMessage(parentId, summary);
+        console.log('[Max] Schedule fully reset by parent');
+      }
+      return;
+    }
+  }
+
+  // ── Multi-step assign confirmation dialog ───────────────────────────────────
+  if (parentAssignDraft) {
+    const draft = parentAssignDraft;
+    if (text.startsWith('/')) {
+      parentAssignDraft = null;
+      console.log('[Max] Assign draft cancelled by command');
+    } else if (CONFIRM_RE.test(text.trim())) {
+      const added = [];
+      for (const task of draft.tasks) {
+        const desc = task.description || task.description_es || task.description_ru;
+        if (desc) {
+          if (!task.description) {
+            task.description = task.description_es && task.description_ru
+              ? `${task.description_es} / ${task.description_ru}`
+              : desc;
+          }
+          storage.addHomeworkTask(task);
+          added.push(`• ${task.subject || 'General'}: ${task.description_ru || task.description}${task.due ? ` (до ${task.due})` : ''}`);
+        }
+      }
+      parentAssignDraft = null;
+      await bot.sendMessage(parentId, `✅ Сохранено ${added.length} задание(й):\n${added.join('\n')}`);
+      console.log('[Max] Assign confirmed, saved', added.length, 'tasks');
+      return;
+    } else if (/^(нет|отмена|cancel|отменить)\.?$/i.test(text.trim())) {
+      parentAssignDraft = null;
+      await bot.sendMessage(parentId, 'Отменено. Можешь отправить /assign заново.');
+      return;
+    } else {
+      await bot.sendChatAction(parentId, 'typing');
+      const todayStr = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Madrid' });
+      const tomorrowDate = new Date();
+      tomorrowDate.setDate(tomorrowDate.getDate() + 1);
+      const tomorrowStr = tomorrowDate.toLocaleDateString('sv-SE', { timeZone: 'Europe/Madrid' });
+      try {
+        const prevContext = draft.tasks.map((t, i) =>
+          `${i + 1}. ${t.subject}: ES="${t.description_es || t.description}" / RU="${t.description_ru || ''}"${t.comment ? ` (${t.comment})` : ''}`
+        ).join('\n');
+        const parsed = await askMaxOneShot(
+          `Eres un parser de deberes escolares. El padre revisa las tareas extraídas y envía correcciones.
+Aplica las correcciones del padre a la lista de tareas y devuelve la lista actualizada como JSON array.
+Cada tarea: {"subject": "Asignatura en español (con mayúscula)", "description_es": "Acción concreta en ESPAÑOL", "description_ru": "То же задание на РУССКОМ", "due": "YYYY-MM-DD o vacío", "comment": "Nota en RUSO si necesario, o vacío"}.
+Si el padre dice eliminar una tarea — elimínala. Si dice cambiar algo — cámbialo. Si añade info — incorpórala.
+Hoy es ${todayStr}. "mañana" = ${tomorrowStr}.`,
+          `Tareas actuales:\n${prevContext}\n\nTexto original del que se extrajeron:\n"${draft.rawText.slice(0, 500)}"\n\nCorrección del padre: "${text.trim()}"`
+        );
+        const match = parsed.match(/\[[\s\S]*\]/);
+        const tasks = match ? JSON.parse(match[0]) : draft.tasks;
+        for (const t of tasks) {
+          if (!t.description && (t.description_es || t.description_ru)) {
+            t.description = t.description_es && t.description_ru
+              ? `${t.description_es} / ${t.description_ru}`
+              : (t.description_es || t.description_ru);
+          }
+        }
+        draft.tasks = tasks;
+        let preview = '📝 Обновлённый список:\n';
+        tasks.forEach((t, i) => {
+          preview += `\n${i + 1}. ${t.subject || 'General'}:`;
+          preview += `\n   🇪🇸 ${t.description_es || t.description}`;
+          preview += `\n   🇷🇺 ${t.description_ru || t.description}`;
+          if (t.due) preview += `\n   📅 до ${t.due}`;
+          if (t.comment) preview += `\n   💬 ${t.comment}`;
+        });
+        preview += '\n\nПодтвердить? Или напиши уточнения. /отмена — отменить.';
+        await bot.sendMessage(parentId, preview);
+      } catch (e) {
+        console.error('[Max] Assign re-parse error:', e.message);
+        await bot.sendMessage(parentId, 'Не удалось обработать уточнение. Подтвердить текущий вариант? Или /отмена.');
+      }
+      return;
+    }
+  }
+
   // /report — сессия за сегодня
   if (text === '/report') {
     const todayStr = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Madrid' });
@@ -465,7 +616,7 @@ async function handleParentCommand(msg, text) {
     return;
   }
 
-  // /homework — ДЗ для родителя (по-русски)
+  // /homework — ДЗ для родителя (по-русски), с ID для удаления
   if (text === '/homework') {
     const hw = storage.loadHomework();
     const pending = hw.tasks.filter(t => !t.done);
@@ -475,9 +626,33 @@ async function handleParentCommand(msg, text) {
     }
     let reply = '📝 Домашние задания:\n';
     for (const t of pending) {
-      reply += `\n• ${t.subject}: ${t.description}${t.due ? ` (до ${t.due})` : ''}`;
+      reply += `\n• ${t.subject}: ${t.description}${t.due ? ` (до ${t.due})` : ''}\n  🔹 /delhw ${t.id}`;
     }
     await bot.sendMessage(parentId, reply);
+    return;
+  }
+
+  // /delhw <id> [id2 ...] — удалить одно или несколько ДЗ
+  if (text.startsWith('/delhw ')) {
+    const ids = text.slice('/delhw '.length).trim().split(/\s+/);
+    const removed = [];
+    const notFound = [];
+    for (const id of ids) {
+      const task = storage.removeHomeworkTask(id);
+      if (task) {
+        removed.push(`• ${task.subject}: ${task.description}`);
+      } else {
+        notFound.push(id);
+      }
+    }
+    let reply = '';
+    if (removed.length > 0) {
+      reply += `🗑 Удалено ${removed.length} задание(й):\n${removed.join('\n')}`;
+    }
+    if (notFound.length > 0) {
+      reply += `${reply ? '\n\n' : ''}Не найдено: ${notFound.join(', ')}`;
+    }
+    await bot.sendMessage(parentId, reply || 'Ничего не удалено.');
     return;
   }
 
@@ -506,6 +681,57 @@ async function handleParentCommand(msg, text) {
       }
     }
     await bot.sendMessage(parentId, reply);
+    return;
+  }
+
+  // /setday <день> <предметы через запятую> — редактирование одного дня расписания
+  if (text.startsWith('/setday ')) {
+    const rest = text.slice('/setday '.length).trim();
+    const spaceIdx = rest.indexOf(' ');
+    if (spaceIdx === -1) {
+      await bot.sendMessage(parentId, 'Формат: /setday ср Математика, Английский, Физкультура\nИли: /setday ср — (выходной)');
+      return;
+    }
+    const dayInput = rest.slice(0, spaceIdx);
+    const dayKey = resolveDayName(dayInput);
+    if (!dayKey) {
+      await bot.sendMessage(parentId, `Неизвестный день: "${dayInput}"\nИспользуй: пн, вт, ср, чт, пт (или lunes, martes, miércoles, jueves, viernes)`);
+      return;
+    }
+    const subjectsInput = rest.slice(spaceIdx + 1).trim();
+    const FREE_RE = /^(—|-|выходной|свободный|libre|nada|нет уроков|нет)$/i;
+    let subjects;
+    if (FREE_RE.test(subjectsInput)) {
+      subjects = [];
+    } else {
+      await bot.sendChatAction(parentId, 'typing');
+      try {
+        const parsed = await askMaxOneShot(
+          'Eres un parser. El padre te dice las asignaturas para un día. Devuelve SOLO un JSON array de strings con los nombres de las asignaturas en español correcto (con mayúscula). Ejemplo: ["Matemáticas", "Lengua", "Inglés"]. Sin explicaciones, solo el JSON array.',
+          `Asignaturas: "${subjectsInput}"`
+        );
+        const match = parsed.match(/\[[\s\S]*?\]/);
+        subjects = match ? JSON.parse(match[0]) : subjectsInput.split(/[,;]+/).map(s => s.trim()).filter(Boolean);
+      } catch (e) {
+        console.error('[Max] /setday parse error:', e.message);
+        subjects = subjectsInput.split(/[,;]+/).map(s => s.trim()).filter(Boolean);
+      }
+    }
+    const schedule = storage.loadSchedule() || {};
+    schedule[dayKey] = subjects;
+    storage.saveSchedule(schedule);
+    const dayLabel = DAY_LABELS_RU_SHORT[dayKey];
+    const display = subjects.length > 0 ? subjects.join(', ') : '— (выходной)';
+    await bot.sendMessage(parentId, `✅ ${dayLabel}: ${display}`);
+    console.log('[Max] Schedule updated by parent:', dayKey, subjects);
+    return;
+  }
+
+  // /resetschedule — пошаговый полный сброс расписания
+  if (text === '/resetschedule') {
+    parentScheduleDraft = { step: 0, schedule: {} };
+    const firstLabel = DAY_LABELS_RU_SHORT[WEEKDAYS[0]];
+    await bot.sendMessage(parentId, `📅 Пересоздаём расписание с нуля.\n\n${firstLabel} — напиши предметы через запятую (или «—» если выходной):`);
     return;
   }
 
@@ -576,22 +802,85 @@ async function handleParentCommand(msg, text) {
     return;
   }
 
-  // /assign <subject>: <description>
+  // /assign <subject>: <description> — или свободный текст (парсинг через Claude с подтверждением)
   if (text.startsWith('/assign ')) {
     const rest = text.slice('/assign '.length).trim();
+    if (!rest) {
+      await bot.sendMessage(parentId, 'Формат: /assign Lengua: прочитать параграф 12\nИли просто вставь текст/письмо от учителя.');
+      return;
+    }
+    // Строгий формат «Предмет: описание» — только если часть до : короткая (1-3 слова, ≤40 символов)
+    // и вся строка однострочная. Иначе — свободный формат.
     const colonIdx = rest.indexOf(':');
-    if (colonIdx === -1) {
-      await bot.sendMessage(parentId, 'Формат: /assign Lengua: прочитать параграф 12');
+    const isSingleLine = !rest.includes('\n');
+    const candidateSubject = colonIdx !== -1 ? rest.slice(0, colonIdx).trim() : '';
+    const isStrictFormat = colonIdx !== -1 && isSingleLine
+      && candidateSubject.length <= 40
+      && candidateSubject.split(/\s+/).length <= 3
+      && rest.slice(colonIdx + 1).trim().length > 0;
+    if (isStrictFormat) {
+      const subject = candidateSubject;
+      const description = rest.slice(colonIdx + 1).trim();
+      storage.addHomeworkTask({ subject, description, due: '' });
+      await bot.sendMessage(parentId, `✅ Задание добавлено: ${subject} — ${description}`);
       return;
     }
-    const subject = rest.slice(0, colonIdx).trim();
-    const description = rest.slice(colonIdx + 1).trim();
-    if (!subject || !description) {
-      await bot.sendMessage(parentId, 'Формат: /assign Lengua: прочитать параграф 12');
-      return;
+    // Свободный формат — Claude разбивает на конкретные пункты и добавляет уточнения
+    await bot.sendChatAction(parentId, 'typing');
+    const todayStr = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Madrid' });
+    const tomorrowDate = new Date();
+    tomorrowDate.setDate(tomorrowDate.getDate() + 1);
+    const tomorrowStr = tomorrowDate.toLocaleDateString('sv-SE', { timeZone: 'Europe/Madrid' });
+    try {
+      const parsed = await askMaxOneShot(
+        `Eres un parser de deberes/tareas escolares. El padre te envía un texto — puede ser un mensaje de un profesor, un email, una nota de agenda o una descripción propia. El alumno tiene 13 años, colegio español en Madrid.
+
+Tu trabajo: extraer TODAS las tareas concretas que el alumno debe realizar. Devuelve SOLO un JSON array (sin texto extra).
+
+Cada tarea: {"subject": "Asignatura en español (con mayúscula)", "description_es": "Acción concreta en ESPAÑOL que debe realizar el alumno", "description_ru": "То же самое задание на РУССКОМ языке", "due": "YYYY-MM-DD o vacío si no se menciona fecha", "comment": "Nota importante para el padre en RUSO: откуда взять материалы, связь с оценкой, пояснения если что-то неясно, или vacío si todo claro"}.
+
+Reglas importantes:
+- Desglosa textos largos en tareas INDIVIDUALES — cada acción concreta es una tarea separada.
+- description_es y description_ru deben contener LA MISMA tarea, pero en español y en ruso respectivamente.
+- Determina la asignatura del CONTEXTO del mensaje (profesor, tema mencionado, etc.), no solo de cada frase.
+- Si un profesor dice que es de "Geografía e Historia", todas las tareas de ese mensaje son de esa asignatura (o de la sub-área correspondiente: "Historia" o "Geografía" según el contenido de la tarea).
+- Ignora saludos, presentaciones, opiniones del profesor — extrae solo las ACCIONES para el alumno.
+- El campo "comment" debe estar en RUSO y contener información práctica: dónde están los materiales (Teams, clase, etc.), si la tarea es para recuperación/evaluación, plazos implícitos, o advertencias sobre partes poco claras.
+- Si no puedes determinar la asignatura, pon "General".
+Hoy es ${todayStr}. "mañana" = ${tomorrowStr}. "esta semana" = hasta el viernes de esta semana.`,
+        `Texto del padre:\n\n${rest}`
+      );
+      let tasks = [];
+      const match = parsed.match(/\[[\s\S]*\]/);
+      tasks = match ? JSON.parse(match[0]) : [];
+      if (tasks.length === 0) {
+        tasks = [{ subject: 'General', description_es: rest.slice(0, 200), description_ru: rest.slice(0, 200), due: '', comment: '' }];
+      }
+      // Формируем description = "ES / RU" для сохранения в homework.json
+      for (const t of tasks) {
+        if (!t.description && (t.description_es || t.description_ru)) {
+          t.description = t.description_es && t.description_ru
+            ? `${t.description_es} / ${t.description_ru}`
+            : (t.description_es || t.description_ru);
+        }
+      }
+      parentAssignDraft = { tasks, rawText: rest };
+      let preview = '📝 Распознаны задания:\n';
+      tasks.forEach((t, i) => {
+        preview += `\n${i + 1}. ${t.subject || 'General'}:`;
+        preview += `\n   🇪🇸 ${t.description_es || t.description}`;
+        preview += `\n   🇷🇺 ${t.description_ru || t.description}`;
+        if (t.due) preview += `\n   📅 до ${t.due}`;
+        if (t.comment) preview += `\n   💬 ${t.comment}`;
+      });
+      preview += '\n\nВсё верно? Подтверди или напиши уточнения.';
+      await bot.sendMessage(parentId, preview);
+    } catch (e) {
+      console.error('[Max] /assign freeform parse error:', e.message);
+      storage.addHomeworkTask({ subject: 'General', description: rest, due: '' });
+      parentAssignDraft = null;
+      await bot.sendMessage(parentId, `✅ Задание добавлено: General — ${rest}`);
     }
-    storage.addHomeworkTask({ subject, description, due: '' });
-    await bot.sendMessage(parentId, '✅ Задание добавлено. Макс передаст его сыну на следующей сессии.');
     return;
   }
 
@@ -676,21 +965,32 @@ async function handleParentCommand(msg, text) {
   if (text === '/help') {
     await bot.sendMessage(parentId,
       'Команды для родителя:\n\n' +
+      '📊 *Отчёты*\n' +
       '/report — сессия сегодня\n' +
       '/sessions — список всех дат сессий\n' +
-      '/sessions ГГГГ-ММ-ДД — сессии за конкретный день\n' +
+      '/sessions ГГГГ-ММ-ДД — сессии за день\n' +
       '/week — недельный дайджест\n' +
-      '/progress — прогресс по предметам\n' +
-      '/schedule — расписание сына\n' +
-      '/homework — домашние задания\n' +
-      '/balance — баланс TimeGuard\n' +
-      '/quests — активные квесты\n' +
-      '/codes — статус пула призовых кодов\n' +
-      '/gencodes [N] — сгенерировать N кодов (по умолчанию 100)\n' +
-      '/assign Предмет: задание\n' +
+      '/progress — прогресс по предметам\n\n' +
+      '📅 *Расписание*\n' +
+      '/schedule — посмотреть расписание\n' +
+      '/setday <день> <предметы> — изменить один день\n' +
+      '  Пример: /setday ср Математика, Английский\n' +
+      '/resetschedule — пересоздать расписание с нуля\n\n' +
+      '📝 *Домашние задания*\n' +
+      '/homework — невыполненные ДЗ\n' +
+      '/assign Предмет: задание — добавить ДЗ\n' +
+      '/assign <текст> — свободный формат\n' +
+      '📷 Или отправь фото ДЗ — бот распознает\n' +
+      '/delhw <id> — удалить задание\n\n' +
+      '🎯 *Квесты и призы*\n' +
       '/quest — создать квест (диалог)\n' +
-      '/cancelquest <id>\n\n' +
-      'Или просто напиши вопрос — например: "Как он учится?" или "Что было на прошлой неделе?"'
+      '/quests — активные квесты\n' +
+      '/cancelquest <id>\n' +
+      '/balance — баланс TimeGuard\n' +
+      '/codes — статус пула кодов\n' +
+      '/gencodes [N] — сгенерировать коды\n\n' +
+      'Или просто напиши вопрос — например: "Как он учится?"',
+      { parse_mode: 'Markdown' }
     );
     return;
   }
@@ -711,6 +1011,84 @@ async function handleParentCommand(msg, text) {
   } catch (e) {
     console.error('[Max] askParent error:', e.message);
     await bot.sendMessage(parentId, 'Не удалось обработать запрос. Попробуй ещё раз.');
+  }
+}
+
+// ── Parent photo handler ──────────────────────────────────────────────────────
+
+async function handleParentPhoto(msg) {
+  const parentId = process.env.PARENT_CHAT_ID;
+  try {
+    await bot.sendChatAction(parentId, 'typing');
+    const photo = msg.photo[msg.photo.length - 1];
+    const { base64, mime_type } = await vision.downloadTelegramPhoto(
+      bot, photo.file_id, process.env.TUTOR_BOT_TOKEN
+    );
+    const caption = msg.caption || '';
+    const todayStr = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Madrid' });
+    const tomorrowDate = new Date();
+    tomorrowDate.setDate(tomorrowDate.getDate() + 1);
+    const tomorrowStr = tomorrowDate.toLocaleDateString('sv-SE', { timeZone: 'Europe/Madrid' });
+
+    const systemPrompt =
+      `Eres un parser de deberes escolares. Analiza la foto enviada por el padre — puede ser una foto de agenda, pizarra, mensaje del profesor, o tarea escrita. El alumno tiene 13 años, colegio español en Madrid.
+
+Extrae TODAS las tareas concretas visibles y devuelve SOLO un JSON array (sin texto extra).
+Cada tarea: {"subject": "Asignatura en español (con mayúscula)", "description_es": "Acción concreta en ESPAÑOL", "description_ru": "То же задание на РУССКОМ", "due": "YYYY-MM-DD o vacío", "comment": "Nota en RUSO: откуда материалы, связь с оценкой, если что-то неразборчиво, o vacío si todo claro"}.
+Hoy es ${todayStr}. "mañana" = ${tomorrowStr}.
+Reglas:
+- Cada acción concreta es una tarea separada.
+- description_es y description_ru contienen LA MISMA tarea en español y ruso.
+- Determina la asignatura del contexto visual (encabezado, nombre del profesor, tema).
+- Si no puedes determinar la asignatura, pon "General".
+- Si no puedes leer nada útil, devuelve un array vacío: [].
+- Ignora contenido no relevante (saludos, firmas).`;
+
+    const userText = caption
+      ? `Contexto del padre: "${caption}"`
+      : 'Analiza esta foto de deberes.';
+
+    const parsed = await askMaxOneShotWithImage(systemPrompt, userText, base64, mime_type);
+
+    let tasks = [];
+    try {
+      const match = parsed.match(/\[[\s\S]*\]/);
+      tasks = match ? JSON.parse(match[0]) : [];
+    } catch (e) {
+      console.error('[Max] Parent photo homework parse error:', e.message);
+      tasks = [];
+    }
+
+    if (tasks.length === 0) {
+      await bot.sendMessage(parentId,
+        'Не удалось распознать задания на фото.\nПопробуй отправить фото поближе или добавь описание через /assign.'
+      );
+      return;
+    }
+
+    for (const t of tasks) {
+      if (!t.description && (t.description_es || t.description_ru)) {
+        t.description = t.description_es && t.description_ru
+          ? `${t.description_es} / ${t.description_ru}`
+          : (t.description_es || t.description_ru);
+      }
+    }
+
+    parentAssignDraft = { tasks, rawText: caption || '[фото ДЗ]' };
+    let preview = '📝 Распознано с фото:\n';
+    tasks.forEach((t, i) => {
+      preview += `\n${i + 1}. ${t.subject || 'General'}:`;
+      preview += `\n   🇪🇸 ${t.description_es || t.description}`;
+      preview += `\n   🇷🇺 ${t.description_ru || t.description}`;
+      if (t.due) preview += `\n   📅 до ${t.due}`;
+      if (t.comment) preview += `\n   💬 ${t.comment}`;
+    });
+    preview += '\n\nВсё верно? Подтверди или напиши уточнения.';
+    await bot.sendMessage(parentId, preview);
+    console.log(`[Max] Parent photo: ${tasks.length} tasks recognized, awaiting confirmation`);
+  } catch (e) {
+    console.error('[Max] handleParentPhoto error:', e.message);
+    await bot.sendMessage(parentId, 'Ошибка при обработке фото. Попробуй ещё раз или используй /assign.').catch(() => {});
   }
 }
 
@@ -888,8 +1266,16 @@ bot.on('message', async (msg) => {
       }
     }
 
+    // Reply context: if student replied to a specific message, prepend context
+    const sessionHistory = session.getHistory();
+    const replyContext = buildReplyContext(msg, sessionHistory, { botName: 'Max' });
+    const textForClaude = replyContext ? replyContext + '\n\n' + text : text;
+
+    const msgMeta = { message_id: msg.message_id };
+    if (msg.reply_to_message) msgMeta.reply_to_message_id = msg.reply_to_message.message_id;
+
     // Add to session + send to Claude
-    session.addMessage('user', text);
+    session.addMessage('user', textForClaude, msgMeta);
     await bot.sendChatAction(chatId, 'typing');
 
     const history = session.getHistory();
@@ -928,8 +1314,9 @@ bot.on('message', async (msg) => {
       }
     }
 
-    session.addMessage('assistant', finalText);
-    await sendLongMessage(chatId, finalText);
+    const sentMsg = await sendLongMessage(chatId, finalText);
+    const assistantMeta = sentMsg && sentMsg.message_id ? { message_id: sentMsg.message_id } : {};
+    session.addMessage('assistant', finalText, assistantMeta);
 
   } catch (err) {
     console.error('[Max] Error:', err.message);
@@ -941,6 +1328,10 @@ bot.on('message', async (msg) => {
 // ── Photo handler ─────────────────────────────────────────────────────────────
 
 bot.on('photo', async (msg) => {
+  if (isParent(msg)) {
+    await handleParentPhoto(msg);
+    return;
+  }
   if (!isAllowed(msg)) return;
 
   const chatId = msg.chat.id;
@@ -966,8 +1357,14 @@ bot.on('photo', async (msg) => {
       session.startSession('General');
     }
 
-    // Build message with photo for Claude
-    const content = vision.buildPhotoMessage(base64, mime_type, caption || '¿Puedes ayudarme con esto?');
+    // Reply context for photo messages
+    const photoHistory = session.getHistory();
+    const replyCtx = buildReplyContext(msg, photoHistory, { botName: 'Max' });
+    const photoCaption = replyCtx
+      ? replyCtx + '\n\n' + (caption || '¿Puedes ayudarme con esto?')
+      : (caption || '¿Puedes ayudarme con esto?');
+
+    const content = vision.buildPhotoMessage(base64, mime_type, photoCaption);
     const history = session.getHistory();
     const context = session.getContext();
 
@@ -978,11 +1375,14 @@ bot.on('photo', async (msg) => {
     ];
     const reply = await askMax(messagesForClaude, context, undefined, 'photo');
 
-    // Store text placeholder in session, not base64
-    session.addMessage('user', vision.photoPlaceholder(caption));
-    session.addMessage('assistant', reply);
+    const photoMeta = { message_id: msg.message_id };
+    if (msg.reply_to_message) photoMeta.reply_to_message_id = msg.reply_to_message.message_id;
 
-    await sendLongMessage(chatId, reply);
+    // Store text placeholder in session, not base64
+    session.addMessage('user', vision.photoPlaceholder(caption), photoMeta);
+    const sentMsg = await sendLongMessage(chatId, reply);
+    const assistantMeta = sentMsg && sentMsg.message_id ? { message_id: sentMsg.message_id } : {};
+    session.addMessage('assistant', reply, assistantMeta);
   } catch (err) {
     console.error('[Max] Photo error:', err.message);
     await bot.sendMessage(chatId, formatErrorForUser(err)).catch(() => {});
@@ -1047,7 +1447,15 @@ bot.on('voice', async (msg) => {
       }
     }
 
-    session.addMessage('user', text);
+    // Reply context for voice messages
+    const voiceHistory = session.getHistory();
+    const voiceReplyCtx = buildReplyContext(msg, voiceHistory, { botName: 'Max' });
+    const textForClaude = voiceReplyCtx ? voiceReplyCtx + '\n\n' + text : text;
+
+    const voiceMeta = { message_id: msg.message_id };
+    if (msg.reply_to_message) voiceMeta.reply_to_message_id = msg.reply_to_message.message_id;
+
+    session.addMessage('user', textForClaude, voiceMeta);
 
     const history = session.getHistory();
     const context = session.getContext();
@@ -1083,8 +1491,9 @@ bot.on('voice', async (msg) => {
       }
     }
 
-    session.addMessage('assistant', finalTextV);
-    await sendLongMessage(chatId, finalTextV);
+    const sentVoiceMsg = await sendLongMessage(chatId, finalTextV);
+    const voiceAssistantMeta = sentVoiceMsg && sentVoiceMsg.message_id ? { message_id: sentVoiceMsg.message_id } : {};
+    session.addMessage('assistant', finalTextV, voiceAssistantMeta);
 
   } catch (err) {
     console.error('[Max] Voice error:', err.message);
@@ -1140,7 +1549,9 @@ async function main() {
     report,
     sendLongMessage,
     setAwaitingHomework,
-    startOnboarding
+    startOnboarding,
+    getLastHomeworkReminder: () => lastHomeworkReminder,
+    setLastHomeworkReminder: (ts) => { lastHomeworkReminder = ts; }
   });
 
   const STARTUP_COOLDOWN_MS = 4 * 60 * 60 * 1000;

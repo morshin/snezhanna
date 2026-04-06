@@ -52,30 +52,37 @@ function splitParagraph(para, maxLen) {
 async function sendLongMessage(chatId, text) {
   const MAX = 4096;
   if (text.length <= MAX) {
-    await bot.sendMessage(chatId, text);
-    return;
+    return await bot.sendMessage(chatId, text);
   }
   const paragraphs = text.split(/\n\n/);
   let chunk = '';
+  let firstSent = null;
   for (const para of paragraphs) {
     if (para.length > MAX) {
-      // Параграф сам по себе слишком длинный — сначала отправим накопленный chunk
       if (chunk.trim()) {
-        await bot.sendMessage(chatId, chunk.trim());
+        const sent = await bot.sendMessage(chatId, chunk.trim());
+        if (!firstSent) firstSent = sent;
         chunk = '';
       }
-      // Затем отправим части параграфа по отдельности
       for (const part of splitParagraph(para, MAX)) {
-        await bot.sendMessage(chatId, part);
+        const sent = await bot.sendMessage(chatId, part);
+        if (!firstSent) firstSent = sent;
       }
     } else if (chunk.length + para.length + 2 > MAX) {
-      if (chunk.trim()) await bot.sendMessage(chatId, chunk.trim());
+      if (chunk.trim()) {
+        const sent = await bot.sendMessage(chatId, chunk.trim());
+        if (!firstSent) firstSent = sent;
+      }
       chunk = para;
     } else {
       chunk += (chunk ? '\n\n' : '') + para;
     }
   }
-  if (chunk.trim()) await bot.sendMessage(chatId, chunk.trim());
+  if (chunk.trim()) {
+    const sent = await bot.sendMessage(chatId, chunk.trim());
+    if (!firstSent) firstSent = sent;
+  }
+  return firstSent;
 }
 
 module.exports = { bot, ALLOWED, isAllowed, sendLongMessage };

@@ -162,6 +162,7 @@ session = {
 - Полная история диалога передаётся в Claude при каждом запросе (context window)
 - Claude получает системный промпт из `IDENTITY.md` + текущий стейт сессии
 - Голосовые → Whisper → текст → обычная обработка
+- Reply context: если ученик отвечает на конкретное сообщение (reply), контекст родительского сообщения и цепочки ответов подклеивается к тексту перед отправкой в Claude (через общий `lib/reply-chain.js`); каждое сообщение в сессии хранит `message_id` для поддержки цепочек
 
 ### Поддержка фотографий
 
@@ -707,6 +708,7 @@ Tasks:
    - Weekly summary → /mnt/yadisk-agent/kids/weekly/YYYY-Wxx.md
 5. Scheduled tasks (node-cron, Europe/Madrid timezone):
    - 15:00 Mon–Fri: afternoon checkin — ask about day + homework, show tomorrow's schedule from schedule.json, update homework.json
+   - 16:00–20:00 Mon–Fri: hourly homework reminder — if pending tasks exist and no active session, send a short reminder to the student (anti-spam: min 55 min between reminders)
    - 21:00 Mon–Fri: evening reminder — tomorrow's lessons + pending homework from homework.json
    - 20:30 daily: generate day summary
    - 18:00 Sunday: generate weekly digest

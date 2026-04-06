@@ -27,10 +27,13 @@ Two actor types in Max's bot:
 | Actor | Identified by | What they can do |
 |-------|--------------|-----------------|
 | Student (son) | `TUTOR_ALLOWED_USER_ID` | Chat, /done, /schedule, /homework, /reset, /status |
-| Parent (Vova) | `PARENT_CHAT_ID` | /report, /week, /homework, /assign, /quest, /quests |
+| Parent (Vova) | `PARENT_CHAT_ID` | /report, /week, /homework, /assign (text or photo), /quest, /quests, /setday, /resetschedule, /schedule, /balance, /codes, /gencodes |
 
 If `msg.from.id == PARENT_CHAT_ID` → route to parent handler, skip student flow entirely.  
-Parent messages are never forwarded to Claude's tutoring session — they go to a separate handler.
+Parent messages are never forwarded to Claude's tutoring session — they go to a separate handler.  
+Parent photos are routed to homework recognition (Claude vision) before the student photo handler.
+
+**Note:** reply context (`msg.reply_to_message`) is supported for student messages via shared `lib/reply-chain.js`. Parent commands are routed before the student flow and do not use reply context since they are handled as discrete commands, not conversational turns with Claude.
 
 ---
 
@@ -122,13 +125,42 @@ Lists all quests with `status: "active"`. Format:
    Награда: +20 мин | ID: quest_1747000000001
 ```
 
-### `/assign <subject>: <description>`
+### `/setday <day> <subjects>`
 
-Creates a homework task (no reward). Example:  
-`/assign Lengua: прочитать параграф 12 и написать краткое содержание`
+Updates schedule for a single day. Day names accepted in Russian (`пн`, `вт`, `ср`, `чт`, `пт`) or Spanish (`lunes`–`viernes`).  
+Subjects are comma-separated; parsed through Claude to normalize to Spanish with correct capitalization.  
+Use `—` or `выходной` to mark as free day.
 
-Saves to `homework.json` via `addHomeworkTask()`.  
-Response: "✅ Задание добавлено. Макс передаст его сыну на следующей сессии."
+Examples:  
+- `/setday ср Математика, Английский, Физкультура`  
+- `/setday viernes —`
+
+Response: "✅ Ср: Matemáticas, Inglés, Educación Física"
+
+### `/resetschedule`
+
+Full guided schedule reset — 5-step dialog (one day at a time, Mon–Fri).  
+State stored in `parentScheduleDraft` variable, same pattern as `/quest` dialog.  
+After all 5 days entered: `storage.saveSchedule()`.
+
+### `/assign <subject>: <description>` or `/assign <free text>`
+
+Creates a homework task (no reward).
+
+**Strict format** (with colon): `/assign Lengua: прочитать параграф 12` — subject and description parsed directly, saved immediately.
+
+**Free-form** (no colon): `/assign завтра сдать реферат по истории` — Claude parses the text into concrete action items with subject, description, due date, and clarifying comments (e.g. "page not specified", "deadline unclear"). Bot shows a preview and waits for parent confirmation. Parent can confirm, correct (Claude re-parses with corrections), or cancel.
+
+**Photo**: Parent can also send a photo of homework — Claude vision recognizes tasks with the same confirmation flow. Optional caption provides additional context.
+
+State is stored in `parentAssignDraft` variable (cancelled by any `/` command).  
+Saves to `homework.json` via `addHomeworkTask()` only after confirmation.
+
+### `/delhw <id> [id2 ...]`
+
+Deletes one or more homework tasks by ID. IDs are shown in `/homework` output.  
+Supports multiple space-separated IDs for batch deletion.  
+Response: list of deleted tasks, or "not found" for unknown IDs.
 
 ### `/quest <subject> "<description>" +<minutes>мин`
 

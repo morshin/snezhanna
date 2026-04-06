@@ -90,7 +90,7 @@ function t(key, ...args) {
   return typeof val === 'function' ? val(...args) : val;
 }
 
-function setupSchedules({ bot, chatId, storage, session, claude, report, sendLongMessage, setAwaitingHomework, startOnboarding }) {
+function setupSchedules({ bot, chatId, storage, session, claude, report, sendLongMessage, setAwaitingHomework, startOnboarding, getLastHomeworkReminder, setLastHomeworkReminder }) {
 
   // Понедельничное приветствие с объявлением языка недели — пн 08:00
   cron.schedule('0 8 * * 1', async () => {
@@ -229,6 +229,29 @@ function setupSchedules({ bot, chatId, storage, session, claude, report, sendLon
       }
     } catch (e) {
       console.error('[Cron] weekly digest error:', e.message);
+    }
+  }, { timezone: TIMEZONE });
+
+  // Hourly homework reminder — 16:00-20:00 Mon–Fri
+  cron.schedule('0 16-20 * * 1-5', async () => {
+    if (!chatId()) return;
+    try {
+      const hw = storage.loadHomework();
+      const pending = hw.tasks.filter(task => !task.done);
+      if (pending.length === 0) return;
+      if (session.isActive()) return;
+      const lastReminder = getLastHomeworkReminder ? getLastHomeworkReminder() : null;
+      if (lastReminder && (Date.now() - lastReminder) < 55 * 60 * 1000) return;
+      const lang = langWeek.getCurrentLang();
+      const n = pending.length;
+      const msg = lang === 'ru'
+        ? `Напоминание: у тебя ${n} невыполненн${n === 1 ? 'ое задание' : (n < 5 ? 'ых задания' : 'ых заданий')}. Напиши /homework чтобы посмотреть.`
+        : `Recuerda que tienes ${n} deber${n === 1 ? '' : 'es'} pendiente${n === 1 ? '' : 's'}. Escribe /deberes para verlos.`;
+      await bot.sendMessage(chatId(), msg);
+      if (setLastHomeworkReminder) setLastHomeworkReminder(Date.now());
+      console.log('[Cron] Homework reminder sent, pending:', n);
+    } catch (e) {
+      console.error('[Cron] homework reminder error:', e.message);
     }
   }, { timezone: TIMEZONE });
 

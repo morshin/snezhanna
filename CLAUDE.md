@@ -62,6 +62,7 @@ node lib/indexer.js --incremental # incremental update
 - Evening check-in includes a summary of all Yandex Disk write operations logged during the day (via `lib/disk-log.js`); log is cleared after sending
 - Bot commands: `/reset` (clear history), `/status`, `/auth <code>` (Google OAuth callback)
 - Voice messages: downloaded from Telegram → transcribed via OpenAI Whisper → sent to Claude
+- Reply context: when user replies to a specific message, `lib/reply-chain.js` builds a context block from `msg.reply_to_message` (+ `msg.quote` if present) and walks the reply chain via `message_id` lookups in history; context is prepended to the user message before Claude sees it
 
 **`tutor/index.js`** — Max tutor bot (separate systemd service):
 - Telegram bot for Vova's son (13 y/o, Spanish school), access-controlled by `TUTOR_ALLOWED_USER_ID`
@@ -73,15 +74,16 @@ node lib/indexer.js --incremental # incremental update
 - Photo support via shared `lib/vision.js` (homework photos, textbook pages)
 - Voice support via shared `lib/whisper.js` with `language='es'`
 - Prompt caching enabled (same as Snezhanna): identity cached, cache hits logged
+- Reply context support (same as Snezhanna): reply-to-message and quote context prepended to student messages via shared `lib/reply-chain.js`
 - Homework tracking: afternoon checkin (15:00) asks "what homework?", next reply auto-parsed via `askMaxOneShot` and saved to `homework.json`; Claude marks completed homework with `[DONE:ID]` markers stripped before display
 - **Quest system**: parent assigns quests via `/quest`; active quests injected into Claude context; Claude appends `[QUEST_DONE:id]` when objective met; index.js strips markers, calls `completeQuest()`, issues next unused prize code from `codes_DDMMYYYY.md`, sends code to son in Spanish + parent notification; updates HMAC-signed `balance.json`; warns parent when ≤10 codes remain
 - **Prize code pool**: parent runs `/gencodes [N]` → generates N unique 10-char alphanumeric codes, writes `codes_DDMMYYYY.md` to `KIDS_DIR`, sends `prize_DDMMYYYY.txt` via `bot.sendDocument()` for import into Time Boss Cloud; `/codes` shows remaining count
-- **Parent commands**: `/report` (today's session), `/week` (weekly digest), `/homework`, `/balance`, `/quests`, `/codes` (code pool status), `/gencodes [N]` (generate prize codes), `/assign <subject>: <task>`, `/quest <subject> "<desc>" +Nмин`, `/cancelquest <id>`
+- **Parent commands**: `/report` (today's session), `/week` (weekly digest), `/homework` (shows IDs for deletion), `/balance`, `/quests`, `/codes` (code pool status), `/gencodes [N]` (generate prize codes), `/assign <subject>: <task>` (saves immediately) or `/assign <free text>` (Claude parses into tasks with clarifying comments, waits for parent confirmation), `/delhw <id>` (delete homework task), `/quest <subject> "<desc>" +Nмин`, `/cancelquest <id>`, `/setday <day> <subjects>` (edit one day of schedule), `/resetschedule` (full 5-step schedule reset); parent can also send a **photo of homework** — Claude vision recognizes tasks and shows preview for confirmation before saving
 - **Parent notifications**: post-session summary after every session end (student `/done`, auto-close), quest completion alert, subject avoidance flag (weekly), stuck-topic flag (repeated stuck points across sessions)
 - Message processing mutex (`withLock`) prevents race conditions on rapid messages
 - Startup message cooldown (4 hours) for both student and parent, to avoid spam on Zhora restarts
 - Commands (student): `/start`, `/done` / `/стоп` (end session), `/schedule` (view/reset timetable), `/homework` (pending tasks), `/reset`, `/status`
-- Scheduled tasks: afternoon checkin (15:00), evening reminder (21:00), daily summary (20:30), weekly digest (Sunday 18:00) + subject avoidance check, session auto-close (every 5 min, 30 min idle)
+- Scheduled tasks: afternoon checkin (15:00), **hourly homework reminder (16:00–20:00, Mon–Fri)** — sends short reminder to student if pending homework exists and no active session, evening reminder (21:00), daily summary (20:30), weekly digest (Sunday 18:00) + subject avoidance check, session auto-close (every 5 min, 30 min idle)
 - Reports to `/mnt/yadisk-agent/kids/`: daily sessions, progress.md, weekly digests, homework.json, quests.json, balance.json
 - Uses `dotenv` with absolute path to `/opt/snezhanna/.env`
 
@@ -100,6 +102,7 @@ node lib/indexer.js --incremental # incremental update
 | `lib/google.js` | Google Calendar + Gmail via googleapis OAuth2 |
 | `lib/whisper.js` | OpenAI Whisper transcription + TTS (language param: `'ru'` default, `'es'` for Max) |
 | `lib/vision.js` | Shared photo handler: download from Telegram, base64 encode, build Claude image blocks |
+| `lib/reply-chain.js` | Shared reply context builder: extracts `reply_to_message` / `quote` from Telegram messages, walks reply chains via `message_id` in history, formats context block prepended to user messages |
 | `lib/state.js` | Persist chatId, businessConnectionId, awaitingWorkloadCheckin to `.nanobot/state.json` |
 | `lib/workload.js` | Workload & Wellbeing scoring: data collection, Claude scoring call, history persistence, weekly report and overload coach block |
 | `lib/workload-scoring-prompt.md` | System prompt for the workload scoring Claude call (JSON output schema, domain weights, tone rules) |
@@ -122,7 +125,7 @@ node lib/indexer.js --incremental # incremental update
 | `tutor/index.js` | Max tutor bot entrypoint |
 | `tutor/lib/storage.js` | Yandex Disk I/O for `/mnt/yadisk-agent/kids/`; quest CRUD; prize code pool CRUD (`codes_DDMMYYYY.md`); HMAC-signed balance |
 | `tutor/lib/session.js` | In-memory tutoring session state |
-| `tutor/lib/claude.js` | Anthropic API wrapper for Max; injects active quests into system context |
+| `tutor/lib/claude.js` | Anthropic API wrapper for Max; injects active quests into system context; `askMaxOneShotWithImage()` for photo homework recognition |
 | `tutor/lib/report.js` | Session/daily/weekly report generation; `checkSubjectAvoidance()`; `checkStuckTopic()` |
 | `tutor/identity/IDENTITY.md` | Max's system prompt (personality, pedagogical rules, language policy, quest awareness) |
 | `docs/tutor-bot-tz.md` | Technical specification for Max tutor bot |

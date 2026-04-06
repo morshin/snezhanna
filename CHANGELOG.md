@@ -9,6 +9,16 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), [Semantic Vers
 <!-- Format: - <One-sentence description> (#<issue or branch ref>) -->
 <!-- Categories: Added | Changed | Fixed | Security | Removed -->
 
+### Added
+
+- **Snezhanna + Max:** reply context support — when replying to a specific message in Telegram, Claude receives the parent message (and full reply chain if applicable) as prepended context; supports `msg.reply_to_message`, `msg.quote` (selected text), and in-memory history chain walking; shared utility `lib/reply-chain.js`
+- **Max:** parent schedule editing — `/setday` (single day) and `/resetschedule` (full guided 5-step reset) commands; day names accepted in Russian and Spanish
+- **Max:** parent can submit homework via photo — Claude vision recognizes tasks from photos with confirmation flow before saving
+- **Max:** improved `/assign` with free-form text parsing and confirmation flow — Claude breaks text into concrete tasks with clarifying comments (ambiguities, missing details); parent reviews, corrects if needed, and confirms before saving
+- **Max:** `/delhw <id>` command for parent to delete homework tasks; `/homework` now shows task IDs for easy deletion
+- **Max:** hourly homework reminders to student (16:00–20:00 weekdays) when pending tasks exist and no active session; anti-spam guard (55 min cooldown)
+- **Max:** `askMaxOneShotWithImage()` in `tutor/lib/claude.js` for one-shot Claude calls with image input
+
 ### Changed
 
 - **GitHub:** integration now surfaces **milestones** with a set due date only—open milestones that are overdue or due within `github.milestone_due_within_days` (default 14, in `config.timezone`), instead of all open issues; merged into tasks / Mini App as `github_kind: "milestone"`.

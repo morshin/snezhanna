@@ -23,6 +23,7 @@ const chatMonitor = require('./lib/chat-monitor');
 const strava = require('./lib/strava');
 const workload = require('./lib/workload');
 const { logTokens } = require('./lib/token-log');
+const { buildReplyContext } = require('./lib/reply-chain');
 const api = require('./lib/api');
 
 // ── Config & Identity ─────────────────────────────────────────────────────────
@@ -120,16 +121,16 @@ async function askClaudeOneShot(userMessage, requestType = 'scheduled') {
   return 'Извини, Вовик, слишком долго думала над этим.';
 }
 
-async function askClaude(userMessage, requestType = 'text') {
-  return withMessageLock(() => _askClaude(userMessage, requestType));
+async function askClaude(userMessage, requestType = 'text', meta = {}) {
+  return withMessageLock(() => _askClaude(userMessage, requestType, meta));
 }
 
-async function _askClaude(userMessage, requestType = 'text') {
+async function _askClaude(userMessage, requestType = 'text', meta = {}) {
   // Сохраняем снимок истории до вызова — восстановим при ошибке,
   // чтобы не оставлять в истории осиротевшие tool_use / tool_result блоки
   const historyBeforeCall = [...history];
 
-  history.push({ role: 'user', content: userMessage });
+  history.push({ role: 'user', content: userMessage, ...meta });
 
   // Trim history, but never orphan a tool_result or start on an assistant message
   if (history.length > config.history.max_messages) {
@@ -166,7 +167,7 @@ async function _askClaude(userMessage, requestType = 'text') {
         model: config.model,
         max_tokens: config.max_tokens,
         system,
-        messages: history,
+        messages: history.map(({ role, content }) => ({ role, content })),
         tools
       });
 
@@ -374,6 +375,8 @@ bot.on('message', async (msg) => {
   const chatId = msg.chat.id;
   let userText = '';
   let requestType = 'text';
+  const msgMeta = { message_id: msg.message_id };
+  if (msg.reply_to_message) msgMeta.reply_to_message_id = msg.reply_to_message.message_id;
 
   try {
 
@@ -533,10 +536,16 @@ bot.on('message', async (msg) => {
       return; // Ignore unsupported message types
     }
 
+    // Reply context: if user replied to a specific message, prepend that context
+    const replyContext = buildReplyContext(msg, history, { botName: 'Snezhanna' });
+    if (replyContext) {
+      userText = replyContext + '\n\n' + userText;
+    }
+
     await bot.sendChatAction(chatId, 'typing');
 
     requestType = msg.voice ? 'voice' : 'text';
-    const reply = await askClaude(userText, requestType);
+    const reply = await askClaude(userText, requestType, msgMeta);
 
     // Send voice if: user sent voice and reply is short, OR user explicitly asked for voice
     const wantsVoice = msg.voice && reply.length < 500
@@ -545,7 +554,11 @@ bot.on('message', async (msg) => {
       try {
         await bot.sendChatAction(chatId, 'record_voice');
         const audio = await whisper.tts(reply);
-        await bot.sendVoice(chatId, audio, {}, { filename: 'voice.mp3', contentType: 'audio/mpeg' });
+        const sentVoice = await bot.sendVoice(chatId, audio, {}, { filename: 'voice.mp3', contentType: 'audio/mpeg' });
+        if (sentVoice && sentVoice.message_id) {
+          const idx = history.findLastIndex(h => h.role === 'assistant');
+          if (idx !== -1) history[idx].message_id = sentVoice.message_id;
+        }
         return;
       } catch (ttsErr) {
         console.error('[TTS] Error, falling back to text:', ttsErr.message);
@@ -553,7 +566,11 @@ bot.on('message', async (msg) => {
     }
 
     // Split long messages at Telegram's 4096 char limit
-    await sendLongMessage(chatId, reply);
+    const sentMsg = await sendLongMessage(chatId, reply);
+    if (sentMsg && sentMsg.message_id) {
+      const idx = history.findLastIndex(h => h.role === 'assistant');
+      if (idx !== -1) history[idx].message_id = sentMsg.message_id;
+    }
 
   } catch (err) {
     console.error('[Snezhanna] Error:', err.message);
@@ -569,7 +586,7 @@ bot.on('message', async (msg) => {
 
       try {
         console.log('[Snezhanna] Retrying after rate limit...');
-        const retryReply = await askClaude(userText, requestType);
+        const retryReply = await askClaude(userText, requestType, msgMeta);
         await sendLongMessage(chatId, retryReply);
       } catch (retryErr) {
         console.error('[Snezhanna] Retry failed:', retryErr.message);
@@ -600,17 +617,35 @@ bot.on('photo', async (msg) => {
     );
 
     const caption = msg.caption || '';
-    const content = vision.buildPhotoMessage(base64, mime_type, caption || 'Что на этом фото?');
 
-    const reply = await askClaude(content, 'photo');
+    // Reply context for photo messages
+    const replyContext = buildReplyContext(msg, history, { botName: 'Snezhanna' });
+    const photoCaption = replyContext
+      ? replyContext + '\n\n' + (caption || 'Что на этом фото?')
+      : (caption || 'Что на этом фото?');
+    const content = vision.buildPhotoMessage(base64, mime_type, photoCaption);
+
+    const photoMeta = { message_id: msg.message_id };
+    if (msg.reply_to_message) photoMeta.reply_to_message_id = msg.reply_to_message.message_id;
+
+    const reply = await askClaude(content, 'photo', photoMeta);
 
     // Replace base64-heavy content in history with a lightweight placeholder
     const lastUserIdx = history.findLastIndex(h => h.role === 'user');
     if (lastUserIdx !== -1) {
-      history[lastUserIdx] = { role: 'user', content: vision.photoPlaceholder(caption) };
+      const prev = history[lastUserIdx];
+      history[lastUserIdx] = {
+        role: 'user', content: vision.photoPlaceholder(caption),
+        ...(prev.message_id ? { message_id: prev.message_id } : {}),
+        ...(prev.reply_to_message_id ? { reply_to_message_id: prev.reply_to_message_id } : {})
+      };
     }
 
-    await sendLongMessage(chatId, reply);
+    const sentMsg = await sendLongMessage(chatId, reply);
+    if (sentMsg && sentMsg.message_id) {
+      const idx = history.findLastIndex(h => h.role === 'assistant');
+      if (idx !== -1) history[idx].message_id = sentMsg.message_id;
+    }
   } catch (err) {
     console.error('[Snezhanna] Photo error:', err.message);
     await bot.sendMessage(chatId, `Вов, ${formatErrorForUser(err)}`).catch(() => {});
@@ -718,25 +753,32 @@ async function sendLongMessage(chatId, text) {
   // Hard block: never write to any chat except Vova's
   if (appState.chatId && String(chatId) !== String(appState.chatId)) {
     console.error(`[SECURITY] sendLongMessage blocked for chat ${chatId}`);
-    return;
+    return null;
   }
   const MAX = 4096;
   if (text.length <= MAX) {
-    await bot.sendMessage(chatId, text);
-    return;
+    return await bot.sendMessage(chatId, text);
   }
   // Split at paragraph boundaries
   const paragraphs = text.split(/\n\n/);
   let chunk = '';
+  let firstSent = null;
   for (const para of paragraphs) {
     if (chunk.length + para.length + 2 > MAX) {
-      if (chunk) await bot.sendMessage(chatId, chunk.trim());
+      if (chunk) {
+        const sent = await bot.sendMessage(chatId, chunk.trim());
+        if (!firstSent) firstSent = sent;
+      }
       chunk = para;
     } else {
       chunk += (chunk ? '\n\n' : '') + para;
     }
   }
-  if (chunk.trim()) await bot.sendMessage(chatId, chunk.trim());
+  if (chunk.trim()) {
+    const sent = await bot.sendMessage(chatId, chunk.trim());
+    if (!firstSent) firstSent = sent;
+  }
+  return firstSent;
 }
 
 function formatEventTime(event) {

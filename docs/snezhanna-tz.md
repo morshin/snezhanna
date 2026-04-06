@@ -124,6 +124,7 @@ snezhanna/
   │   ├── tasks.js          # Task tracking (Eisenhower matrix)
   │   ├── api.js            # HTTP API server for Tasks Mini App (initData validation, task CRUD)
   │   ├── tools.js          # All Claude tool definitions + executeTool dispatcher
+  │   ├── reply-chain.js    # Shared reply context builder for Telegram replies
   │   ├── vision.js         # Photo: download from Telegram, base64, image blocks
   │   ├── whisper.js        # OpenAI Whisper transcription + TTS
   │   ├── yadisk-dirs.js    # Ensure agent subdirs; project/doc CRUD
@@ -348,6 +349,42 @@ Added to `/etc/fstab` for auto-mount on reboot.
 - Anthropic native web search tool (`web_search_20250305`)
 - Server-side, no local execution needed
 - Claude can search for current info: exchange rates, news, weather, etc.
+
+### 10. Reply Context (Telegram Replies)
+
+When a user replies to a specific message in Telegram (or quotes a part of it), the bot extracts the original message and prepends it as context before sending to Claude.
+
+**Implementation:** shared utility `lib/reply-chain.js`, used by both Snezhanna and Max.
+
+**Context sources (priority order):**
+1. `msg.quote.text` — if user selected a specific text fragment when replying
+2. `msg.reply_to_message.text` — full text of the message being replied to
+3. In-memory history chain — walks `message_id` → `reply_to_message_id` links to reconstruct deeper reply chains (reply-to-reply-to-reply)
+
+**Limits:**
+- Max chain depth: 5 messages
+- Max per-message length: 500 chars (truncated with `…`)
+- Max total context block: 2000 chars
+
+**Format for single reply:**
+```
+[Ответ на сообщение]
+> Snezhanna: Here are three options...
+
+User's new message text
+```
+
+**Format for chain (2+ levels):**
+```
+[Цепочка сообщений]
+> (1) Snezhanna: Original question...
+> (2) User: First reply...
+> (3) Snezhanna: Follow-up...
+
+User's new message text
+```
+
+**History metadata:** each history entry stores optional `message_id` and `reply_to_message_id` fields for chain reconstruction. These fields are stripped before sending to the Anthropic API (`messages.map(({ role, content }) => ({ role, content }))`).
 
 ---
 

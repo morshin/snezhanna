@@ -26,9 +26,12 @@ function isActive() {
   return current !== null;
 }
 
-function addMessage(role, content) {
+function addMessage(role, content, meta = {}) {
   if (!current) return;
-  current.messages.push({ role, content });
+  const entry = { role, content };
+  if (meta.message_id) entry.message_id = meta.message_id;
+  if (meta.reply_to_message_id) entry.reply_to_message_id = meta.reply_to_message_id;
+  current.messages.push(entry);
   current.lastActivity = Date.now();
 }
 

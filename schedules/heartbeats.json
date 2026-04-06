@@ -117,6 +117,14 @@
       "service": "tutor"
     },
     {
+      "id": "tutor_homework_reminder",
+      "name": "Напоминание о ДЗ (Max)",
+      "cron": "0 16-20 * * 1-5",
+      "description": "Раз в час с 16 до 20 по будням напоминает ученику о невыполненных ДЗ (если нет активной сессии и список pending не пуст)",
+      "enabled": true,
+      "service": "tutor"
+    },
+    {
       "id": "tutor_session_autoclose",
       "name": "Автозакрытие сессии (Max)",
       "cron": "*/5 * * * *",

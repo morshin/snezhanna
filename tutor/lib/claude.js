@@ -85,7 +85,7 @@ async function askMax(history, sessionContext, pendingHomework, requestType = 't
       model: MODEL,
       max_tokens: MAX_TOKENS,
       system,
-      messages: trimmed
+      messages: trimmed.map(({ role, content }) => ({ role, content }))
     });
 
     if (response.usage?.cache_read_input_tokens) {
@@ -166,4 +166,35 @@ ${contextParts.join('\n\n')}`;
   return askMaxOneShot(systemPrompt, question, 'parent_query');
 }
 
-module.exports = { askMax, askMaxOneShot, askParent };
+async function askMaxOneShotWithImage(systemPrompt, userText, imageBase64, mimeType, requestType = 'parent_photo') {
+  try {
+    const content = [
+      { type: 'image', source: { type: 'base64', media_type: mimeType, data: imageBase64 } }
+    ];
+    if (userText) {
+      content.push({ type: 'text', text: userText });
+    }
+    const response = await anthropic.messages.create({
+      model: MODEL,
+      max_tokens: MAX_TOKENS,
+      system: systemPrompt,
+      messages: [{ role: 'user', content }]
+    });
+
+    logTokens({
+      bot: 'max',
+      type: requestType,
+      tools_called: [],
+      history_len: 1,
+      usage: response.usage
+    });
+
+    const textBlocks = response.content.filter(b => b.type === 'text');
+    return textBlocks.map(b => b.text).join('\n') || '';
+  } catch (err) {
+    console.error('[Claude] OneShotWithImage error:', err.message);
+    throw err;
+  }
+}
+
+module.exports = { askMax, askMaxOneShot, askMaxOneShotWithImage, askParent };
