@@ -10,7 +10,7 @@ const cron = require('node-cron');
 const axios = require('axios');
 
 const state = require('./lib/state');
-const db = require('./lib/db');
+const { db, backup: dbBackup } = require('./lib/db');
 const google = require('./lib/google');
 const whisper = require('./lib/whisper');
 const { getAvailableTools, executeTool, setContext: setToolsContext } = require('./lib/tools');
@@ -1362,7 +1362,7 @@ ${emailsText}`;
 
       const dateSuffix = new Date().toISOString().slice(0, 10).replace(/-/g, '');
       const backupPath = path.join(backupsDir, `snezhanna_${dateSuffix}.db`);
-      await db.backup(backupPath);
+      await dbBackup(backupPath);
       console.log(`[Schedule] database_backup: saved to ${backupPath}`);
       diskLog.log('Бэкап базы данных', `backups/snezhanna_${dateSuffix}.db`);
 

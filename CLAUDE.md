@@ -110,11 +110,12 @@ node lib/indexer.js --incremental # incremental update
 | `lib/workload-scoring-prompt.md` | System prompt for the workload scoring Claude call (JSON output schema, domain weights, tone rules) |
 | `lib/briefing-overload-prompt.md` | System prompt for the morning briefing overload coach block |
 | `docs/snezhanna-workload-scoring-tz.md` | Technical specification for the Workload & Wellbeing Scoring feature |
-| `lib/db.js` | better-sqlite3 initialisation, WAL mode, schema creation (tasks, projects, project_log, project_notes, project_docs, task_deps) |
+| `lib/db.js` | better-sqlite3 init, WAL mode, schema (tasks, projects, project_log, project_notes, project_docs, task_deps, project_params, project_history, contacts, project_contacts, workload_history, memory, file_index); exports `{ db, getProject, getProjectById, listProjects, upsertProjectParam, getProjectParam, backup }` |
 | `lib/indexer.js` | Walk Yandex Disk and build JSON file index |
 | `lib/yadisk-dirs.js` | Ensure agent subdirs exist; project CRUD backed by SQLite (`create_project`, `list_projects`, `read_project_file`, `write_project_file`) and project docs (`list_project_docs`, `read_project_doc`, `write_project_doc`); `saveFile()` still writes to Yandex.Disk |
 | `lib/github.js` | GitHub Milestones: open milestones with `due_on` in the configured window (`github.milestone_due_within_days`, default 14 calendar days in `timezone`, including overdue); used in workload scoring, morning briefing, Mini App API |
-| `scripts/migrate-to-sqlite.js` | One-time migration script: reads existing JSON/MD on Yandex.Disk, imports into SQLite; `--dry-run` flag available |
+| `scripts/migrate-to-sqlite.js` | One-time migration: tasks + projects from Yandex.Disk JSON → SQLite; `--dry-run` available |
+| `scripts/migrate-memory-workload.js` | One-time migration: memory/*.md + workload-history.json → SQLite; `--dry-run` available |
 | `data/snezhanna.db` | SQLite database (gitignored) — tasks, projects, docs, logs |
 | `lib/api.js` | HTTP API server for Mini App; validates Telegram initData, serves static files from `mini-app/`, exposes task CRUD + calendar + `GET /api/github/milestones` (legacy `/api/github/issues` same JSON) |
 | `mini-app/index.html` | Telegram Mini App frontend — two-tab (Tasks + Calendar) single-file HTML/JS/CSS |

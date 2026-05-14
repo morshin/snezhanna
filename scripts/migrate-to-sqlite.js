@@ -23,7 +23,7 @@ const DRY_RUN = process.argv.includes('--dry-run');
 if (DRY_RUN) console.log('[migrate] DRY RUN — no writes to DB');
 
 // Initialise DB (creates tables if needed)
-const db = require('../lib/db');
+const { db } = require('../lib/db');
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
