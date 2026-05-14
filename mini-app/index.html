@@ -1795,13 +1795,32 @@
     </div>
     <div class="settings-list" id="emailAccountsList">`;
     for (const a of emailAccountsData) {
-      html += `<div class="settings-list-item" data-email-id="${a.id}">
-        <div class="settings-list-item-text">
-          <div class="settings-list-item-title">${esc(a.label)}</div>
-          <div class="settings-list-item-sub">${esc(a.email)} · ${a.type} · ${a.account_type}${a.enabled ? '' : ' · отключён'}</div>
+      const aid = a.id;
+      html += `
+      <div class="project-expand-row" data-email-aid="${aid}" style="cursor:pointer;">
+        <div class="settings-list-item" style="border-bottom:none">
+          <div class="settings-list-item-text">
+            <div class="settings-list-item-title">${esc(a.label)}</div>
+            <div class="settings-list-item-sub">${esc(a.email)} · ${a.type}${a.enabled ? '' : ' · отключён'}</div>
+          </div>
+          <span class="project-expand-arrow" id="earr_${aid}" style="font-size:14px;color:var(--tg-theme-hint-color,#999);transition:transform 0.2s;display:inline-block">›</span>
         </div>
-        <button class="settings-toggle-btn ${a.enabled ? 'on' : ''}" data-toggle-email="${a.id}" style="margin-right:8px"></button>
-        <button class="settings-del-btn" data-del-email="${a.id}">✕</button>
+        <div class="project-inline-editor" id="eed_${aid}" style="display:none;padding:12px 16px 16px;background:var(--tg-theme-secondary-bg-color,#f7f7f7);border-top:1px solid var(--tg-theme-secondary-bg-color,#eee)">
+          <input class="settings-inline-input" id="e_label_${aid}" placeholder="Название" value="${escAttr(a.label)}">
+          <input class="settings-inline-input" id="e_email_${aid}" placeholder="Email адрес" value="${escAttr(a.email)}">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0">
+            <span style="font-size:14px">Включён</span>
+            <button class="settings-toggle-btn ${a.enabled ? 'on' : ''}" id="e_enabled_${aid}"></button>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0">
+            <span style="font-size:14px">Тип</span>
+            <span style="font-size:13px;color:var(--tg-theme-hint-color,#999)">${a.type} · ${a.account_type}</span>
+          </div>
+          <div style="display:flex;gap:8px;margin-top:8px">
+            <button class="settings-form-btn primary" id="e_save_${aid}">Сохранить</button>
+            <button class="settings-form-btn secondary" data-del-email="${aid}">Удалить</button>
+          </div>
+        </div>
       </div>`;
     }
     if (emailAccountsData.length === 0) html += '<div style="padding:10px 16px;font-size:14px;color:var(--tg-theme-hint-color,#999)">Нет почтовых ящиков</div>';
@@ -2007,22 +2026,48 @@
       await api('POST', '/api/email-accounts', { label, email, type });
       loadSettingsData();
     });
+    body.querySelectorAll('[data-email-aid]').forEach(row => {
+      row.addEventListener('click', (e) => {
+        if (e.target.closest('.project-inline-editor')) return;
+        const aid = row.dataset.emailAid;
+        const editor = document.getElementById('eed_' + aid);
+        const arrow = document.getElementById('earr_' + aid);
+        const isOpen = editor.style.display !== 'none';
+        editor.style.display = isOpen ? 'none' : 'block';
+        arrow.style.transform = isOpen ? '' : 'rotate(90deg)';
+      });
+    });
     body.querySelectorAll('[data-del-email]').forEach(btn => {
-      btn.addEventListener('click', async () => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
         const id = btn.dataset.delEmail;
         if (!confirm('Удалить ящик?')) return;
         await api('DELETE', `/api/email-accounts/${id}`);
         loadSettingsData();
       });
     });
-    body.querySelectorAll('[data-toggle-email]').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        const id = btn.dataset.toggleEmail;
-        const isOn = btn.classList.contains('on');
-        await api('PATCH', `/api/email-accounts/${id}`, { enabled: isOn ? 0 : 1 });
-        loadSettingsData();
-      });
-    });
+    for (const a of emailAccountsData) {
+      const aid = a.id;
+      const enabledBtn = document.getElementById('e_enabled_' + aid);
+      if (enabledBtn) {
+        enabledBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          enabledBtn.classList.toggle('on');
+        });
+      }
+      const saveBtn = document.getElementById('e_save_' + aid);
+      if (saveBtn) {
+        saveBtn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          const label = document.getElementById('e_label_' + aid).value.trim();
+          const email = document.getElementById('e_email_' + aid).value.trim();
+          const enabled = document.getElementById('e_enabled_' + aid).classList.contains('on') ? 1 : 0;
+          if (!label) return;
+          await api('PATCH', `/api/email-accounts/${aid}`, { label, email, enabled });
+          loadSettingsData();
+        });
+      }
+    }
 
     // Chats
     document.getElementById('addChatBtn').addEventListener('click', () => {
