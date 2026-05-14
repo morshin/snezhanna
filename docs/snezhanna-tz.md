@@ -107,30 +107,33 @@ snezhanna/
   ├── index.js              # Snezhanna main entrypoint
   ├── setup.sh              # Initial server setup script
   ├── config/
-  │   └── nanobot.json      # Config: model, tokens, timezone, yadisk, chat_monitor
+  │   └── nanobot.json      # Config: model, tokens, timezone, yadisk
   ├── identity/
   │   └── IDENTITY.md       # Snezhanna's system prompt
   ├── lib/
   │   ├── attachments.js    # Email attachment parsing (PDF/XLSX/DOCX)
-  │   ├── chat-monitor.js   # In-memory Telegram chat message store
+  │   ├── api.js            # HTTP API server for Mini App (task/calendar/settings/chats/projects/contacts CRUD)
+  │   ├── chat-monitor.js   # Telegram chat monitor — reads from SQLite monitored_chats; addChat/removeChat
+  │   ├── db.js             # SQLite init (better-sqlite3), all table schemas, helper exports
   │   ├── disk-log.js       # In-memory Yandex.Disk write operation log
   │   ├── file-cache.js     # File content cache
   │   ├── google.js         # Google Calendar + Gmail via googleapis OAuth2
-  │   ├── indexer.js        # Yandex.Disk file indexer
-  │   ├── memory.js         # Memory file read/write helpers
+  │   ├── indexer.js        # Yandex.Disk file indexer (writes to SQLite file_index)
+  │   ├── memory.js         # Memory CRUD backed by SQLite memory table
   │   ├── races.js          # Strava race management
-  │   ├── state.js          # Persist chatId to .nanobot/state.json
+  │   ├── settings.js       # Key-value user settings (SQLite user_settings); getSystemPromptBlock()
+  │   ├── state.js          # Persist chatId + briefing/silence/vacation state to .nanobot/state.json
   │   ├── strava.js         # Strava API: weekly sync, fitness digest
-  │   ├── tasks.js          # Task tracking (Eisenhower matrix)
-  │   ├── api.js            # HTTP API server for Tasks Mini App (initData validation, task CRUD)
+  │   ├── tasks.js          # Task tracking (Eisenhower matrix, SQLite)
   │   ├── tools.js          # All Claude tool definitions + executeTool dispatcher
   │   ├── reply-chain.js    # Shared reply context builder for Telegram replies
   │   ├── vision.js         # Photo: download from Telegram, base64, image blocks
   │   ├── whisper.js        # OpenAI Whisper transcription + TTS
+  │   ├── workload.js       # Workload & Wellbeing scoring; history in SQLite workload_history
   │   ├── yadisk-dirs.js    # Ensure agent subdirs; project/doc CRUD
   │   └── yadisk.js         # Yandex.Disk WebDAV read/write helpers
   ├── mini-app/
-  │   └── index.html        # Telegram Mini App frontend (single-file HTML/JS/CSS)
+  │   └── index.html        # Telegram Mini App frontend — Tasks + Calendar + Settings modal
   ├── docs/
   │   ├── snezhanna-tz.md           # This document
   │   ├── tutor-bot-tz.md           # Max tutor bot spec
@@ -139,7 +142,10 @@ snezhanna/
   │   ├── tz-tasks-mini-app.md     # Tasks Mini App spec
   │   ├── tz-miniapp-calendar-tab.md  # Calendar tab spec
   │   ├── tz-calendar-metadata.md   # Calendar metadata spec
-  │   ├── snezhanna-workload-scoring-tz.md  # Workload scoring spec (WIP)
+  │   ├── snezhanna-workload-scoring-tz.md  # Workload scoring spec
+  │   ├── tz-1-conversational-briefing.md   # TZ-1: conversational briefing gate
+  │   ├── tz-2-sqlite-migration.md          # TZ-2: SQLite migration spec
+  │   ├── tz-3-settings-miniapp.md          # TZ-3: Settings Mini App spec
   │   └── backlog.md                # Future improvements backlog
   ├── skills/
   │   ├── google-calendar.md
@@ -331,15 +337,21 @@ Added to `/etc/fstab` for auto-mount on reboot.
 - API validates Telegram `initData` via HMAC-SHA256 using `TELEGRAM_BOT_TOKEN`
 - Task API routes: `GET /api/tasks`, `POST /api/tasks/:id/complete`, `PATCH /api/tasks/:id`, `DELETE /api/tasks/:id`
 - Calendar API routes: `GET /api/calendar/day`, `GET /api/calendar/week` — reads from `lib/google.js`
-- All task mutations go through `lib/tasks.js` — no direct file access
+- Settings API routes: `GET/POST /api/settings`, `POST /api/settings/batch`, `POST /api/quiet`
+- Chats API routes: `GET/POST /api/chats`, `DELETE /api/chats/:chat_id`
+- Projects API routes: `GET/POST /api/projects`, `PATCH /api/projects/:id`, `GET/POST /api/projects/:id/params`
+- Contacts API routes: `GET/POST /api/contacts`, `PATCH/DELETE /api/contacts/:id`, contact↔project linking
+- All task/settings mutations go through respective `lib/*.js` modules — no direct DB access in api.js for logic
 - Port configured in `config/nanobot.json → mini_app.port` (default 3001)
 - Requires HTTPS reverse proxy (nginx/caddy) for Telegram Mini App requirement
-- See `docs/tz-tasks-mini-app.md` and `docs/tz-miniapp-calendar-tab.md` for specs
+- Mini App frontend has 3 tabs: Tasks, Calendar, Settings (gear icon → full-screen modal)
+- See `docs/tz-tasks-mini-app.md`, `docs/tz-miniapp-calendar-tab.md`, `docs/tz-3-settings-miniapp.md` for specs
 
 ### 8. Chat Monitoring
 
 - Snezhanna passively monitors specified Telegram chats (family + work)
-- Monitored chats configured in `config/nanobot.json → chat_monitor.chats`
+- Monitored chats stored in SQLite `monitored_chats` table (migrated from `config/nanobot.json → chat_monitor.chats`)
+- Add/remove chats via Mini App Settings → Чаты, or via Claude conversation
 - In-memory message store (cleared after evening check-in)
 - Messages available to Claude as context when Vova asks about them
 - Evening check-in includes summary of disk write operations (via `lib/disk-log.js`)
@@ -744,7 +756,7 @@ Separate Telegram bot for Vova's son. See `docs/tutor-bot-tz.md` for full spec.
 
 ## Configuration (`config/nanobot.json`)
 
-Single source of truth for runtime settings:
+Single source of truth for static runtime config. Dynamic user preferences are stored in SQLite `user_settings` (via `lib/settings.js`):
 
 ```json
 {
@@ -777,14 +789,23 @@ Single source of truth for runtime settings:
   },
   "mini_app": {
     "port": 3001
-  },
-  "chat_monitor": {
-    "chats": [
-      { "chat_id": 123, "name": "...", "type": "personal|work", "category": "kids|family", "project": "..." }
-    ]
   }
 }
 ```
+
+### User Settings (SQLite `user_settings`)
+
+Dynamic preferences edited via Mini App or Claude conversation (`update_my_preferences` tool):
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `preferred_name` | `Вовик` | How Snezhanna addresses Vova |
+| `formality` | `informal` | `formal` or `informal` |
+| `response_style` | `concise` | `concise` or `detailed` |
+| `briefing_time` | `08:00` | Morning briefing HH:MM; changes reschedule the cron job live |
+| `github_enabled` | `true` | Include GitHub milestones in briefing |
+| `strava_enabled` | `true` | Include Strava in weekly digest |
+| `email_poll_interval` | `30` | Minutes between email checks: 15, 30, or 60 |
 
 ---
 

@@ -236,6 +236,30 @@ const migrate = db.transaction(() => {
   return { tasksMigrated, projectsMigrated };
 });
 
+// ── Chat monitor migration ─────────────────────────────────────────────────────
+
+function migrateChats() {
+  const chatsCfg = (config.chat_monitor && config.chat_monitor.chats) || [];
+  if (chatsCfg.length === 0) {
+    console.log('[migrate] No chat_monitor.chats in config, skipping');
+    return 0;
+  }
+  const insert = db.prepare(`
+    INSERT OR IGNORE INTO monitored_chats (chat_id, name, type, category, project)
+    VALUES (?, ?, ?, ?, ?)
+  `);
+  let count = 0;
+  for (const chat of chatsCfg) {
+    if (DRY_RUN) {
+      console.log(`[migrate] [dry] chat: ${chat.name} (${chat.chat_id})`);
+    } else {
+      insert.run(chat.chat_id, chat.name, chat.type || 'personal', chat.category || null, chat.project || null);
+    }
+    count++;
+  }
+  return count;
+}
+
 // ── Execute ───────────────────────────────────────────────────────────────────
 
 console.log('[migrate] Starting migration...');
@@ -269,10 +293,13 @@ try {
     return { tasksMigrated, projectsMigrated };
   })() : migrate();
 
+  const chatsMigrated = migrateChats();
+
   console.log('');
   console.log(`[migrate] Done!`);
   console.log(`  Projects: ${result.projectsMigrated}`);
   console.log(`  Tasks:    ${result.tasksMigrated}`);
+  console.log(`  Chats:    ${chatsMigrated}`);
   if (!DRY_RUN) {
     console.log('');
     console.log('[migrate] Old JSON files are preserved. Delete manually after verifying the migration.');

@@ -4,8 +4,8 @@
     {
       "id": "morning_briefing",
       "name": "Утренний брифинг",
-      "cron": "0 8 * * *",
-      "description": "Доброе утро + события на день + топ-3 задачи + почта",
+      "cron": "configurable — default 08:00, controlled by user_settings.briefing_time",
+      "description": "Conversational gate: сначала спрашивает 'Готов к брифингу?', полный брифинг только на положительный ответ. Время переопределяется через Mini App Settings или команду Снежанне (update_my_preferences tool).",
       "enabled": true
     },
     {

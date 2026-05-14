@@ -14,6 +14,7 @@ const { db, backup: dbBackup } = require('./lib/db');
 const google = require('./lib/google');
 const whisper = require('./lib/whisper');
 const { getAvailableTools, executeTool, setContext: setToolsContext } = require('./lib/tools');
+const settings = require('./lib/settings');
 const briefing = require('./lib/briefing');
 const yadiskDirs = require('./lib/yadisk-dirs');
 const vision = require('./lib/vision');
@@ -25,7 +26,7 @@ const strava = require('./lib/strava');
 const workload = require('./lib/workload');
 const { logTokens } = require('./lib/token-log');
 const { buildReplyContext } = require('./lib/reply-chain');
-const api = require('./lib/api');
+const { start: apiStart, setApiContext } = require('./lib/api');
 
 // ── Config & Identity ─────────────────────────────────────────────────────────
 
@@ -59,7 +60,7 @@ async function askClaudeOneShot(userMessage, requestType = 'scheduled') {
     timeZone: config.timezone
   });
   const system = [
-    { type: 'text', text: `Сейчас: ${nowStr} (${config.timezone}).` },
+    { type: 'text', text: `Сейчас: ${nowStr} (${config.timezone}).\n\n${settings.getSystemPromptBlock()}` },
     { type: 'text', text: identity, cache_control: { type: 'ephemeral' } }
   ];
 
@@ -158,7 +159,7 @@ async function _askClaude(userMessage, requestType = 'text', meta = {}) {
     timeZone: config.timezone
   });
   const system = [
-    { type: 'text', text: `Сейчас: ${nowStr} (${config.timezone}).` },
+    { type: 'text', text: `Сейчас: ${nowStr} (${config.timezone}).\n\n${settings.getSystemPromptBlock()}` },
     { type: 'text', text: identity, cache_control: { type: 'ephemeral' } }
   ];
 
@@ -319,7 +320,16 @@ const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, { polling: true });
 const ALLOWED = process.env.TELEGRAM_ALLOWED_USER_ID.replace('@', '');
 
 let appState = state.load();
-setToolsContext(appState, state.save);
+
+let briefingCronJob = null;
+function rescheduleBriefing(timeStr) {
+  const [h, m] = timeStr.split(':');
+  if (briefingCronJob) briefingCronJob.stop();
+  briefingCronJob = cron.schedule(`${m} ${h} * * *`, runMorningBriefing, { timezone: config.timezone });
+  console.log(`[Schedule] Briefing rescheduled to ${timeStr}`);
+}
+
+setToolsContext(appState, state.save, rescheduleBriefing);
 
 function isAllowed(msg) {
   const { id, username } = msg.from || {};
@@ -1016,59 +1026,63 @@ async function sendComebackDigest(chatId, daysAway) {
 // In-memory set of deadline task IDs already alerted today (cleared at midnight)
 const alertedDeadlines = new Set();
 
-function setupSchedules() {
-  // Morning briefing — 08:00 Madrid (conversational gate)
-  cron.schedule('0 8 * * *', async () => {
-    if (!appState.chatId) return;
-    console.log('[Schedule] morning_briefing fired');
-    try {
-      // Step 1 — vacation mode
-      if (appState.quietUntil) {
-        if (new Date() < new Date(appState.quietUntil)) {
-          console.log('[Schedule] morning_briefing: quiet mode active, skipping');
-          return;
-        }
-        appState.quietUntil = null;
-        state.save(appState);
-      }
-
-      // Step 2 — silence level
-      appState.silenceLevel = briefing.computeSilenceLevel(appState.silenceDaysCount || 0);
-      if (appState.silenceLevel === 2) {
-        console.log('[Schedule] morning_briefing: silenceLevel=2, skipping');
+async function runMorningBriefing() {
+  if (!appState.chatId) return;
+  console.log('[Schedule] morning_briefing fired');
+  try {
+    // Step 1 — vacation mode
+    if (appState.quietUntil) {
+      if (new Date() < new Date(appState.quietUntil)) {
+        console.log('[Schedule] morning_briefing: quiet mode active, skipping');
         return;
       }
-      if (appState.silenceLevel === 1 && new Date().getDate() % 2 === 0) {
-        console.log('[Schedule] morning_briefing: silenceLevel=1, even day, skipping');
-        return;
-      }
-
-      // Step 3 — was pending from yesterday (ignored)
-      if (appState.briefingPending) {
-        appState.silenceDaysCount = (appState.silenceDaysCount || 0) + 1;
-        appState.briefingPending = false;
-        appState.briefingPendingAt = null;
-        state.save(appState);
-        console.log('[Schedule] morning_briefing: previous question was ignored, silenceDays=', appState.silenceDaysCount);
-      }
-
-      // Step 4 — value check
-      const hasContent = await briefing.hasSomethingToSay();
-      if (!hasContent) {
-        console.log('[Schedule] morning_briefing: nothing to say, skipping');
-        return;
-      }
-
-      // Step 5 — send the prompt question
-      await sendToVova('Доброе утро! Как дела? Готов к брифингу? 🌅');
-      appState.briefingPending = true;
-      appState.briefingPendingAt = new Date().toISOString();
+      appState.quietUntil = null;
       state.save(appState);
-      console.log('[Schedule] morning_briefing: prompt question sent');
-    } catch (e) {
-      console.error('[Schedule] morning_briefing error:', e.message);
     }
-  }, { timezone: config.timezone });
+
+    // Step 2 — silence level
+    appState.silenceLevel = briefing.computeSilenceLevel(appState.silenceDaysCount || 0);
+    if (appState.silenceLevel === 2) {
+      console.log('[Schedule] morning_briefing: silenceLevel=2, skipping');
+      return;
+    }
+    if (appState.silenceLevel === 1 && new Date().getDate() % 2 === 0) {
+      console.log('[Schedule] morning_briefing: silenceLevel=1, even day, skipping');
+      return;
+    }
+
+    // Step 3 — was pending from yesterday (ignored)
+    if (appState.briefingPending) {
+      appState.silenceDaysCount = (appState.silenceDaysCount || 0) + 1;
+      appState.briefingPending = false;
+      appState.briefingPendingAt = null;
+      state.save(appState);
+      console.log('[Schedule] morning_briefing: previous question was ignored, silenceDays=', appState.silenceDaysCount);
+    }
+
+    // Step 4 — value check
+    const hasContent = await briefing.hasSomethingToSay();
+    if (!hasContent) {
+      console.log('[Schedule] morning_briefing: nothing to say, skipping');
+      return;
+    }
+
+    // Step 5 — send the prompt question
+    await sendToVova('Доброе утро! Как дела? Готов к брифингу? 🌅');
+    appState.briefingPending = true;
+    appState.briefingPendingAt = new Date().toISOString();
+    state.save(appState);
+    console.log('[Schedule] morning_briefing: prompt question sent');
+  } catch (e) {
+    console.error('[Schedule] morning_briefing error:', e.message);
+  }
+}
+
+function setupSchedules() {
+  // Morning briefing — uses briefing_time setting (default 08:00 Madrid)
+  const briefingTime = settings.get('briefing_time') || '08:00';
+  const [bH, bM] = briefingTime.split(':');
+  briefingCronJob = cron.schedule(`${bM} ${bH} * * *`, runMorningBriefing, { timezone: config.timezone });
 
   // Evening check-in — 19:00 Madrid
   cron.schedule('0 19 * * *', async () => {
@@ -1391,7 +1405,8 @@ async function main() {
   console.log('[Snezhanna] Starting...');
 
   yadiskDirs.ensureDirs();
-  api.start();
+  apiStart();
+  setApiContext(appState, state.save, rescheduleBriefing);
   setupSchedules();
 
   if (appState.chatId) {

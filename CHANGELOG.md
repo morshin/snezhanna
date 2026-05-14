@@ -11,6 +11,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), [Semantic Vers
 
 ### Added
 
+- **Snezhanna:** Settings Mini App — gear icon in tab bar opens full-screen settings modal with sections: Profile (name, tone, style), Schedule (briefing time, vacation mode), Integrations (GitHub, Strava, email interval), Chats (add/remove monitored chats), Projects, Contacts; all settings persist to SQLite `user_settings` table; injected into Claude system prompt via `settings.getSystemPromptBlock()`; `update_my_preferences` tool lets Claude update settings from conversation; `rescheduleBriefing()` applies new briefing time to running cron (TZ-3)
 - **Snezhanna:** SQLite migration complete — memory, workload history, and file index now stored in SQLite; new tables: workload_history, memory, file_index, project_params, project_history, contacts, project_contacts; migration script scripts/migrate-memory-workload.js (TZ-2)
 - **Snezhanna:** conversational briefing gate — morning cron asks "Готов к брифингу?" and sends full briefing only on positive reply; silence adaptation (3 levels) reduces/stops prompts when ignored; vacation mode via `/quiet [N]` command and `set_quiet_mode` tool; comeback digest after 3+ days of silence; deadline hard-alerts (10-min cron) and email reply-request hard-alerts bypass silence/vacation; evening check-in suppressed at silence level ≥ 1 (TZ-1)
 

@@ -55,6 +55,8 @@ node lib/indexer.js --incremental # incremental update
 - Prompt caching enabled (`betas: ['prompt-caching-2024-07-31']`): identity block marked with `cache_control: { type: 'ephemeral' }` to reduce input token usage and avoid rate limits; cache hits logged as `[Cache] hit: N tokens cached`
 - Anthropic native web search (`web_search_20250305`) enabled as a server-side tool — Claude can search the web for current info (rates, news, weather) without any local execution
 - Auto-fetches Google Calendar / Gmail context when keywords are detected in user messages (Russian keywords: "календар", "встреч", "сегодня", "почт", etc.)
+- System prompt = timestamp block + `settings.getSystemPromptBlock()` (preferred name, formality, response style from SQLite) + `identity/IDENTITY.md` (cached). User can change preferences via Mini App settings or by telling Snezhanna (→ `update_my_preferences` tool).
+- Morning briefing time is controlled by `settings.get('briefing_time')` (default 08:00); changing it via Mini App or chat calls `rescheduleBriefing(newTime)` which stops the old cron job and creates a new one.
 - On startup: initialises SQLite DB (`lib/db.js`, creates `data/snezhanna.db` if missing), calls `yadiskDirs.ensureDirs()` to create any missing agent subdirs (`index/`, `memory/`, `fitness/`, `drafts/`, `digests/`, `backups/`), then starts the Mini App HTTP API server (`lib/api.js`) on the port from `config.mini_app.port` (default 3001)
 - Task and project storage: local SQLite (`data/snezhanna.db`) via `better-sqlite3` (synchronous). Tasks have subtasks (`parent_id`) and dependencies (`task_deps` table). New tools: `add_task_dependency`, `get_task_with_subtasks`. Daily DB backup to `/mnt/yadisk-agent/backups/snezhanna_YYYYMMDD.db` at 03:30 (keep 7).
 - Scheduled tasks via `node-cron`: morning briefing gate (08:00), workload weekly check-in (Monday 09:00), evening check-in (19:00), weekly digest (Sunday 10:00), calendar reminders every 10 min (fires at 30-min mark), deadline alerts every 10 min, DB backup (03:30)
@@ -117,8 +119,9 @@ node lib/indexer.js --incremental # incremental update
 | `scripts/migrate-to-sqlite.js` | One-time migration: tasks + projects from Yandex.Disk JSON → SQLite; `--dry-run` available |
 | `scripts/migrate-memory-workload.js` | One-time migration: memory/*.md + workload-history.json → SQLite; `--dry-run` available |
 | `data/snezhanna.db` | SQLite database (gitignored) — tasks, projects, docs, logs |
-| `lib/api.js` | HTTP API server for Mini App; validates Telegram initData, serves static files from `mini-app/`, exposes task CRUD + calendar + `GET /api/github/milestones` (legacy `/api/github/issues` same JSON) |
-| `mini-app/index.html` | Telegram Mini App frontend — two-tab (Tasks + Calendar) single-file HTML/JS/CSS |
+| `lib/settings.js` | Key-value user settings in SQLite `user_settings`; `get(key)`, `set(key,val)`, `getAll()`, `getSystemPromptBlock()` (injected into every Claude system prompt) |
+| `lib/api.js` | HTTP API server for Mini App; validates Telegram initData, serves static files from `mini-app/`, exposes task CRUD + calendar + settings/chats/projects/contacts CRUD + `GET /api/github/milestones` |
+| `mini-app/index.html` | Telegram Mini App frontend — Tasks + Calendar + Settings (gear icon → full-screen modal) single-file HTML/JS/CSS |
 | `lib/disk-log.js` | In-memory log of Yandex Disk write operations; flushed after evening check-in |
 | `identity/IDENTITY.md` | Snezhanna's system prompt (personality, capabilities, prompt injection defense) |
 | `config/nanobot.json` | Model, token limits, timezone, history window, Yandex Disk mount paths, indexer rules, `database.path` |

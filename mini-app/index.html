@@ -654,6 +654,283 @@
     background: var(--tg-theme-button-color, #3390ec);
     flex-shrink: 0;
   }
+
+  /* ── Settings modal ───────────────────────────────────────────────── */
+
+  .settings-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 200;
+    background: var(--tg-theme-bg-color, #fff);
+    display: flex;
+    flex-direction: column;
+    transform: translateY(100%);
+    transition: transform 0.3s ease;
+  }
+  .settings-modal.open { transform: translateY(0); }
+
+  .settings-modal-header {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    padding: 14px 16px calc(14px + env(safe-area-inset-top, 0));
+    border-bottom: 1px solid var(--tg-theme-secondary-bg-color, #e0e0e0);
+    background: var(--tg-theme-bg-color, #fff);
+  }
+  .settings-modal-title {
+    flex: 1;
+    font-size: 17px;
+    font-weight: 700;
+    text-align: center;
+  }
+  .settings-modal-close {
+    width: 32px; height: 32px;
+    display: flex; align-items: center; justify-content: center;
+    border: none; background: none; cursor: pointer;
+    font-size: 20px; color: var(--tg-theme-hint-color, #999);
+    border-radius: 50%;
+  }
+  .settings-modal-close:active { background: var(--tg-theme-secondary-bg-color, #eee); }
+
+  .settings-modal-body {
+    flex: 1;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: 0 0 calc(env(safe-area-inset-bottom, 0) + 20px);
+  }
+
+  .settings-section {
+    padding: 20px 16px 4px;
+  }
+  .settings-section-title {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.7px;
+    color: var(--tg-theme-hint-color, #999);
+    padding: 0 0 10px;
+  }
+  .settings-row {
+    display: flex;
+    align-items: center;
+    min-height: 48px;
+    padding: 6px 0;
+    gap: 12px;
+    border-bottom: 1px solid var(--tg-theme-secondary-bg-color, #f0f0f0);
+    position: relative;
+  }
+  .settings-row:last-child { border-bottom: none; }
+  .settings-row-label {
+    font-size: 15px;
+    color: var(--tg-theme-text-color, #000);
+    min-width: 110px;
+  }
+  .settings-row-value {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+  .settings-input {
+    padding: 7px 10px;
+    font-size: 15px;
+    border: 1.5px solid var(--tg-theme-secondary-bg-color, #ddd);
+    border-radius: 8px;
+    background: var(--tg-theme-secondary-bg-color, #f5f5f5);
+    color: var(--tg-theme-text-color, #000);
+    font-family: inherit;
+    text-align: right;
+    width: 130px;
+  }
+  .settings-input:focus { outline: none; border-color: var(--tg-theme-button-color, #3390ec); }
+  .settings-input.time-input { width: 80px; }
+
+  .seg-toggle {
+    display: flex;
+    background: var(--tg-theme-secondary-bg-color, #f0f0f0);
+    border-radius: 7px;
+    padding: 2px;
+    gap: 2px;
+  }
+  .seg-toggle-btn {
+    padding: 5px 10px;
+    border-radius: 5px;
+    border: none;
+    background: none;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    color: var(--tg-theme-hint-color, #999);
+    font-family: inherit;
+    transition: all 0.15s;
+  }
+  .seg-toggle-btn.active {
+    background: var(--tg-theme-button-color, #3390ec);
+    color: var(--tg-theme-button-text-color, #fff);
+  }
+
+  .settings-toggle-btn {
+    width: 44px; height: 26px;
+    border-radius: 13px;
+    border: none; cursor: pointer;
+    background: var(--tg-theme-hint-color, #ccc);
+    position: relative;
+    transition: background 0.2s;
+    flex-shrink: 0;
+  }
+  .settings-toggle-btn.on { background: var(--tg-theme-button-color, #3390ec); }
+  .settings-toggle-btn::after {
+    content: '';
+    position: absolute;
+    top: 3px; left: 3px;
+    width: 20px; height: 20px;
+    border-radius: 50%;
+    background: #fff;
+    transition: transform 0.2s;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+  }
+  .settings-toggle-btn.on::after { transform: translateX(18px); }
+
+  .save-indicator {
+    font-size: 12px;
+    font-weight: 700;
+    width: 18px; text-align: center;
+    opacity: 0;
+    transition: opacity 0.2s;
+  }
+  .save-indicator.ok { color: #4caf50; opacity: 1; }
+  .save-indicator.err { color: #e53935; opacity: 1; }
+
+  .settings-list { padding: 0; }
+  .settings-list-item {
+    display: flex;
+    align-items: center;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--tg-theme-secondary-bg-color, #f0f0f0);
+    gap: 10px;
+  }
+  .settings-list-item-text { flex: 1; }
+  .settings-list-item-title { font-size: 15px; }
+  .settings-list-item-sub { font-size: 12px; color: var(--tg-theme-hint-color, #999); }
+  .settings-del-btn {
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    border: none; background: none; cursor: pointer;
+    color: #e53935; font-size: 18px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .settings-del-btn:active { background: #ffebee; }
+
+  .settings-add-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 16px;
+    font-size: 15px;
+    color: var(--tg-theme-button-color, #3390ec);
+    border: none; background: none; cursor: pointer;
+    font-family: inherit; width: 100%;
+  }
+  .settings-add-btn:active { background: var(--tg-theme-secondary-bg-color, #f5f5f5); }
+
+  .settings-inline-form {
+    padding: 12px 16px;
+    background: var(--tg-theme-secondary-bg-color, #f7f7f7);
+    border-radius: 10px;
+    margin: 4px 16px;
+    display: none;
+  }
+  .settings-inline-form.open { display: block; }
+  .settings-inline-input {
+    width: 100%;
+    padding: 9px 10px;
+    font-size: 14px;
+    border: 1.5px solid var(--tg-theme-secondary-bg-color, #ddd);
+    border-radius: 8px;
+    background: var(--tg-theme-bg-color, #fff);
+    color: var(--tg-theme-text-color, #000);
+    font-family: inherit;
+    margin-bottom: 8px;
+    box-sizing: border-box;
+  }
+  .settings-inline-input:focus { outline: none; border-color: var(--tg-theme-button-color, #3390ec); }
+  .settings-inline-row {
+    display: flex; gap: 8px; margin-bottom: 8px;
+  }
+  .settings-inline-row .settings-inline-input { margin-bottom: 0; }
+  .settings-form-btns {
+    display: flex; gap: 8px; justify-content: flex-end;
+  }
+  .settings-form-btn {
+    padding: 8px 16px;
+    border-radius: 8px;
+    border: none; cursor: pointer;
+    font-size: 14px; font-weight: 600;
+    font-family: inherit;
+  }
+  .settings-form-btn.primary {
+    background: var(--tg-theme-button-color, #3390ec);
+    color: var(--tg-theme-button-text-color, #fff);
+  }
+  .settings-form-btn.secondary {
+    background: var(--tg-theme-secondary-bg-color, #e0e0e0);
+    color: var(--tg-theme-text-color, #000);
+  }
+
+  .quiet-info {
+    font-size: 13px;
+    color: var(--tg-theme-hint-color, #888);
+    flex: 1;
+    text-align: right;
+  }
+  .quiet-reset-btn {
+    padding: 5px 10px;
+    border-radius: 7px;
+    border: 1.5px solid #e53935;
+    background: none;
+    color: #e53935;
+    font-size: 13px; font-weight: 600;
+    cursor: pointer; font-family: inherit;
+  }
+  .quiet-set-row {
+    display: flex; gap: 8px; align-items: center;
+  }
+  .quiet-date-input {
+    flex: 1;
+    padding: 7px 10px;
+    font-size: 14px;
+    border: 1.5px solid var(--tg-theme-secondary-bg-color, #ddd);
+    border-radius: 8px;
+    background: var(--tg-theme-secondary-bg-color, #f5f5f5);
+    color: var(--tg-theme-text-color, #000);
+    font-family: inherit;
+  }
+  .quiet-set-btn {
+    padding: 7px 12px;
+    border-radius: 8px;
+    border: none;
+    background: var(--tg-theme-button-color, #3390ec);
+    color: var(--tg-theme-button-text-color, #fff);
+    font-size: 14px; font-weight: 600;
+    cursor: pointer; font-family: inherit;
+  }
+
+  .email-seg { display: flex; gap: 4px; }
+  .email-seg-btn {
+    padding: 5px 10px;
+    border-radius: 6px;
+    border: 1.5px solid var(--tg-theme-secondary-bg-color, #ddd);
+    background: none;
+    font-size: 13px; font-weight: 600;
+    cursor: pointer; color: var(--tg-theme-hint-color, #999);
+    font-family: inherit; transition: all 0.15s;
+  }
+  .email-seg-btn.active {
+    border-color: var(--tg-theme-button-color, #3390ec);
+    background: var(--tg-theme-button-color, #3390ec);
+    color: var(--tg-theme-button-text-color, #fff);
+  }
 </style>
 </head>
 <body>
@@ -700,6 +977,22 @@
     <svg viewBox="0 0 24 24"><path d="M19 4h-1V2h-2v2H8V2H6v2H5c-1.11 0-1.99.9-1.99 2L3 20c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V10h14v10zm0-12H5V6h14v2z"/></svg>
     <span>Calendar</span>
   </button>
+  <button class="bottom-tab" id="settingsTabBtn">
+    <svg viewBox="0 0 24 24"><path d="M19.14 12.94c.04-.3.06-.61.06-.94s-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>
+    <span>Settings</span>
+  </button>
+</div>
+
+<!-- ── Settings modal ────────────────────────────────────────────────── -->
+<div class="settings-modal" id="settingsModal">
+  <div class="settings-modal-header">
+    <div style="width:32px"></div>
+    <div class="settings-modal-title">Настройки</div>
+    <button class="settings-modal-close" id="settingsModalClose">✕</button>
+  </div>
+  <div class="settings-modal-body" id="settingsModalBody">
+    <div class="loading"><div class="spinner"></div></div>
+  </div>
 </div>
 
 </div>
@@ -1339,6 +1632,552 @@
 
   // Overlay click to close sheet
   document.getElementById('overlay').addEventListener('click', closeSheet);
+
+  // Settings tab button
+  document.getElementById('settingsTabBtn').addEventListener('click', openSettings);
+  document.getElementById('settingsModalClose').addEventListener('click', closeSettings);
+
+  // ══════════════════════════════════════════════════════════════════════
+  // SETTINGS
+  // ══════════════════════════════════════════════════════════════════════
+
+  let settingsData = null;
+  let chatsData = [];
+  let projectsData = [];
+  let contactsData = [];
+
+  function openSettings() {
+    document.querySelectorAll('.bottom-tab').forEach(t => t.classList.remove('active'));
+    document.getElementById('settingsTabBtn').classList.add('active');
+    document.getElementById('settingsModal').classList.add('open');
+    loadSettingsData();
+  }
+
+  function closeSettings() {
+    document.getElementById('settingsModal').classList.remove('open');
+    // Restore previous tab active state
+    document.getElementById('settingsTabBtn').classList.remove('active');
+    if (currentScreen === 'tasks') {
+      document.querySelector('.bottom-tab[data-screen="tasks"]').classList.add('active');
+    } else {
+      document.querySelector('.bottom-tab[data-screen="calendar"]').classList.add('active');
+    }
+  }
+
+  async function loadSettingsData() {
+    document.getElementById('settingsModalBody').innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+    try {
+      const [sRes, cRes, pRes, ctRes] = await Promise.all([
+        api('GET', '/api/settings'),
+        api('GET', '/api/chats'),
+        api('GET', '/api/projects'),
+        api('GET', '/api/contacts')
+      ]);
+      settingsData = sRes;
+      chatsData = cRes.chats || [];
+      projectsData = pRes.projects || [];
+      contactsData = ctRes.contacts || [];
+      renderSettings();
+    } catch (e) {
+      document.getElementById('settingsModalBody').innerHTML = '<div class="empty-state"><div class="text">Ошибка загрузки</div></div>';
+    }
+  }
+
+  function makeSaveIndicator(id) {
+    return `<span class="save-indicator" id="si_${id}"></span>`;
+  }
+
+  async function saveSetting(key, value, indicatorId) {
+    const el = indicatorId ? document.getElementById('si_' + indicatorId) : null;
+    try {
+      await api('POST', '/api/settings', { key, value: String(value) });
+      if (el) { el.textContent = '✓'; el.className = 'save-indicator ok'; setTimeout(() => { el.textContent = ''; el.className = 'save-indicator'; }, 1500); }
+    } catch {
+      if (el) { el.textContent = '✗'; el.className = 'save-indicator err'; setTimeout(() => { el.textContent = ''; el.className = 'save-indicator'; }, 2000); }
+    }
+  }
+
+  function renderSettings() {
+    const s = settingsData || {};
+    const quietUntil = s.quiet_until ? new Date(s.quiet_until).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', timeZone: TZ }) : null;
+
+    let html = '';
+
+    // ── ПРОФИЛЬ ──
+    html += `<div class="settings-section">
+      <div class="settings-section-title">Профиль</div>
+      <div class="settings-row">
+        <span class="settings-row-label">Обращение</span>
+        <div class="settings-row-value">
+          ${makeSaveIndicator('name')}
+          <input class="settings-input" id="si_name_input" type="text" value="${esc(s.preferred_name || 'Вовик')}" placeholder="Вовик">
+        </div>
+      </div>
+      <div class="settings-row">
+        <span class="settings-row-label">Тон</span>
+        <div class="settings-row-value">
+          ${makeSaveIndicator('form')}
+          <div class="seg-toggle">
+            <button class="seg-toggle-btn ${s.formality !== 'formal' ? 'active' : ''}" data-key="formality" data-value="informal">Ты</button>
+            <button class="seg-toggle-btn ${s.formality === 'formal' ? 'active' : ''}" data-key="formality" data-value="formal">Вы</button>
+          </div>
+        </div>
+      </div>
+      <div class="settings-row">
+        <span class="settings-row-label">Стиль</span>
+        <div class="settings-row-value">
+          ${makeSaveIndicator('style')}
+          <div class="seg-toggle">
+            <button class="seg-toggle-btn ${s.response_style !== 'detailed' ? 'active' : ''}" data-key="response_style" data-value="concise">Кратко</button>
+            <button class="seg-toggle-btn ${s.response_style === 'detailed' ? 'active' : ''}" data-key="response_style" data-value="detailed">Подробно</button>
+          </div>
+        </div>
+      </div>
+    </div>`;
+
+    // ── РАСПИСАНИЕ ──
+    html += `<div class="settings-section">
+      <div class="settings-section-title">Расписание</div>
+      <div class="settings-row">
+        <span class="settings-row-label">Брифинг</span>
+        <div class="settings-row-value">
+          ${makeSaveIndicator('btime')}
+          <input class="settings-input time-input" id="si_btime_input" type="time" value="${esc(s.briefing_time || '08:00')}">
+        </div>
+      </div>
+      <div class="settings-row" id="quietRow">
+        <span class="settings-row-label">Тихий режим</span>
+        <div class="settings-row-value" id="quietValue">
+          ${quietUntil
+            ? `<span class="quiet-info">до ${quietUntil}</span><button class="quiet-reset-btn" id="quietResetBtn">Сбросить</button>`
+            : `<div class="quiet-set-row"><input type="date" class="quiet-date-input" id="quietDateInput"><button class="quiet-set-btn" id="quietSetBtn">Включить</button></div>`
+          }
+        </div>
+      </div>
+    </div>`;
+
+    // ── ИНТЕГРАЦИИ ──
+    html += `<div class="settings-section">
+      <div class="settings-section-title">Интеграции</div>
+      <div class="settings-row">
+        <span class="settings-row-label">GitHub Issues</span>
+        <div class="settings-row-value">
+          ${makeSaveIndicator('gh')}
+          <button class="settings-toggle-btn ${s.github_enabled !== 'false' ? 'on' : ''}" data-key="github_enabled" id="gh_toggle"></button>
+        </div>
+      </div>
+      <div class="settings-row">
+        <span class="settings-row-label">Strava</span>
+        <div class="settings-row-value">
+          ${makeSaveIndicator('str')}
+          <button class="settings-toggle-btn ${s.strava_enabled !== 'false' ? 'on' : ''}" data-key="strava_enabled" id="str_toggle"></button>
+        </div>
+      </div>
+      <div class="settings-row">
+        <span class="settings-row-label">Почта каждые</span>
+        <div class="settings-row-value">
+          ${makeSaveIndicator('email')}
+          <div class="email-seg">
+            <button class="email-seg-btn ${s.email_poll_interval === '15' ? 'active' : ''}" data-key="email_poll_interval" data-value="15">15 мин</button>
+            <button class="email-seg-btn ${(s.email_poll_interval || '30') === '30' ? 'active' : ''}" data-key="email_poll_interval" data-value="30">30 мин</button>
+            <button class="email-seg-btn ${s.email_poll_interval === '60' ? 'active' : ''}" data-key="email_poll_interval" data-value="60">60 мин</button>
+          </div>
+        </div>
+      </div>
+    </div>`;
+
+    // ── ЧАТЫ ──
+    html += `<div class="settings-section">
+      <div class="settings-section-title">Отслеживаемые чаты</div>
+    </div>
+    <div class="settings-list" id="chatsList">`;
+    for (const c of chatsData) {
+      html += `<div class="settings-list-item" data-chat-id="${c.chat_id}">
+        <div class="settings-list-item-text">
+          <div class="settings-list-item-title">${esc(c.name)}</div>
+          <div class="settings-list-item-sub">${c.chat_id} · ${c.type}${c.category ? ' · ' + c.category : ''}</div>
+        </div>
+        <button class="settings-del-btn" data-del-chat="${c.chat_id}">✕</button>
+      </div>`;
+    }
+    html += `</div>
+    <button class="settings-add-btn" id="addChatBtn">＋ Добавить чат</button>
+    <div class="settings-inline-form" id="addChatForm">
+      <input class="settings-inline-input" id="addChatId" type="number" placeholder="Chat ID (число)">
+      <input class="settings-inline-input" id="addChatName" placeholder="Название">
+      <div class="settings-inline-row">
+        <input class="settings-inline-input" id="addChatCategory" placeholder="Категория (work/family/kids)">
+      </div>
+      <div class="settings-form-btns">
+        <button class="settings-form-btn secondary" id="addChatCancel">Отмена</button>
+        <button class="settings-form-btn primary" id="addChatSave">Добавить</button>
+      </div>
+    </div>`;
+
+    // ── ПРОЕКТЫ ──
+    html += `<div class="settings-section">
+      <div class="settings-section-title">Проекты</div>
+    </div>
+    <div class="settings-list" id="projectsList">`;
+    for (const p of projectsData) {
+      const pid = p.id;
+      html += `
+      <div class="project-expand-row" data-pid="${pid}" style="cursor:pointer;">
+        <div class="settings-list-item" style="border-bottom:none">
+          <div class="settings-list-item-text">
+            <div class="settings-list-item-title">${esc(p.display_name || p.name)}</div>
+            <div class="settings-list-item-sub">${p.status}${p.description ? ' · ' + esc(p.description).slice(0, 40) : ''}</div>
+          </div>
+          <span class="project-expand-arrow" id="parr_${pid}" style="font-size:14px;color:var(--tg-theme-hint-color,#999);transition:transform 0.2s;display:inline-block">›</span>
+        </div>
+        <div class="project-inline-editor" id="ped_${pid}" style="display:none;padding:12px 16px 16px;background:var(--tg-theme-secondary-bg-color,#f7f7f7);border-top:1px solid var(--tg-theme-secondary-bg-color,#eee)">
+          <input class="settings-inline-input" id="p_display_${pid}" placeholder="Название" value="${escAttr(p.display_name || p.name)}">
+          <input class="settings-inline-input" id="p_desc_${pid}" placeholder="Описание" value="${escAttr(p.description || '')}">
+          <input class="settings-inline-input" id="p_github_${pid}" placeholder="GitHub repo (owner/repo)" value="">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0">
+            <span style="font-size:14px">Статус</span>
+            <div class="seg-toggle">
+              <button class="seg-toggle-btn ${p.status !== 'archived' ? 'active' : ''}" data-pstatus="active" data-pid="${pid}">Активен</button>
+              <button class="seg-toggle-btn ${p.status === 'archived' ? 'active' : ''}" data-pstatus="archived" data-pid="${pid}">Архив</button>
+            </div>
+          </div>
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.7px;color:var(--tg-theme-hint-color,#999);padding:10px 0 6px">Параметры брифинга</div>
+          <div id="p_params_${pid}"><div class="loading" style="padding:8px 0"><div class="spinner" style="width:18px;height:18px;border-width:2px"></div></div></div>
+          <div style="display:flex;gap:8px;margin-top:10px">
+            <button class="settings-form-btn secondary p-cancel-btn" data-pid="${pid}" style="flex:1">Отмена</button>
+            <button class="settings-form-btn primary p-save-btn" data-pid="${pid}" style="flex:1">Сохранить</button>
+          </div>
+        </div>
+      </div>`;
+    }
+    if (projectsData.length === 0) html += '<div style="padding:10px 16px;font-size:14px;color:var(--tg-theme-hint-color,#999)">Нет проектов</div>';
+    html += `</div>
+    <button class="settings-add-btn" id="addProjectBtn">＋ Новый проект</button>
+    <div class="settings-inline-form" id="addProjectForm">
+      <input class="settings-inline-input" id="addProjectName" placeholder="Внутреннее имя (латиница)">
+      <input class="settings-inline-input" id="addProjectDisplay" placeholder="Отображаемое название">
+      <input class="settings-inline-input" id="addProjectDesc" placeholder="Описание (опционально)">
+      <div class="settings-form-btns">
+        <button class="settings-form-btn secondary" id="addProjectCancel">Отмена</button>
+        <button class="settings-form-btn primary" id="addProjectSave">Создать</button>
+      </div>
+    </div>`;
+
+    // ── КОНТАКТЫ ──
+    html += `<div class="settings-section">
+      <div class="settings-section-title">Контакты</div>
+    </div>
+    <div class="settings-list" id="contactsList">`;
+    for (const c of contactsData) {
+      html += `<div class="settings-list-item" data-contact-id="${c.id}">
+        <div class="settings-list-item-text">
+          <div class="settings-list-item-title">${esc(c.name)}</div>
+          <div class="settings-list-item-sub">${[c.role, c.company].filter(Boolean).join(' · ') || '—'}</div>
+        </div>
+        <button class="settings-del-btn" data-del-contact="${c.id}">✕</button>
+      </div>`;
+    }
+    if (contactsData.length === 0) html += '<div style="padding:10px 16px;font-size:14px;color:var(--tg-theme-hint-color,#999)">Нет контактов</div>';
+    html += `</div>
+    <button class="settings-add-btn" id="addContactBtn">＋ Добавить контакт</button>
+    <div class="settings-inline-form" id="addContactForm">
+      <input class="settings-inline-input" id="addContactName" placeholder="Имя">
+      <div class="settings-inline-row">
+        <input class="settings-inline-input" id="addContactRole" placeholder="Роль">
+        <input class="settings-inline-input" id="addContactCompany" placeholder="Компания">
+      </div>
+      <div class="settings-inline-row">
+        <input class="settings-inline-input" id="addContactTelegram" placeholder="Telegram (@username)">
+        <input class="settings-inline-input" id="addContactEmail" placeholder="Email">
+      </div>
+      <div class="settings-form-btns">
+        <button class="settings-form-btn secondary" id="addContactCancel">Отмена</button>
+        <button class="settings-form-btn primary" id="addContactSave">Добавить</button>
+      </div>
+    </div>`;
+
+    document.getElementById('settingsModalBody').innerHTML = html;
+    bindSettingsEvents();
+  }
+
+  function bindSettingsEvents() {
+    const body = document.getElementById('settingsModalBody');
+
+    // Text input: save on blur
+    const nameInput = document.getElementById('si_name_input');
+    if (nameInput) {
+      nameInput.addEventListener('blur', () => saveSetting('preferred_name', nameInput.value, 'name'));
+    }
+    const btimeInput = document.getElementById('si_btime_input');
+    if (btimeInput) {
+      btimeInput.addEventListener('change', () => saveSetting('briefing_time', btimeInput.value, 'btime'));
+    }
+
+    // Segmented toggles (formality, response_style)
+    body.querySelectorAll('.seg-toggle-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const key = btn.dataset.key;
+        const val = btn.dataset.value;
+        const indicatorMap = { formality: 'form', response_style: 'style' };
+        btn.closest('.seg-toggle').querySelectorAll('.seg-toggle-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        saveSetting(key, val, indicatorMap[key] || key);
+      });
+    });
+
+    // Toggle buttons (github_enabled, strava_enabled)
+    body.querySelectorAll('.settings-toggle-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const key = btn.dataset.key;
+        const isOn = btn.classList.toggle('on');
+        const indicatorMap = { github_enabled: 'gh', strava_enabled: 'str' };
+        saveSetting(key, isOn ? 'true' : 'false', indicatorMap[key] || key);
+      });
+    });
+
+    // Email interval buttons
+    body.querySelectorAll('.email-seg-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        body.querySelectorAll('.email-seg-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        saveSetting('email_poll_interval', btn.dataset.value, 'email');
+      });
+    });
+
+    // Quiet mode
+    const quietResetBtn = document.getElementById('quietResetBtn');
+    if (quietResetBtn) {
+      quietResetBtn.addEventListener('click', async () => {
+        await api('POST', '/api/quiet', { until: null });
+        settingsData.quiet_until = null;
+        const qv = document.getElementById('quietValue');
+        if (qv) qv.innerHTML = `<div class="quiet-set-row"><input type="date" class="quiet-date-input" id="quietDateInput"><button class="quiet-set-btn" id="quietSetBtn">Включить</button></div>`;
+        bindQuietSetBtn();
+      });
+    }
+    bindQuietSetBtn();
+
+    // Chats
+    document.getElementById('addChatBtn').addEventListener('click', () => {
+      document.getElementById('addChatForm').classList.toggle('open');
+    });
+    document.getElementById('addChatCancel').addEventListener('click', () => {
+      document.getElementById('addChatForm').classList.remove('open');
+    });
+    document.getElementById('addChatSave').addEventListener('click', async () => {
+      const chatId = document.getElementById('addChatId').value.trim();
+      const name = document.getElementById('addChatName').value.trim();
+      const category = document.getElementById('addChatCategory').value.trim();
+      if (!chatId || !name) return;
+      const type = ['work', 'family', 'kids'].includes(category) ? 'work' : 'personal';
+      await api('POST', '/api/chats', { chat_id: Number(chatId), name, type, category: category || null });
+      loadSettingsData();
+    });
+    body.querySelectorAll('[data-del-chat]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const chatId = btn.dataset.delChat;
+        if (!confirm('Удалить чат ' + chatId + '?')) return;
+        await api('DELETE', `/api/chats/${chatId}`);
+        loadSettingsData();
+      });
+    });
+
+    // Projects — expand rows
+    body.querySelectorAll('.project-expand-row').forEach(row => {
+      row.addEventListener('click', async (e) => {
+        // Don't toggle if clicking inside the editor
+        if (e.target.closest('.project-inline-editor')) return;
+        const pid = row.dataset.pid;
+        const editor = document.getElementById('ped_' + pid);
+        const arrow = document.getElementById('parr_' + pid);
+        const isOpen = editor.style.display !== 'none';
+        if (isOpen) {
+          editor.style.display = 'none';
+          arrow.style.transform = '';
+        } else {
+          editor.style.display = 'block';
+          arrow.style.transform = 'rotate(90deg)';
+          // Load params
+          loadProjectParams(pid);
+        }
+      });
+    });
+
+    // Project status toggles
+    body.querySelectorAll('[data-pstatus]').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const pid = btn.dataset.pid;
+        btn.closest('.seg-toggle').querySelectorAll('.seg-toggle-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+      });
+    });
+
+    // Project cancel buttons
+    body.querySelectorAll('.p-cancel-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const pid = btn.dataset.pid;
+        document.getElementById('ped_' + pid).style.display = 'none';
+        document.getElementById('parr_' + pid).style.transform = '';
+      });
+    });
+
+    // Project save buttons
+    body.querySelectorAll('.p-save-btn').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const pid = btn.dataset.pid;
+        const display = document.getElementById('p_display_' + pid).value.trim();
+        const desc = document.getElementById('p_desc_' + pid).value.trim();
+        const github = document.getElementById('p_github_' + pid).value.trim();
+        const statusBtn = body.querySelector(`.seg-toggle-btn.active[data-pid="${pid}"]`);
+        const status = statusBtn ? statusBtn.dataset.pstatus : null;
+
+        const patch = {};
+        if (display) patch.display_name = display;
+        if (desc !== undefined) patch.description = desc || null;
+        if (github) patch.github_repo = github;
+        if (status) patch.status = status;
+
+        try {
+          await api('PATCH', `/api/projects/${pid}`, patch);
+          // Save params
+          await saveProjectParams(pid);
+          btn.textContent = '✓ Сохранено';
+          setTimeout(() => { btn.textContent = 'Сохранить'; }, 1500);
+          // Refresh project data without closing editor
+          const pRes = await api('GET', '/api/projects');
+          projectsData = pRes.projects || [];
+          const p = projectsData.find(x => String(x.id) === String(pid));
+          if (p) {
+            const titleEl = body.querySelector(`.project-expand-row[data-pid="${pid}"] .settings-list-item-title`);
+            const subEl = body.querySelector(`.project-expand-row[data-pid="${pid}"] .settings-list-item-sub`);
+            if (titleEl) titleEl.textContent = p.display_name || p.name;
+            if (subEl) subEl.textContent = p.status + (p.description ? ' · ' + p.description.slice(0, 40) : '');
+          }
+        } catch {
+          btn.textContent = '✗ Ошибка';
+          setTimeout(() => { btn.textContent = 'Сохранить'; }, 2000);
+        }
+      });
+    });
+
+    // Projects add form
+    document.getElementById('addProjectBtn').addEventListener('click', () => {
+      document.getElementById('addProjectForm').classList.toggle('open');
+    });
+    document.getElementById('addProjectCancel').addEventListener('click', () => {
+      document.getElementById('addProjectForm').classList.remove('open');
+    });
+    document.getElementById('addProjectSave').addEventListener('click', async () => {
+      const name = document.getElementById('addProjectName').value.trim();
+      const display = document.getElementById('addProjectDisplay').value.trim();
+      const desc = document.getElementById('addProjectDesc').value.trim();
+      if (!name) return;
+      await api('POST', '/api/projects', { name, display_name: display || name, description: desc || null });
+      loadSettingsData();
+    });
+
+    // Contacts
+    document.getElementById('addContactBtn').addEventListener('click', () => {
+      document.getElementById('addContactForm').classList.toggle('open');
+    });
+    document.getElementById('addContactCancel').addEventListener('click', () => {
+      document.getElementById('addContactForm').classList.remove('open');
+    });
+    document.getElementById('addContactSave').addEventListener('click', async () => {
+      const name = document.getElementById('addContactName').value.trim();
+      if (!name) return;
+      await api('POST', '/api/contacts', {
+        name,
+        role: document.getElementById('addContactRole').value.trim() || null,
+        company: document.getElementById('addContactCompany').value.trim() || null,
+        telegram: document.getElementById('addContactTelegram').value.trim() || null,
+        email: document.getElementById('addContactEmail').value.trim() || null
+      });
+      loadSettingsData();
+    });
+    body.querySelectorAll('[data-del-contact]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const cid = btn.dataset.delContact;
+        if (!confirm('Удалить контакт?')) return;
+        await api('DELETE', `/api/contacts/${cid}`);
+        loadSettingsData();
+      });
+    });
+  }
+
+  const PARAM_TOGGLES = [
+    { key: 'tasks_in_briefing',   label: 'Задачи в брифинге' },
+    { key: 'calendar_in_briefing', label: 'Календарь' },
+    { key: 'github_in_briefing',  label: 'GitHub Issues' },
+    { key: 'include_in_briefing', label: 'Включать в брифинг' },
+    { key: 'notifications',       label: 'Уведомления' },
+  ];
+
+  async function loadProjectParams(pid) {
+    const container = document.getElementById('p_params_' + pid);
+    if (!container) return;
+    const githubInput = document.getElementById('p_github_' + pid);
+    try {
+      const res = await api('GET', `/api/projects/${pid}/params`);
+      const params = res.params || {};
+      if (githubInput && params.github_repo) githubInput.value = params.github_repo;
+
+      let html = '';
+      for (const { key, label } of PARAM_TOGGLES) {
+        const on = params[key] !== 'false' && params[key] !== '0';
+        html += `<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--tg-theme-secondary-bg-color,#eee)">
+          <span style="font-size:14px">${label}</span>
+          <button class="settings-toggle-btn${on ? ' on' : ''}" data-pparam="${key}" data-pid="${pid}"></button>
+        </div>`;
+      }
+      container.innerHTML = html;
+      // Bind param toggles
+      container.querySelectorAll('[data-pparam]').forEach(btn => {
+        btn.addEventListener('click', (e) => { e.stopPropagation(); btn.classList.toggle('on'); });
+      });
+    } catch {
+      container.innerHTML = '<div style="font-size:13px;color:var(--tg-theme-hint-color,#999)">Не удалось загрузить параметры</div>';
+    }
+  }
+
+  async function saveProjectParams(pid) {
+    const container = document.getElementById('p_params_' + pid);
+    const githubInput = document.getElementById('p_github_' + pid);
+    if (!container) return;
+    const promises = [];
+    if (githubInput && githubInput.value.trim()) {
+      promises.push(api('POST', `/api/projects/${pid}/params`, { key: 'github_repo', value: githubInput.value.trim() }));
+    }
+    container.querySelectorAll('[data-pparam]').forEach(btn => {
+      promises.push(api('POST', `/api/projects/${pid}/params`, { key: btn.dataset.pparam, value: btn.classList.contains('on') ? 'true' : 'false' }));
+    });
+    await Promise.all(promises);
+  }
+
+  function bindQuietSetBtn() {
+    const setBtn = document.getElementById('quietSetBtn');
+    if (setBtn) {
+      setBtn.addEventListener('click', async () => {
+        const val = document.getElementById('quietDateInput').value;
+        if (!val) return;
+        await api('POST', '/api/quiet', { until: val });
+        settingsData.quiet_until = new Date(val).toISOString();
+        const d = new Date(val).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', timeZone: TZ });
+        const qv = document.getElementById('quietValue');
+        if (qv) qv.innerHTML = `<span class="quiet-info">до ${d}</span><button class="quiet-reset-btn" id="quietResetBtn">Сбросить</button>`;
+        document.getElementById('quietResetBtn').addEventListener('click', async () => {
+          await api('POST', '/api/quiet', { until: null });
+          settingsData.quiet_until = null;
+          const qv2 = document.getElementById('quietValue');
+          if (qv2) qv2.innerHTML = `<div class="quiet-set-row"><input type="date" class="quiet-date-input" id="quietDateInput"><button class="quiet-set-btn" id="quietSetBtn">Включить</button></div>`;
+          bindQuietSetBtn();
+        });
+      });
+    }
+  }
 
   // ── Init ──────────────────────────────────────────────────────────────
 
