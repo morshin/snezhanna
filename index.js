@@ -13,7 +13,8 @@ const state = require('./lib/state');
 const db = require('./lib/db');
 const google = require('./lib/google');
 const whisper = require('./lib/whisper');
-const { getAvailableTools, executeTool } = require('./lib/tools');
+const { getAvailableTools, executeTool, setContext: setToolsContext } = require('./lib/tools');
+const briefing = require('./lib/briefing');
 const yadiskDirs = require('./lib/yadisk-dirs');
 const vision = require('./lib/vision');
 const diskLog = require('./lib/disk-log');
@@ -318,6 +319,7 @@ const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, { polling: true });
 const ALLOWED = process.env.TELEGRAM_ALLOWED_USER_ID.replace('@', '');
 
 let appState = state.load();
+setToolsContext(appState, state.save);
 
 function isAllowed(msg) {
   const { id, username } = msg.from || {};
@@ -361,6 +363,23 @@ bot.on('message', async (msg) => {
     console.log('[Snezhanna] Saved chatId:', appState.chatId);
   }
 
+  // Track last user activity + return-from-silence digest
+  {
+    const prevSilenceDays = appState.silenceDaysCount || 0;
+    appState.lastUserMessageAt = new Date().toISOString();
+    if (prevSilenceDays >= 3) {
+      appState.silenceDaysCount = 0;
+      appState.silenceLevel = 0;
+      state.save(appState);
+      // Send comeback digest (fire-and-forget, don't block message handler)
+      sendComebackDigest(msg.chat.id, prevSilenceDays).catch(e =>
+        console.error('[Briefing] comeback digest error:', e.message)
+      );
+    } else {
+      state.save(appState);
+    }
+  }
+
   // Send delayed startup message
   if (pendingStartup) {
     pendingStartup = false;
@@ -402,6 +421,55 @@ bot.on('message', async (msg) => {
         const gcal = google.isAuthorized() ? '✅' : '❌ нет авторизации';
         await bot.sendMessage(chatId, `📊 Статус:\n• Google: ${gcal}\n• Claude: ✅\n• Я работаю 🟢`);
         return;
+      }
+
+      // ── /quiet — vacation mode ──
+      if (userText.startsWith('/quiet')) {
+        const arg = userText.slice(6).trim();
+        const days = arg === '' ? 3 : parseInt(arg, 10);
+        if (!isNaN(days) && days >= 0 && days <= 30) {
+          if (days === 0) {
+            appState.quietUntil = null;
+            state.save(appState);
+            await bot.sendMessage(chatId, 'Вернулась! 👋');
+          } else {
+            appState.quietUntil = new Date(Date.now() + days * 86400000).toISOString();
+            appState.silenceDaysCount = 0;
+            appState.silenceLevel = 0;
+            state.save(appState);
+            const untilStr = new Date(appState.quietUntil).toLocaleDateString('ru-RU', {
+              day: 'numeric', month: 'long', timeZone: config.timezone
+            });
+            await bot.sendMessage(chatId, `Ок, ухожу в тишину до ${untilStr}. Хард-алерты (встречи, дедлайны) продолжу слать 🤫`);
+          }
+        } else {
+          await bot.sendMessage(chatId, 'Использование: /quiet [N дней, 0–30]. По умолчанию 3 дня. /quiet 0 — отмена.');
+        }
+        return;
+      }
+
+      // ── Briefing reply detection ──
+      if (appState.briefingPending) {
+        const elapsed = Date.now() - new Date(appState.briefingPendingAt).getTime();
+        if (elapsed < 8 * 60 * 60 * 1000) {
+          const POSITIVE_REPLIES = ['да', 'ага', 'го', 'давай', 'готов', 'yes', 'yep', 'ok', 'ок', 'конечно', 'погнали', '+', '👍'];
+          const normalized = userText.trim().toLowerCase();
+          if (POSITIVE_REPLIES.includes(normalized)) {
+            appState.briefingPending = false;
+            appState.briefingPendingAt = null;
+            appState.silenceDaysCount = 0;
+            appState.silenceLevel = 0;
+            state.save(appState);
+            await sendMorningBriefingFull(chatId);
+            return;
+          }
+          // Not a positive reply — fall through to normal Claude processing
+        } else {
+          // Expired
+          appState.briefingPending = false;
+          appState.briefingPendingAt = null;
+          state.save(appState);
+        }
       }
 
       // ── Workload check-in intercept ──
@@ -842,30 +910,25 @@ function formatTasksForBriefing(taskList) {
     .join('\n\n');
 }
 
-// ── Scheduled tasks ───────────────────────────────────────────────────────────
+// ── Briefing helpers ──────────────────────────────────────────────────────────
 
-function setupSchedules() {
-  // Morning briefing — 08:00 Madrid
-  cron.schedule('0 8 * * *', async () => {
-    if (!appState.chatId) return;
-    console.log('[Schedule] morning_briefing fired');
-    try {
-      let eventsText = '• Событий нет';
-      if (google.isAuthorized()) {
-        const events = await google.getCalendarEvents(1);
-        if (events.length > 0) {
-          eventsText = events.map(e => `• ${e.summary} (${formatEventTime(e)})`).join('\n');
-        }
-      }
-      let tasksText = '• Задач нет';
-      try {
-        const todayTasks = await tasksMerge.getTodayTasksWithGithub(2, { wideGithubWindow: true });
-        tasksText = formatTasksForBriefing(todayTasks);
-      } catch (e) {
-        console.error('[Schedule] Failed to load tasks for briefing:', e.message);
-      }
+async function sendMorningBriefingFull(chatId) {
+  let eventsText = '• Событий нет';
+  if (google.isAuthorized()) {
+    const events = await google.getCalendarEvents(1);
+    if (events.length > 0) {
+      eventsText = events.map(e => `• ${e.summary} (${formatEventTime(e)})`).join('\n');
+    }
+  }
+  let tasksText = '• Задач нет';
+  try {
+    const todayTasks = await tasksMerge.getTodayTasksWithGithub(2, { wideGithubWindow: true });
+    tasksText = formatTasksForBriefing(todayTasks);
+  } catch (e) {
+    console.error('[Briefing] Failed to load tasks:', e.message);
+  }
 
-      const prompt = `Составь утренний брифинг для Вовочки. Сегодня ${todayStr()}.
+  const prompt = `Составь утренний брифинг для Вовочки. Сегодня ${todayStr()}.
 События в Calendar:
 ${eventsText}
 
@@ -873,42 +936,135 @@ ${eventsText}
 ${tasksText}
 
 Кратко прокомментируй день и выдели 1-2 самые важные вещи. Будь живым и тёплым.`;
-      let briefingText = await askClaudeOneShot(prompt);
+  let briefingText = await askClaudeOneShot(prompt);
 
-      // Overload coach block (only when last score ≤ 5)
-      try {
-        const lastScore = workload.getLastScore();
-        if (lastScore !== null && lastScore <= 5) {
-          let todayEvents = [];
-          let tomorrowEvents = [];
-          if (google.isAuthorized()) {
-            const allEvents = await google.getCalendarEvents(2);
-            const todayDate = new Date().toLocaleDateString('sv-SE', { timeZone: config.timezone });
-            const tmrw = new Date();
-            tmrw.setDate(tmrw.getDate() + 1);
-            const tmrwDate = tmrw.toLocaleDateString('sv-SE', { timeZone: config.timezone });
-            todayEvents = allEvents.filter(e => {
-              const d = new Date(e.start.dateTime || e.start.date);
-              return d.toLocaleDateString('sv-SE', { timeZone: config.timezone }) === todayDate;
-            });
-            tomorrowEvents = allEvents.filter(e => {
-              const d = new Date(e.start.dateTime || e.start.date);
-              return d.toLocaleDateString('sv-SE', { timeZone: config.timezone }) === tmrwDate;
-            });
-          }
-          let openTasks = [];
-          try { openTasks = await tasksMerge.getTodayTasksWithGithub(2, { wideGithubWindow: true }); } catch (_) {}
-          const overloadBlock = await workload.buildOverloadBlock(lastScore, todayEvents, tomorrowEvents, openTasks);
-          if (overloadBlock) {
-            briefingText += '\n\n---\n\n' + overloadBlock;
-          }
+  // Overload coach block (only when last score ≤ 5)
+  try {
+    const lastScore = workload.getLastScore();
+    if (lastScore !== null && lastScore <= 5) {
+      let todayEvents = [];
+      let tomorrowEvents = [];
+      if (google.isAuthorized()) {
+        const allEvents = await google.getCalendarEvents(2);
+        const todayDate = new Date().toLocaleDateString('sv-SE', { timeZone: config.timezone });
+        const tmrw = new Date();
+        tmrw.setDate(tmrw.getDate() + 1);
+        const tmrwDate = tmrw.toLocaleDateString('sv-SE', { timeZone: config.timezone });
+        todayEvents = allEvents.filter(e => {
+          const d = new Date(e.start.dateTime || e.start.date);
+          return d.toLocaleDateString('sv-SE', { timeZone: config.timezone }) === todayDate;
+        });
+        tomorrowEvents = allEvents.filter(e => {
+          const d = new Date(e.start.dateTime || e.start.date);
+          return d.toLocaleDateString('sv-SE', { timeZone: config.timezone }) === tmrwDate;
+        });
+      }
+      let openTasks = [];
+      try { openTasks = await tasksMerge.getTodayTasksWithGithub(2, { wideGithubWindow: true }); } catch (_) {}
+      const overloadBlock = await workload.buildOverloadBlock(lastScore, todayEvents, tomorrowEvents, openTasks);
+      if (overloadBlock) briefingText += '\n\n---\n\n' + overloadBlock;
+    }
+  } catch (e) {
+    console.error('[Briefing] overload_block error:', e.message);
+  }
+
+  await bot.sendMessage(chatId, briefingText);
+  console.log('[Briefing] full briefing sent');
+}
+
+async function sendComebackDigest(chatId, daysAway) {
+  const config_tz = config.timezone;
+  const todayStr_ = new Date().toLocaleDateString('sv-SE', { timeZone: config_tz });
+
+  const overdueTasks = [];
+  try {
+    const all = tasks.getTodayTasks(0);
+    all.filter(t => t.due_date && t.due_date < todayStr_).forEach(t => overdueTasks.push(t));
+  } catch (_) {}
+
+  let pastEvents = [];
+  try {
+    if (google.isAuthorized()) {
+      const from = new Date();
+      from.setDate(from.getDate() - daysAway);
+      // getCalendarEvents fetches from today; use getCalendarEvents(0) for today only
+      // For past events we assemble manually via a wider call and filter
+      const wider = await google.getCalendarEvents(0);
+      pastEvents = wider.filter(e => {
+        const d = new Date(e.start.dateTime || e.start.date);
+        return d < new Date();
+      });
+    }
+  } catch (_) {}
+
+  if (overdueTasks.length === 0 && pastEvents.length === 0) return;
+
+  const lines = [`Вов, тебя не было ${daysAway} дн. Вот что накопилось:\n`];
+  if (overdueTasks.length > 0) {
+    lines.push('📋 Просроченные задачи:');
+    overdueTasks.forEach(t => lines.push(`• ${t.title}${t.due_date ? ' (до ' + t.due_date + ')' : ''}`));
+  }
+  if (pastEvents.length > 0) {
+    lines.push('\n📅 Пропущенные события:');
+    pastEvents.slice(0, 10).forEach(e => lines.push(`• ${e.summary} (${formatEventTime(e)})`));
+  }
+  await bot.sendMessage(chatId, lines.join('\n'));
+}
+
+// ── Scheduled tasks ───────────────────────────────────────────────────────────
+
+// In-memory set of deadline task IDs already alerted today (cleared at midnight)
+const alertedDeadlines = new Set();
+
+function setupSchedules() {
+  // Morning briefing — 08:00 Madrid (conversational gate)
+  cron.schedule('0 8 * * *', async () => {
+    if (!appState.chatId) return;
+    console.log('[Schedule] morning_briefing fired');
+    try {
+      // Step 1 — vacation mode
+      if (appState.quietUntil) {
+        if (new Date() < new Date(appState.quietUntil)) {
+          console.log('[Schedule] morning_briefing: quiet mode active, skipping');
+          return;
         }
-      } catch (e) {
-        console.error('[Schedule] overload_block error:', e.message);
+        appState.quietUntil = null;
+        state.save(appState);
       }
 
-      await sendToVova(briefingText);
-      console.log('[Schedule] morning_briefing done');
+      // Step 2 — silence level
+      appState.silenceLevel = briefing.computeSilenceLevel(appState.silenceDaysCount || 0);
+      if (appState.silenceLevel === 2) {
+        console.log('[Schedule] morning_briefing: silenceLevel=2, skipping');
+        return;
+      }
+      if (appState.silenceLevel === 1 && new Date().getDate() % 2 === 0) {
+        console.log('[Schedule] morning_briefing: silenceLevel=1, even day, skipping');
+        return;
+      }
+
+      // Step 3 — was pending from yesterday (ignored)
+      if (appState.briefingPending) {
+        appState.silenceDaysCount = (appState.silenceDaysCount || 0) + 1;
+        appState.briefingPending = false;
+        appState.briefingPendingAt = null;
+        state.save(appState);
+        console.log('[Schedule] morning_briefing: previous question was ignored, silenceDays=', appState.silenceDaysCount);
+      }
+
+      // Step 4 — value check
+      const hasContent = await briefing.hasSomethingToSay();
+      if (!hasContent) {
+        console.log('[Schedule] morning_briefing: nothing to say, skipping');
+        return;
+      }
+
+      // Step 5 — send the prompt question
+      await sendToVova('Доброе утро! Как дела? Готов к брифингу? 🌅');
+      appState.briefingPending = true;
+      appState.briefingPendingAt = new Date().toISOString();
+      state.save(appState);
+      console.log('[Schedule] morning_briefing: prompt question sent');
     } catch (e) {
       console.error('[Schedule] morning_briefing error:', e.message);
     }
@@ -917,6 +1073,8 @@ ${tasksText}
   // Evening check-in — 19:00 Madrid
   cron.schedule('0 19 * * *', async () => {
     if (!appState.chatId) return;
+    if ((appState.silenceLevel || 0) >= 1) return;
+    if (appState.quietUntil && new Date() < new Date(appState.quietUntil)) return;
     console.log('[Schedule] evening_checkin fired');
     try {
       let eventsText = '• Событий нет';
@@ -1063,26 +1221,49 @@ ${chatSection}`;
   // Calendar reminders — check every 10 min
   const notifiedEvents = new Set();
   cron.schedule('*/10 * * * *', async () => {
-    if (!appState.chatId || !google.isAuthorized()) return;
-    try {
-      const events = await google.getUpcomingEvents(40);
-      const now = Date.now();
-      for (const event of events) {
-        if (!event.start.dateTime) continue;
-        const eventTime = new Date(event.start.dateTime).getTime();
-        const minutesUntil = (eventTime - now) / 60000;
-        if (minutesUntil >= 28 && minutesUntil <= 32 && !notifiedEvents.has(event.id)) {
-          notifiedEvents.add(event.id);
-          const timeStr = new Date(event.start.dateTime).toLocaleTimeString('ru-RU', {
-            hour: '2-digit', minute: '2-digit', timeZone: config.timezone
-          });
-          await sendToVova(`📅 Вовик, через 30 минут: *${event.summary}* в ${timeStr}`, { parse_mode: 'Markdown' });
+    if (!appState.chatId) return;
+
+    // Calendar reminders (always, bypass silence/vacation)
+    if (google.isAuthorized()) {
+      try {
+        const events = await google.getUpcomingEvents(40);
+        const now = Date.now();
+        for (const event of events) {
+          if (!event.start.dateTime) continue;
+          const eventTime = new Date(event.start.dateTime).getTime();
+          const minutesUntil = (eventTime - now) / 60000;
+          if (minutesUntil >= 28 && minutesUntil <= 32 && !notifiedEvents.has(event.id)) {
+            notifiedEvents.add(event.id);
+            const timeStr = new Date(event.start.dateTime).toLocaleTimeString('ru-RU', {
+              hour: '2-digit', minute: '2-digit', timeZone: config.timezone
+            });
+            await sendToVova(`📅 Вовик, через 30 минут: *${event.summary}* в ${timeStr}`, { parse_mode: 'Markdown' });
+          }
         }
+      } catch (e) {
+        console.error('[Schedule] calendar_reminder error:', e.message);
+      }
+    }
+
+    // Deadline alerts — hard alerts, bypass silence/vacation
+    try {
+      const todayStr_ = new Date().toLocaleDateString('sv-SE', { timeZone: config.timezone });
+      const dueTodayTasks = tasks.getTodayTasks(0).filter(t =>
+        t.due_date === todayStr_ && !alertedDeadlines.has(t.id)
+      );
+      for (const t of dueTodayTasks) {
+        alertedDeadlines.add(t.id);
+        await sendToVova(`📋 Вов, сегодня дедлайн: *${t.title}*`, { parse_mode: 'Markdown' });
       }
     } catch (e) {
-      console.error('[Schedule] calendar_reminder error:', e.message);
+      console.error('[Schedule] deadline_alert error:', e.message);
     }
   });
+
+  // Clear alerted deadlines at midnight
+  cron.schedule('0 0 * * *', () => {
+    alertedDeadlines.clear();
+  }, { timezone: config.timezone });
 
   // Email check — every 30 minutes
   const MAX_EMAIL_DIGEST_SEEN = 2000;
@@ -1115,10 +1296,25 @@ ${chatSection}`;
 
       console.log(`[Schedule] email_check: ${newMessages.length} new unread email(s)`);
 
+      // Hard-alert emails requiring reply — always send regardless of silence/vacation
+      for (const m of newMessages) {
+        if (briefing.looksLikeReplyRequest(m)) {
+          await sendToVova(`📬 Вов, похоже нужен ответ: *${m.subject || '(без темы)'}* — от ${m.from || '?'}`, { parse_mode: 'Markdown' });
+          seenEmailIds.add(m.id);
+        }
+      }
+      persistEmailDigestSeen(seenEmailIds);
+
+      // Regular digest — only at silenceLevel 0
+      if ((appState.silenceLevel || 0) >= 1) {
+        console.log('[Schedule] email_check: silenceLevel>=1, skipping regular digest');
+        return;
+      }
+
       // Полный текст (getMessageById помечает как прочитанное). ID в seen — только после успешной загрузки,
       // иначе следующий тик повторит попытку.
       const fullMessages = [];
-      for (const m of newMessages.slice(0, 10)) {
+      for (const m of newMessages.filter(m => !seenEmailIds.has(m.id)).slice(0, 10)) {
         try {
           const full = await google.getMessageById(m.id);
           fullMessages.push(full);

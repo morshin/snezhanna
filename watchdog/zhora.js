@@ -121,7 +121,15 @@ async function checkTelegramApi() {
   });
 }
 
+// Yandex Disk goes through nightly maintenance ~01:00–04:00 UTC; skip alerts during that window
+function isNightMaintenanceWindow() {
+  const h = new Date().getUTCHours();
+  return h >= 1 && h < 5;
+}
+
 async function checkMounts() {
+  if (isNightMaintenanceWindow()) return true;
+
   const mounts = [
     { path: '/mnt/yadisk-readonly', name: 'yadisk-readonly' },
     { path: '/mnt/yadisk-agent', name: 'yadisk-agent' }
