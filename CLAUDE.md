@@ -59,7 +59,7 @@ node lib/indexer.js --incremental # incremental update
 - Morning briefing time is controlled by `settings.get('briefing_time')` (default 08:00); changing it via Mini App or chat calls `rescheduleBriefing(newTime)` which stops the old cron job and creates a new one.
 - On startup: initialises SQLite DB (`lib/db.js`, creates `data/snezhanna.db` if missing), calls `yadiskDirs.ensureDirs()` to create any missing agent subdirs (`index/`, `memory/`, `fitness/`, `drafts/`, `digests/`, `backups/`), then starts the Mini App HTTP API server (`lib/api.js`) on the port from `config.mini_app.port` (default 3001)
 - Task and project storage: local SQLite (`data/snezhanna.db`) via `better-sqlite3` (synchronous). Tasks have subtasks (`parent_id`) and dependencies (`task_deps` table). New tools: `add_task_dependency`, `get_task_with_subtasks`. Daily DB backup to `/mnt/yadisk-agent/backups/snezhanna_YYYYMMDD.db` at 03:30 (keep 7).
-- Scheduled tasks via `node-cron`: morning briefing gate (08:00), workload weekly check-in (Monday 09:00), evening check-in (19:00), weekly digest (Sunday 10:00), calendar reminders every 10 min (fires at 30-min mark), deadline alerts every 10 min, DB backup (03:30)
+- Scheduled tasks via `node-cron`: morning briefing gate (08:00), workload weekly check-in (Monday 09:00), evening check-in (19:00), weekly digest (Sunday 10:00), calendar reminders every 10 min (fires at 30-min mark), deadline alerts every 10 min, email poll (interval from `settings.email_poll_interval`, default 30 min, reschedules dynamically), DB backup (03:30)
 - Conversational briefing (TZ-1): morning cron sends "Готов к брифингу?" only if `hasSomethingToSay()` returns true; waits for positive reply (up to 8 h) before sending full briefing; silence tracking (`silenceDaysCount` / `silenceLevel` 0–2) reduces frequency after 3+ ignored days; vacation mode via `/quiet [N]` command or `set_quiet_mode` tool (`quietUntil` ISO timestamp); comeback digest sent on first message after 3+ silent days; hard alerts (calendar reminders, deadline alerts, email reply-request alerts) bypass silence/vacation; evening check-in suppressed at silenceLevel ≥ 1
 - Workload & Wellbeing scoring: weekly life-balance score (0–10) across 4 domains (work, family, health, personal). Monday 09:00 check-in collects self-reported data, then `lib/workload.js` aggregates Calendar/Gmail/Tasks/Strava data and runs a standalone Claude scoring call. Morning briefing appends an overload coach block when score ≤ 5. On-demand via phrases like "мой скор", "как я справляюсь". History persisted to `/mnt/yadisk-agent/workload-history.json` (last 12 weeks)
 - Evening check-in includes a summary of all Yandex Disk write operations logged during the day (via `lib/disk-log.js`); log is cleared after sending
@@ -102,7 +102,10 @@ node lib/indexer.js --incremental # incremental update
 | File | Purpose |
 |------|---------|
 | `index.js` | Main bot entrypoint |
-| `lib/google.js` | Google Calendar + Gmail via googleapis OAuth2 |
+| `lib/google.js` | Google Calendar + Gmail via googleapis OAuth2; Gmail thin-wrappers delegate to `lib/gmail.js` |
+| `lib/gmail.js` | Gmail API adapter (credentials-based, no file I/O); unified message format; functions: `getMessages`, `getMessage`, `createDraft`, `sendMessage`, `markAsRead`, `getAttachment` |
+| `lib/imap.js` | IMAP/SMTP adapter using `imap`, `mailparser`, `nodemailer`; auto-detects Office 365; functions: `getMessages`, `getMessage`, `createDraft` (IMAP APPEND), `sendMessage` (nodemailer), `markAsRead` |
+| `lib/mail-manager.js` | Multi-account email coordinator; `pollAll()` dispatches to gmail/imap adapters, bootstraps new accounts (seeds seen IDs without digest on first poll), categorizes messages, detects subprojects; `buildEmailDigest()` formats per-account digest; seen tracking in SQLite `email_seen` table |
 | `lib/whisper.js` | OpenAI Whisper transcription + TTS (language param: `'ru'` default, `'es'` for Max) |
 | `lib/vision.js` | Shared photo handler: download from Telegram, base64 encode, build Claude image blocks |
 | `lib/reply-chain.js` | Shared reply context builder: extracts `reply_to_message` / `quote` from Telegram messages, walks reply chains via `message_id` in history, formats context block prepended to user messages |
@@ -112,7 +115,7 @@ node lib/indexer.js --incremental # incremental update
 | `lib/workload-scoring-prompt.md` | System prompt for the workload scoring Claude call (JSON output schema, domain weights, tone rules) |
 | `lib/briefing-overload-prompt.md` | System prompt for the morning briefing overload coach block |
 | `docs/snezhanna-workload-scoring-tz.md` | Technical specification for the Workload & Wellbeing Scoring feature |
-| `lib/db.js` | better-sqlite3 init, WAL mode, schema (tasks, projects, project_log, project_notes, project_docs, task_deps, project_params, project_history, contacts, project_contacts, workload_history, memory, file_index); exports `{ db, getProject, getProjectById, listProjects, upsertProjectParam, getProjectParam, backup }` |
+| `lib/db.js` | better-sqlite3 init, WAL mode, schema (tasks, projects, project_log, project_notes, project_docs, task_deps, project_params, project_history, contacts, project_contacts, workload_history, memory, file_index, email_accounts, email_seen); exports `{ db, getProject, getProjectById, listProjects, upsertProjectParam, getProjectParam, backup }` |
 | `lib/indexer.js` | Walk Yandex Disk and build JSON file index |
 | `lib/yadisk-dirs.js` | Ensure agent subdirs exist; project CRUD backed by SQLite (`create_project`, `list_projects`, `read_project_file`, `write_project_file`) and project docs (`list_project_docs`, `read_project_doc`, `write_project_doc`); `saveFile()` still writes to Yandex.Disk |
 | `lib/github.js` | GitHub Milestones: open milestones with `due_on` in the configured window (`github.milestone_due_within_days`, default 14 calendar days in `timezone`, including overdue); used in workload scoring, morning briefing, Mini App API |
@@ -120,7 +123,7 @@ node lib/indexer.js --incremental # incremental update
 | `scripts/migrate-memory-workload.js` | One-time migration: memory/*.md + workload-history.json → SQLite; `--dry-run` available |
 | `data/snezhanna.db` | SQLite database (gitignored) — tasks, projects, docs, logs |
 | `lib/settings.js` | Key-value user settings in SQLite `user_settings`; `get(key)`, `set(key,val)`, `getAll()`, `getSystemPromptBlock()` (injected into every Claude system prompt) |
-| `lib/api.js` | HTTP API server for Mini App; validates Telegram initData, serves static files from `mini-app/`, exposes task CRUD + calendar + settings/chats/projects/contacts CRUD + `GET /api/github/milestones` |
+| `lib/api.js` | HTTP API server for Mini App; validates Telegram initData, serves static files from `mini-app/`, exposes task CRUD + calendar + settings/chats/projects/contacts/email-accounts CRUD + `GET /api/github/milestones` |
 | `mini-app/index.html` | Telegram Mini App frontend — Tasks + Calendar + Settings (gear icon → full-screen modal) single-file HTML/JS/CSS |
 | `lib/disk-log.js` | In-memory log of Yandex Disk write operations; flushed after evening check-in |
 | `identity/IDENTITY.md` | Snezhanna's system prompt (personality, capabilities, prompt injection defense) |

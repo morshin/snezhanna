@@ -260,6 +260,38 @@ function migrateChats() {
   return count;
 }
 
+function migrateGmailAccount() {
+  const TOKEN_FILE = path.join(__dirname, '../token.json');
+  const CREDS_FILE = path.join(__dirname, '../credentials.json');
+  if (!fs.existsSync(TOKEN_FILE) || !fs.existsSync(CREDS_FILE)) {
+    console.log('[migrate] token.json or credentials.json not found, skipping Gmail account migration');
+    return 0;
+  }
+  const existing = db.prepare("SELECT id FROM email_accounts WHERE type = 'gmail'").get();
+  if (existing) {
+    console.log('[migrate] Gmail account already in email_accounts, skipping');
+    return 0;
+  }
+  const token = JSON.parse(fs.readFileSync(TOKEN_FILE, 'utf8'));
+  const raw = JSON.parse(fs.readFileSync(CREDS_FILE, 'utf8'));
+  const creds = raw.installed || raw.web;
+  const credentials = JSON.stringify({
+    client_id: creds.client_id,
+    client_secret: creds.client_secret,
+    redirect_uri: creds.redirect_uris[0],
+    ...token
+  });
+  if (DRY_RUN) {
+    console.log('[migrate] [dry] Gmail account: primary Gmail from token.json');
+    return 1;
+  }
+  db.prepare(
+    "INSERT OR IGNORE INTO email_accounts (label, email, type, account_type, enabled, bootstrapped, credentials) VALUES (?, ?, 'gmail', 'personal', 1, 0, ?)"
+  ).run('Gmail (основная)', process.env.GMAIL_EMAIL || 'gmail', credentials);
+  console.log('[migrate] Gmail account migrated from token.json');
+  return 1;
+}
+
 // ── Execute ───────────────────────────────────────────────────────────────────
 
 console.log('[migrate] Starting migration...');
@@ -294,12 +326,14 @@ try {
   })() : migrate();
 
   const chatsMigrated = migrateChats();
+  const gmailMigrated = migrateGmailAccount();
 
   console.log('');
   console.log(`[migrate] Done!`);
   console.log(`  Projects: ${result.projectsMigrated}`);
   console.log(`  Tasks:    ${result.tasksMigrated}`);
   console.log(`  Chats:    ${chatsMigrated}`);
+  console.log(`  Gmail:    ${gmailMigrated}`);
   if (!DRY_RUN) {
     console.log('');
     console.log('[migrate] Old JSON files are preserved. Delete manually after verifying the migration.');

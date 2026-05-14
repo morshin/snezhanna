@@ -1645,6 +1645,7 @@
   let chatsData = [];
   let projectsData = [];
   let contactsData = [];
+  let emailAccountsData = [];
 
   function openSettings() {
     document.querySelectorAll('.bottom-tab').forEach(t => t.classList.remove('active'));
@@ -1667,16 +1668,18 @@
   async function loadSettingsData() {
     document.getElementById('settingsModalBody').innerHTML = '<div class="loading"><div class="spinner"></div></div>';
     try {
-      const [sRes, cRes, pRes, ctRes] = await Promise.all([
+      const [sRes, cRes, pRes, ctRes, eRes] = await Promise.all([
         api('GET', '/api/settings'),
         api('GET', '/api/chats'),
         api('GET', '/api/projects'),
-        api('GET', '/api/contacts')
+        api('GET', '/api/contacts'),
+        api('GET', '/api/email-accounts')
       ]);
       settingsData = sRes;
       chatsData = cRes.chats || [];
       projectsData = pRes.projects || [];
       contactsData = ctRes.contacts || [];
+      emailAccountsData = eRes.accounts || [];
       renderSettings();
     } catch (e) {
       document.getElementById('settingsModalBody').innerHTML = '<div class="empty-state"><div class="text">Ошибка загрузки</div></div>';
@@ -1783,6 +1786,38 @@
             <button class="email-seg-btn ${s.email_poll_interval === '60' ? 'active' : ''}" data-key="email_poll_interval" data-value="60">60 мин</button>
           </div>
         </div>
+      </div>
+    </div>`;
+
+    // ── ПОЧТА ──
+    html += `<div class="settings-section">
+      <div class="settings-section-title">Почтовые ящики</div>
+    </div>
+    <div class="settings-list" id="emailAccountsList">`;
+    for (const a of emailAccountsData) {
+      html += `<div class="settings-list-item" data-email-id="${a.id}">
+        <div class="settings-list-item-text">
+          <div class="settings-list-item-title">${esc(a.label)}</div>
+          <div class="settings-list-item-sub">${esc(a.email)} · ${a.type} · ${a.account_type}${a.enabled ? '' : ' · отключён'}</div>
+        </div>
+        <button class="settings-toggle-btn ${a.enabled ? 'on' : ''}" data-toggle-email="${a.id}" style="margin-right:8px"></button>
+        <button class="settings-del-btn" data-del-email="${a.id}">✕</button>
+      </div>`;
+    }
+    if (emailAccountsData.length === 0) html += '<div style="padding:10px 16px;font-size:14px;color:var(--tg-theme-hint-color,#999)">Нет почтовых ящиков</div>';
+    html += `</div>
+    <button class="settings-add-btn" id="addEmailBtn">＋ Добавить ящик</button>
+    <div class="settings-inline-form" id="addEmailForm">
+      <input class="settings-inline-input" id="addEmailLabel" placeholder="Название (Работа, Личная...)">
+      <input class="settings-inline-input" id="addEmailAddr" placeholder="Email адрес" type="email">
+      <select class="settings-inline-input" id="addEmailType" style="background:var(--tg-theme-bg-color,#fff);color:var(--tg-theme-text-color,#000)">
+        <option value="gmail">Gmail (OAuth)</option>
+        <option value="imap">IMAP</option>
+      </select>
+      <div style="font-size:12px;color:var(--tg-theme-hint-color,#999);padding:4px 0">Учётные данные настраиваются через бота командой /auth</div>
+      <div class="settings-form-btns">
+        <button class="settings-form-btn secondary" id="addEmailCancel">Отмена</button>
+        <button class="settings-form-btn primary" id="addEmailSave">Добавить</button>
       </div>
     </div>`;
 
@@ -1956,6 +1991,38 @@
       });
     }
     bindQuietSetBtn();
+
+    // Email accounts
+    document.getElementById('addEmailBtn').addEventListener('click', () => {
+      document.getElementById('addEmailForm').classList.toggle('open');
+    });
+    document.getElementById('addEmailCancel').addEventListener('click', () => {
+      document.getElementById('addEmailForm').classList.remove('open');
+    });
+    document.getElementById('addEmailSave').addEventListener('click', async () => {
+      const label = document.getElementById('addEmailLabel').value.trim();
+      const email = document.getElementById('addEmailAddr').value.trim();
+      const type = document.getElementById('addEmailType').value;
+      if (!label || !email) return;
+      await api('POST', '/api/email-accounts', { label, email, type });
+      loadSettingsData();
+    });
+    body.querySelectorAll('[data-del-email]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const id = btn.dataset.delEmail;
+        if (!confirm('Удалить ящик?')) return;
+        await api('DELETE', `/api/email-accounts/${id}`);
+        loadSettingsData();
+      });
+    });
+    body.querySelectorAll('[data-toggle-email]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const id = btn.dataset.toggleEmail;
+        const isOn = btn.classList.contains('on');
+        await api('PATCH', `/api/email-accounts/${id}`, { enabled: isOn ? 0 : 1 });
+        loadSettingsData();
+      });
+    });
 
     // Chats
     document.getElementById('addChatBtn').addEventListener('click', () => {

@@ -27,6 +27,7 @@ const workload = require('./lib/workload');
 const { logTokens } = require('./lib/token-log');
 const { buildReplyContext } = require('./lib/reply-chain');
 const { start: apiStart, setApiContext } = require('./lib/api');
+const mailManager = require('./lib/mail-manager');
 
 // ── Config & Identity ─────────────────────────────────────────────────────────
 
@@ -329,7 +330,57 @@ function rescheduleBriefing(timeStr) {
   console.log(`[Schedule] Briefing rescheduled to ${timeStr}`);
 }
 
-setToolsContext(appState, state.save, rescheduleBriefing);
+let emailCronJob = null;
+
+async function runEmailPoll() {
+  if (!appState.chatId) return;
+  try {
+    const results = await mailManager.pollAll();
+    for (const { account, messages, error } of results) {
+      if (error) {
+        console.error(`[Schedule] email_poll: error for ${account.email}: ${error}`);
+        continue;
+      }
+      if (messages.length === 0) continue;
+
+      console.log(`[Schedule] email_poll: ${messages.length} new message(s) from ${account.email}`);
+
+      // Hard-alert emails requiring reply — bypass silence/vacation
+      for (const m of messages) {
+        if (briefing.looksLikeReplyRequest(m)) {
+          await sendToVova(`📬 Похоже нужен ответ: *${m.subject || '(без темы)'}* — от ${m.from || '?'} (${account.label})`, { parse_mode: 'Markdown' });
+        }
+      }
+
+      // Regular digest — only at silenceLevel 0
+      if ((appState.silenceLevel || 0) >= 1) {
+        console.log('[Schedule] email_poll: silenceLevel>=1, skipping digest');
+        continue;
+      }
+
+      const digestText = mailManager.buildEmailDigest(account, messages);
+      if (!digestText) continue;
+
+      const prompt = `Пришли новые письма. Вот дайджест:\n\n${digestText}\n\nПроанализируй и скажи Вове что важного пришло и что нужно сделать. Кратко.`;
+      const reply = await askClaudeOneShot(prompt);
+      await sendToVova(reply);
+    }
+  } catch (e) {
+    console.error('[Schedule] email_poll error:', e.message);
+  }
+}
+
+function scheduleEmailPoll(intervalMin) {
+  if (emailCronJob) emailCronJob.stop();
+  emailCronJob = cron.schedule(`*/${intervalMin} * * * *`, runEmailPoll, { timezone: config.timezone });
+  console.log(`[Schedule] Email poll scheduled every ${intervalMin} min`);
+}
+
+function rescheduleEmailPoll(intervalMin) {
+  scheduleEmailPoll(intervalMin);
+}
+
+setToolsContext(appState, state.save, rescheduleBriefing, rescheduleEmailPoll);
 
 function isAllowed(msg) {
   const { id, username } = msg.from || {};
@@ -1279,89 +1330,9 @@ ${chatSection}`;
     alertedDeadlines.clear();
   }, { timezone: config.timezone });
 
-  // Email check — every 30 minutes
-  const MAX_EMAIL_DIGEST_SEEN = 2000;
-  function trimEmailDigestSeenIds(ids) {
-    if (ids.length <= MAX_EMAIL_DIGEST_SEEN) return ids;
-    return ids.slice(ids.length - MAX_EMAIL_DIGEST_SEEN);
-  }
-  function persistEmailDigestSeen(seenSet) {
-    appState.emailDigestSeenIds = trimEmailDigestSeenIds([...seenSet]);
-    state.save(appState);
-  }
-
-  cron.schedule('*/30 * * * *', async () => {
-    if (!appState.chatId || !google.isAuthorized()) return;
-    try {
-      const messages = await google.getGmailMessages(20, true);
-      const seenEmailIds = new Set(appState.emailDigestSeenIds || []);
-
-      // Только при самой первой установке (пустой state): запоминаем хвост непрочитанного без спама в чат
-      if (!appState.emailDigestBootstrapped) {
-        messages.forEach((m) => seenEmailIds.add(m.id));
-        appState.emailDigestBootstrapped = true;
-        persistEmailDigestSeen(seenEmailIds);
-        console.log(`[Schedule] email_check bootstrap: seeded ${messages.length} existing unread email(s), no digest`);
-        return;
-      }
-
-      const newMessages = messages.filter((m) => !seenEmailIds.has(m.id));
-      if (newMessages.length === 0) return;
-
-      console.log(`[Schedule] email_check: ${newMessages.length} new unread email(s)`);
-
-      // Hard-alert emails requiring reply — always send regardless of silence/vacation
-      for (const m of newMessages) {
-        if (briefing.looksLikeReplyRequest(m)) {
-          await sendToVova(`📬 Вов, похоже нужен ответ: *${m.subject || '(без темы)'}* — от ${m.from || '?'}`, { parse_mode: 'Markdown' });
-          seenEmailIds.add(m.id);
-        }
-      }
-      persistEmailDigestSeen(seenEmailIds);
-
-      // Regular digest — only at silenceLevel 0
-      if ((appState.silenceLevel || 0) >= 1) {
-        console.log('[Schedule] email_check: silenceLevel>=1, skipping regular digest');
-        return;
-      }
-
-      // Полный текст (getMessageById помечает как прочитанное). ID в seen — только после успешной загрузки,
-      // иначе следующий тик повторит попытку.
-      const fullMessages = [];
-      for (const m of newMessages.filter(m => !seenEmailIds.has(m.id)).slice(0, 10)) {
-        try {
-          const full = await google.getMessageById(m.id);
-          fullMessages.push(full);
-          seenEmailIds.add(m.id);
-        } catch (e) {
-          console.error('[Schedule] email_check: failed to get message', m.id, e.message);
-        }
-      }
-
-      if (fullMessages.length === 0) return;
-
-      const emailsText = fullMessages.map((m, i) =>
-        `--- Письмо ${i + 1} ---\nОт: ${m.from}\nКому: ${m.to}\nТема: ${m.subject}\nДата: ${m.date}\n\n${m.body.slice(0, 2000)}`
-      ).join('\n\n');
-
-      const prompt = `Пришли новые письма на почту (${fullMessages.length} шт.). \
-Проанализируй каждое и составь краткий дайджест для Вовы. \
-Для каждого письма укажи:
-- Тип: 📋 Задача / 📅 Событие / 📁 Проектный апдейт / ℹ️ Инфо / 🗑 Спам
-- Суть в 1–2 предложениях
-- Что нужно сделать (если нужно)
-
-Письма, требующие действий, — вынеси первыми. Не добавляй лишней воды.
-
-${emailsText}`;
-
-      const reply = await askClaudeOneShot(prompt);
-      await sendToVova(reply);
-      persistEmailDigestSeen(seenEmailIds);
-    } catch (e) {
-      console.error('[Schedule] email_check error:', e.message);
-    }
-  }, { timezone: config.timezone });
+  // Email poll — interval from settings (default 30 min)
+  const emailInterval = parseInt(settings.get('email_poll_interval') || '30', 10);
+  scheduleEmailPoll(emailInterval);
 
   // Database backup — 03:30 daily (after incremental indexer at 02:00)
   cron.schedule('30 3 * * *', async () => {
@@ -1406,7 +1377,7 @@ async function main() {
 
   yadiskDirs.ensureDirs();
   apiStart();
-  setApiContext(appState, state.save, rescheduleBriefing);
+  setApiContext(appState, state.save, rescheduleBriefing, rescheduleEmailPoll);
   setupSchedules();
 
   if (appState.chatId) {
