@@ -15,9 +15,14 @@ const BALANCE_FILE = path.join(KIDS_DIR, 'balance.json');
 
 function ensureDirs() {
   for (const dir of [KIDS_DIR, SESSIONS_DIR, WEEKLY_DIR]) {
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-      console.log('[Storage] Created dir:', dir);
+    try {
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+        console.log('[Storage] Created dir:', dir);
+      }
+    } catch (e) {
+      // Mount may be temporarily unavailable; Zhora will remount
+      console.error('[Storage] Cannot create dir (mount issue?):', dir, e.message);
     }
   }
 }
