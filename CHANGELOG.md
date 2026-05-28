@@ -11,6 +11,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), [Semantic Vers
 
 ### Added
 
+- **Snezhanna:** Settings Mini App — step-by-step Gmail OAuth guide in email account editor; new API endpoints /api/google/auth-url and /api/google/auth-code; auto-expand new Gmail account after adding (fixes #11)
 - **Snezhanna:** Settings Mini App — toggle to skip briefing and check-in on weekends (fixes #10)
 - **Snezhanna:** Settings Mini App — toggles to enable/disable morning briefing and evening check-in (fixes #9)
 - **Snezhanna:** Multi-account email (TZ-4) — unified inbox across Gmail OAuth and IMAP/Office365 accounts; accounts stored in SQLite `email_accounts`; seen-message tracking via `email_seen` table; bootstrap on first poll; per-account digest with category sections; new tools: `get_email_accounts`, `get_emails`, `read_email`, `read_email_attachment`, `mark_email_read`, `create_draft`, `send_email` (confirmed guard); Mini App ПОЧТА section; dynamic email poll reschedule via `update_my_preferences`

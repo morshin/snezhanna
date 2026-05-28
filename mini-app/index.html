@@ -1646,6 +1646,7 @@
   let projectsData = [];
   let contactsData = [];
   let emailAccountsData = [];
+  let googleAuthorized = false;
 
   function openSettings() {
     document.querySelectorAll('.bottom-tab').forEach(t => t.classList.remove('active'));
@@ -1680,6 +1681,7 @@
       projectsData = pRes.projects || [];
       contactsData = ctRes.contacts || [];
       emailAccountsData = eRes.accounts || [];
+      googleAuthorized = eRes.google_authorized || false;
       renderSettings();
     } catch (e) {
       document.getElementById('settingsModalBody').innerHTML = '<div class="empty-state"><div class="text">Ошибка загрузки</div></div>';
@@ -1856,8 +1858,32 @@
             <input class="settings-inline-input" id="e_smtp_host_${aid}" placeholder="smtp.example.com" value="${escAttr(ci.smtp_host || '')}" style="flex:3">
             <input class="settings-inline-input" id="e_smtp_port_${aid}" placeholder="587" value="${ci.smtp_port || ''}" style="flex:1" type="number">
           </div>
+          ` : googleAuthorized ? `
+          <div style="display:flex;align-items:center;gap:8px;padding:8px 0;color:#34c759;font-size:14px">
+            <span>✓</span><span>Gmail подключён через OAuth</span>
+          </div>
           ` : `
-          <div style="font-size:12px;color:var(--tg-theme-hint-color,#999);padding:4px 0">Gmail авторизуется через OAuth — команда /auth в боте</div>
+          <div style="background:var(--tg-theme-bg-color,#fff);border-radius:10px;padding:12px;margin:8px 0;border:1px solid #ff9500">
+            <div style="font-size:13px;font-weight:600;color:#ff9500;margin-bottom:12px">⚠ Gmail не авторизован</div>
+            <div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:12px">
+              <span style="background:#3390ec;color:#fff;border-radius:50%;min-width:20px;height:20px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700">1</span>
+              <div style="flex:1">
+                <div style="font-size:13px;margin-bottom:6px">Открой страницу авторизации Google</div>
+                <button class="settings-form-btn primary" id="e_gmail_open_${aid}" style="width:100%">Открыть Google →</button>
+              </div>
+            </div>
+            <div style="display:flex;align-items:flex-start;gap:10px">
+              <span style="background:#3390ec;color:#fff;border-radius:50%;min-width:20px;height:20px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700">2</span>
+              <div style="flex:1">
+                <div style="font-size:13px;margin-bottom:6px">Скопируй код из браузера и вставь сюда</div>
+                <div style="display:flex;gap:6px">
+                  <input class="settings-inline-input" id="e_gmail_code_${aid}" placeholder="Код авторизации от Google" style="flex:1;margin:0">
+                  <button class="settings-form-btn primary" id="e_gmail_submit_${aid}" style="flex-shrink:0">Подключить</button>
+                </div>
+                <div id="e_gmail_result_${aid}" style="font-size:12px;margin-top:6px;display:none"></div>
+              </div>
+            </div>
+          </div>
           `}
           <div id="e_test_result_${aid}" style="font-size:13px;padding:4px 0;display:none"></div>
           <div style="display:flex;gap:8px;margin-top:8px">
@@ -1896,7 +1922,7 @@
           <input class="settings-inline-input" id="addEmailSmtpPort" placeholder="587" type="number" style="flex:1">
         </div>
       </div>
-      <div id="addEmailGmailHint" style="font-size:12px;color:var(--tg-theme-hint-color,#999);padding:4px 0">Gmail авторизуется через OAuth — команда /auth в боте</div>
+      <div id="addEmailGmailHint" style="font-size:12px;color:var(--tg-theme-hint-color,#999);padding:4px 0">После добавления откроется пошаговый гайд по авторизации Gmail</div>
       <div class="settings-form-btns">
         <button class="settings-form-btn secondary" id="addEmailCancel">Отмена</button>
         <button class="settings-form-btn primary" id="addEmailSave">Добавить</button>
@@ -2105,8 +2131,14 @@
           smtp_port: parseInt(document.getElementById('addEmailSmtpPort').value) || undefined
         };
       }
-      await api('POST', '/api/email-accounts', payload);
-      loadSettingsData();
+      const created = await api('POST', '/api/email-accounts', payload);
+      await loadSettingsData();
+      // Auto-expand the new Gmail account to show the auth guide
+      if (type === 'gmail' && created && created.id) {
+        const editor = document.getElementById('eed_' + created.id);
+        const arrow = document.getElementById('earr_' + created.id);
+        if (editor) { editor.style.display = 'block'; if (arrow) arrow.style.transform = 'rotate(90deg)'; }
+      }
     });
     body.querySelectorAll('[data-email-aid]').forEach(row => {
       row.addEventListener('click', (e) => {
@@ -2181,6 +2213,47 @@
             const res = await api('POST', `/api/email-accounts/${aid}/test`);
             resultEl.style.color = res.ok ? '#34c759' : '#ff3b30';
             resultEl.textContent = res.message;
+          } catch {
+            resultEl.style.color = '#ff3b30';
+            resultEl.textContent = 'Ошибка запроса';
+          }
+        });
+      }
+      // Gmail OAuth guide buttons
+      const gmailOpenBtn = document.getElementById('e_gmail_open_' + aid);
+      if (gmailOpenBtn) {
+        gmailOpenBtn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          try {
+            const res = await api('GET', '/api/google/auth-url');
+            if (res.url) {
+              if (tg && tg.openLink) tg.openLink(res.url);
+              else window.open(res.url, '_blank');
+            }
+          } catch { /* ignore */ }
+        });
+      }
+      const gmailSubmitBtn = document.getElementById('e_gmail_submit_' + aid);
+      if (gmailSubmitBtn) {
+        gmailSubmitBtn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          const codeInput = document.getElementById('e_gmail_code_' + aid);
+          const resultEl = document.getElementById('e_gmail_result_' + aid);
+          const code = codeInput.value.trim();
+          if (!code) return;
+          resultEl.style.display = 'block';
+          resultEl.style.color = 'var(--tg-theme-hint-color,#999)';
+          resultEl.textContent = 'Подключаю...';
+          try {
+            const res = await api('POST', '/api/google/auth-code', { code });
+            if (res.ok) {
+              resultEl.style.color = '#34c759';
+              resultEl.textContent = '✓ Gmail успешно подключён!';
+              setTimeout(() => loadSettingsData(), 1500);
+            } else {
+              resultEl.style.color = '#ff3b30';
+              resultEl.textContent = `Ошибка: ${res.error || 'неверный код'}`;
+            }
           } catch {
             resultEl.style.color = '#ff3b30';
             resultEl.textContent = 'Ошибка запроса';
