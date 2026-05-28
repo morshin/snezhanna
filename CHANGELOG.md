@@ -11,6 +11,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), [Semantic Vers
 
 ### Added
 
+- **Snezhanna:** Settings Mini App — toggle to skip briefing and check-in on weekends (fixes #10)
 - **Snezhanna:** Settings Mini App — toggles to enable/disable morning briefing and evening check-in (fixes #9)
 - **Snezhanna:** Multi-account email (TZ-4) — unified inbox across Gmail OAuth and IMAP/Office365 accounts; accounts stored in SQLite `email_accounts`; seen-message tracking via `email_seen` table; bootstrap on first poll; per-account digest with category sections; new tools: `get_email_accounts`, `get_emails`, `read_email`, `read_email_attachment`, `mark_email_read`, `create_draft`, `send_email` (confirmed guard); Mini App ПОЧТА section; dynamic email poll reschedule via `update_my_preferences`
 - **Snezhanna:** Settings Mini App — gear icon in tab bar opens full-screen settings modal with sections: Profile (name, tone, style), Schedule (briefing time, vacation mode), Integrations (GitHub, Strava, email interval), Chats (add/remove monitored chats), Projects, Contacts; all settings persist to SQLite `user_settings` table; injected into Claude system prompt via `settings.getSystemPromptBlock()`; `update_my_preferences` tool lets Claude update settings from conversation; `rescheduleBriefing()` applies new briefing time to running cron (TZ-3)
