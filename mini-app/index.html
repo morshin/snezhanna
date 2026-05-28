@@ -1759,6 +1759,23 @@
       </div>
     </div>`;
 
+    // ── УВЕДОМЛЕНИЯ ──
+    html += `<div class="settings-section">
+      <div class="settings-section-title">Уведомления</div>
+      <div class="settings-row">
+        <span class="settings-row-label">Утренний брифинг</span>
+        <div class="settings-row-value">
+          <button class="settings-toggle-btn ${s.briefing_enabled !== 'false' ? 'on' : ''}" data-key="briefing_enabled"></button>
+        </div>
+      </div>
+      <div class="settings-row">
+        <span class="settings-row-label">Вечерний чек-ин</span>
+        <div class="settings-row-value">
+          <button class="settings-toggle-btn ${s.checkin_enabled !== 'false' ? 'on' : ''}" data-key="checkin_enabled"></button>
+        </div>
+      </div>
+    </div>`;
+
     // ── ИНТЕГРАЦИИ ──
     html += `<div class="settings-section">
       <div class="settings-section-title">Интеграции</div>
@@ -1796,6 +1813,7 @@
     <div class="settings-list" id="emailAccountsList">`;
     for (const a of emailAccountsData) {
       const aid = a.id;
+      const ci = a.creds_info || {};
       html += `
       <div class="project-expand-row" data-email-aid="${aid}" style="cursor:pointer;">
         <div class="settings-list-item" style="border-bottom:none">
@@ -1813,12 +1831,33 @@
             <button class="settings-toggle-btn ${a.enabled ? 'on' : ''}" id="e_enabled_${aid}"></button>
           </div>
           <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0">
-            <span style="font-size:14px">Тип</span>
-            <span style="font-size:13px;color:var(--tg-theme-hint-color,#999)">${a.type} · ${a.account_type}</span>
+            <span style="font-size:14px">Категория</span>
+            <select class="settings-inline-input" id="e_acctype_${aid}" style="width:auto;background:var(--tg-theme-bg-color,#fff);color:var(--tg-theme-text-color,#000)">
+              <option value="personal" ${a.account_type === 'personal' ? 'selected' : ''}>Личная</option>
+              <option value="corporate" ${a.account_type === 'corporate' ? 'selected' : ''}>Рабочая</option>
+            </select>
           </div>
+          ${a.type === 'imap' ? `
+          <div style="margin-top:4px;font-size:13px;font-weight:600;color:var(--tg-theme-hint-color,#999)">IMAP</div>
+          <div style="display:flex;gap:6px">
+            <input class="settings-inline-input" id="e_host_${aid}" placeholder="imap.example.com" value="${escAttr(ci.host || '')}" style="flex:3">
+            <input class="settings-inline-input" id="e_port_${aid}" placeholder="993" value="${ci.port || 993}" style="flex:1" type="number">
+          </div>
+          <input class="settings-inline-input" id="e_user_${aid}" placeholder="Логин (user@example.com)" value="${escAttr(ci.user || '')}">
+          <input class="settings-inline-input" id="e_pass_${aid}" placeholder="Пароль (app password)" type="password">
+          <div style="margin-top:4px;font-size:13px;font-weight:600;color:var(--tg-theme-hint-color,#999)">SMTP (необязательно)</div>
+          <div style="display:flex;gap:6px">
+            <input class="settings-inline-input" id="e_smtp_host_${aid}" placeholder="smtp.example.com" value="${escAttr(ci.smtp_host || '')}" style="flex:3">
+            <input class="settings-inline-input" id="e_smtp_port_${aid}" placeholder="587" value="${ci.smtp_port || ''}" style="flex:1" type="number">
+          </div>
+          ` : `
+          <div style="font-size:12px;color:var(--tg-theme-hint-color,#999);padding:4px 0">Gmail авторизуется через OAuth — команда /auth в боте</div>
+          `}
+          <div id="e_test_result_${aid}" style="font-size:13px;padding:4px 0;display:none"></div>
           <div style="display:flex;gap:8px;margin-top:8px">
             <button class="settings-form-btn primary" id="e_save_${aid}">Сохранить</button>
-            <button class="settings-form-btn secondary" data-del-email="${aid}">Удалить</button>
+            <button class="settings-form-btn secondary" id="e_test_${aid}">Проверить</button>
+            <button class="settings-form-btn secondary" data-del-email="${aid}" style="margin-left:auto">Удалить</button>
           </div>
         </div>
       </div>`;
@@ -1833,7 +1872,25 @@
         <option value="gmail">Gmail (OAuth)</option>
         <option value="imap">IMAP</option>
       </select>
-      <div style="font-size:12px;color:var(--tg-theme-hint-color,#999);padding:4px 0">Учётные данные настраиваются через бота командой /auth</div>
+      <select class="settings-inline-input" id="addEmailAccType" style="background:var(--tg-theme-bg-color,#fff);color:var(--tg-theme-text-color,#000)">
+        <option value="personal">Личная</option>
+        <option value="corporate">Рабочая</option>
+      </select>
+      <div id="addEmailImapFields" style="display:none">
+        <div style="margin-top:4px;font-size:13px;font-weight:600;color:var(--tg-theme-hint-color,#999)">IMAP</div>
+        <div style="display:flex;gap:6px">
+          <input class="settings-inline-input" id="addEmailHost" placeholder="imap.example.com" style="flex:3">
+          <input class="settings-inline-input" id="addEmailPort" placeholder="993" type="number" value="993" style="flex:1">
+        </div>
+        <input class="settings-inline-input" id="addEmailUser" placeholder="Логин (user@example.com)">
+        <input class="settings-inline-input" id="addEmailPass" placeholder="Пароль (app password)" type="password">
+        <div style="margin-top:4px;font-size:13px;font-weight:600;color:var(--tg-theme-hint-color,#999)">SMTP (необязательно)</div>
+        <div style="display:flex;gap:6px">
+          <input class="settings-inline-input" id="addEmailSmtpHost" placeholder="smtp.example.com" style="flex:3">
+          <input class="settings-inline-input" id="addEmailSmtpPort" placeholder="587" type="number" style="flex:1">
+        </div>
+      </div>
+      <div id="addEmailGmailHint" style="font-size:12px;color:var(--tg-theme-hint-color,#999);padding:4px 0">Gmail авторизуется через OAuth — команда /auth в боте</div>
       <div class="settings-form-btns">
         <button class="settings-form-btn secondary" id="addEmailCancel">Отмена</button>
         <button class="settings-form-btn primary" id="addEmailSave">Добавить</button>
@@ -2018,12 +2075,31 @@
     document.getElementById('addEmailCancel').addEventListener('click', () => {
       document.getElementById('addEmailForm').classList.remove('open');
     });
+    document.getElementById('addEmailType').addEventListener('change', (e) => {
+      document.getElementById('addEmailImapFields').style.display = e.target.value === 'imap' ? 'block' : 'none';
+      document.getElementById('addEmailGmailHint').style.display = e.target.value === 'gmail' ? 'block' : 'none';
+    });
     document.getElementById('addEmailSave').addEventListener('click', async () => {
       const label = document.getElementById('addEmailLabel').value.trim();
       const email = document.getElementById('addEmailAddr').value.trim();
       const type = document.getElementById('addEmailType').value;
+      const account_type = document.getElementById('addEmailAccType').value;
       if (!label || !email) return;
-      await api('POST', '/api/email-accounts', { label, email, type });
+      const payload = { label, email, type, account_type };
+      if (type === 'imap') {
+        const host = document.getElementById('addEmailHost').value.trim();
+        const user = document.getElementById('addEmailUser').value.trim();
+        const password = document.getElementById('addEmailPass').value;
+        if (!host || !user || !password) { alert('Для IMAP нужны хост, логин и пароль'); return; }
+        payload.credentials = {
+          host, user, password,
+          port: parseInt(document.getElementById('addEmailPort').value) || 993,
+          tls: true,
+          smtp_host: document.getElementById('addEmailSmtpHost').value.trim() || undefined,
+          smtp_port: parseInt(document.getElementById('addEmailSmtpPort').value) || undefined
+        };
+      }
+      await api('POST', '/api/email-accounts', payload);
       loadSettingsData();
     });
     body.querySelectorAll('[data-email-aid]').forEach(row => {
@@ -2062,9 +2138,47 @@
           const label = document.getElementById('e_label_' + aid).value.trim();
           const email = document.getElementById('e_email_' + aid).value.trim();
           const enabled = document.getElementById('e_enabled_' + aid).classList.contains('on') ? 1 : 0;
+          const account_type = document.getElementById('e_acctype_' + aid).value;
           if (!label) return;
-          await api('PATCH', `/api/email-accounts/${aid}`, { label, email, enabled });
+          const payload = { label, email, enabled, account_type };
+          if (a.type === 'imap') {
+            const host = document.getElementById('e_host_' + aid).value.trim();
+            const user = document.getElementById('e_user_' + aid).value.trim();
+            const password = document.getElementById('e_pass_' + aid).value;
+            const port = parseInt(document.getElementById('e_port_' + aid).value) || 993;
+            const smtp_host = document.getElementById('e_smtp_host_' + aid).value.trim();
+            const smtp_port = parseInt(document.getElementById('e_smtp_port_' + aid).value) || undefined;
+            if (host && user) {
+              const creds = { host, user, port, tls: true };
+              if (password) creds.password = password;
+              if (smtp_host) creds.smtp_host = smtp_host;
+              if (smtp_port) creds.smtp_port = smtp_port;
+              // Merge with existing credentials (keep old password if not re-entered)
+              if (!password && a.creds_info) creds._keep_password = true;
+              payload.credentials = creds;
+            }
+          }
+          await api('PATCH', `/api/email-accounts/${aid}`, payload);
           loadSettingsData();
+        });
+      }
+      // Test connection button
+      const testBtn = document.getElementById('e_test_' + aid);
+      if (testBtn) {
+        testBtn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          const resultEl = document.getElementById('e_test_result_' + aid);
+          resultEl.style.display = 'block';
+          resultEl.style.color = 'var(--tg-theme-hint-color,#999)';
+          resultEl.textContent = 'Проверяю...';
+          try {
+            const res = await api('POST', `/api/email-accounts/${aid}/test`);
+            resultEl.style.color = res.ok ? '#34c759' : '#ff3b30';
+            resultEl.textContent = res.message;
+          } catch {
+            resultEl.style.color = '#ff3b30';
+            resultEl.textContent = 'Ошибка запроса';
+          }
         });
       }
     }

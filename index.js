@@ -1081,6 +1081,12 @@ async function runMorningBriefing() {
   if (!appState.chatId) return;
   console.log('[Schedule] morning_briefing fired');
   try {
+    // Step 0 — disabled by user
+    if (settings.get('briefing_enabled') === 'false') {
+      console.log('[Schedule] morning_briefing: disabled in settings, skipping');
+      return;
+    }
+
     // Step 1 — vacation mode
     if (appState.quietUntil) {
       if (new Date() < new Date(appState.quietUntil)) {
@@ -1138,6 +1144,7 @@ function setupSchedules() {
   // Evening check-in — 19:00 Madrid
   cron.schedule('0 19 * * *', async () => {
     if (!appState.chatId) return;
+    if (settings.get('checkin_enabled') === 'false') { console.log('[Schedule] evening_checkin: disabled in settings, skipping'); return; }
     if ((appState.silenceLevel || 0) >= 1) return;
     if (appState.quietUntil && new Date() < new Date(appState.quietUntil)) return;
     console.log('[Schedule] evening_checkin fired');
