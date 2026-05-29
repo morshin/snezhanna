@@ -3,6 +3,17 @@
   "max_tokens": 4096,
   "temperature": 1.0,
   "timezone": "Europe/Madrid",
+  "user": {
+    "name": "Вова",
+    "assistant_name": "Снежанна"
+  },
+  "integrations": {
+    "google": true,
+    "yandex_disk": true,
+    "strava": true,
+    "github": true,
+    "chat_monitor": true
+  },
   "language": "ru",
   "voice": {
     "transcription_model": "whisper-1",

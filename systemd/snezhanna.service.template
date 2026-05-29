@@ -1,0 +1,26 @@
+# Template for deploying an additional instance of the bot.
+# Replace INSTANCE_NAME and INSTANCE_DIR with actual values,
+# then copy to /etc/systemd/system/INSTANCE_NAME.service
+#
+# Example: INSTANCE_NAME=snezhanna-alex, INSTANCE_DIR=/opt/snezhanna-alex
+
+[Unit]
+Description=Snezhanna Personal AI Assistant (INSTANCE_NAME)
+After=network.target network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=snezhanna
+WorkingDirectory=INSTANCE_DIR
+EnvironmentFile=INSTANCE_DIR/.env
+ExecStartPre=/bin/mkdir -p INSTANCE_DIR/data
+ExecStart=/usr/bin/node INSTANCE_DIR/index.js
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=INSTANCE_NAME
+
+[Install]
+WantedBy=multi-user.target

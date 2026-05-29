@@ -29,7 +29,11 @@ const api = require('./lib/api');
 // ── Config & Identity ─────────────────────────────────────────────────────────
 
 const config = JSON.parse(fs.readFileSync(path.join(__dirname, 'config/nanobot.json'), 'utf8'));
-const identity = fs.readFileSync(path.join(__dirname, 'identity/IDENTITY.md'), 'utf8');
+const userName = config.user?.name || 'хозяин';
+const identityRaw = fs.readFileSync(path.join(__dirname, 'identity/IDENTITY.md'), 'utf8');
+const identity = identityRaw
+  .replace(/\{\{USER_NAME\}\}/g, userName)
+  .replace(/\{\{ASSISTANT_NAME\}\}/g, config.user?.assistant_name || 'Ассистент');
 
 // ── Anthropic ─────────────────────────────────────────────────────────────────
 
@@ -118,7 +122,7 @@ async function askClaudeOneShot(userMessage, requestType = 'scheduled') {
     return textBlocks.map(b => b.text).join('\n') || '';
   }
 
-  return 'Извини, Вовик, слишком долго думала над этим.';
+  return `Извини, ${userName}, слишком долго думала над этим.`;
 }
 
 async function askClaude(userMessage, requestType = 'text', meta = {}) {
@@ -247,7 +251,7 @@ async function _askClaude(userMessage, requestType = 'text', meta = {}) {
     }
 
     // Safety: if we hit max rounds, return whatever we have
-    return 'Извини, Вовик, я слишком долго думала. Попробуй переформулировать вопрос.';
+    return `Извини, ${userName}, я слишком долго думала. Попробуй переформулировать вопрос.`;
   } catch (err) {
     // При любой ошибке откатываем историю в состояние до вызова.
     // Иначе в истории могут остаться осиротевшие tool_use без tool_result,
@@ -364,7 +368,7 @@ bot.on('message', async (msg) => {
   // Send delayed startup message
   if (pendingStartup) {
     pendingStartup = false;
-    await bot.sendMessage(msg.chat.id, 'Вов, я онлайн! 🦞');
+    await bot.sendMessage(msg.chat.id, `${userName}, я онлайн! 🦞`);
     // Prompt Google auth if needed
     if (!google.isAuthorized()) {
       setTimeout(() => offerGoogleAuth(msg.chat.id), 1500);
@@ -439,7 +443,7 @@ bot.on('message', async (msg) => {
             await sendLongMessage(chatId, report);
           } catch (e) {
             console.error('[Workload] Checkin scoring error:', e.message);
-            await bot.sendMessage(chatId, 'Вов, что-то не смогла собрать отчёт. Попробую позже.');
+            await bot.sendMessage(chatId, `${userName}, что-то не смогла собрать отчёт. Попробую позже.`);
           }
           return;
         }
@@ -477,7 +481,7 @@ bot.on('message', async (msg) => {
           await sendLongMessage(chatId, report);
         } catch (e) {
           console.error('[Workload] On-demand scoring error:', e.message);
-          await bot.sendMessage(chatId, `Вов, ${formatErrorForUser(e)}`);
+          await bot.sendMessage(chatId, `${userName}, ${formatErrorForUser(e)}`);
         }
         return;
       }
@@ -578,7 +582,7 @@ bot.on('message', async (msg) => {
     if (isRateLimitError(err) && userText) {
       // Сообщаем, что попробуем позже
       await bot.sendMessage(chatId,
-        'Вов, сейчас небольшой перелимит запросов к Claude — подожди 2 минуты, попробую ещё раз и сразу вернусь к тебе 🕐'
+        `${userName}, сейчас небольшой перелимит запросов к Claude — подожди 2 минуты, попробую ещё раз и сразу вернусь к тебе 🕐`
       ).catch(() => {});
 
       // История уже откачена внутри askClaude — просто ждём и повторяем
@@ -590,10 +594,10 @@ bot.on('message', async (msg) => {
         await sendLongMessage(chatId, retryReply);
       } catch (retryErr) {
         console.error('[Snezhanna] Retry failed:', retryErr.message);
-        await bot.sendMessage(chatId, `Вов, ${formatErrorForUser(retryErr)}`).catch(() => {});
+        await bot.sendMessage(chatId, `${userName}, ${formatErrorForUser(retryErr)}`).catch(() => {});
       }
     } else {
-      await bot.sendMessage(chatId, `Вов, ${formatErrorForUser(err)}`).catch(() => {});
+      await bot.sendMessage(chatId, `${userName}, ${formatErrorForUser(err)}`).catch(() => {});
     }
   }
 });
@@ -648,7 +652,7 @@ bot.on('photo', async (msg) => {
     }
   } catch (err) {
     console.error('[Snezhanna] Photo error:', err.message);
-    await bot.sendMessage(chatId, `Вов, ${formatErrorForUser(err)}`).catch(() => {});
+    await bot.sendMessage(chatId, `${userName}, ${formatErrorForUser(err)}`).catch(() => {});
   }
 });
 
@@ -710,7 +714,7 @@ bot.on('business_message', (msg) => {
 async function offerGoogleAuth(chatId) {
   const url = google.getAuthUrl();
   await bot.sendMessage(chatId,
-    `🔐 Вова, нужна авторизация Google!\n\nПерейди по ссылке:\n${url}\n\nПотом отправь мне код командой:\n/auth КОД`
+    `🔐 ${userName}, нужна авторизация Google!\n\nПерейди по ссылке:\n${url}\n\nПотом отправь мне код командой:\n/auth КОД`
   );
 }
 
@@ -865,7 +869,7 @@ function setupSchedules() {
         console.error('[Schedule] Failed to load tasks for briefing:', e.message);
       }
 
-      const prompt = `Составь утренний брифинг для Вовочки. Сегодня ${todayStr()}.
+      const prompt = `Составь утренний брифинг для ${userName}. Сегодня ${todayStr()}.
 События в Calendar:
 ${eventsText}
 
@@ -945,7 +949,7 @@ ${tasksText}
         ? `\nСообщения из чатов за сегодня:\n${chatDigest}\n\nПроанализируй дайджест чатов: для рабочих — выдели задачи, решения, вопросы требующие внимания; для личных — важные моменты и планы.`
         : '\nНовых сообщений в отслеживаемых чатах не было.';
 
-      const prompt = `Сделай вечерний чек-ин для Вовочки. Спроси как прошёл день.
+      const prompt = `Сделай вечерний чек-ин для ${userName}. Спроси как прошёл день.
 Завтра в Calendar:
 ${eventsText}
 ${diskSection}
@@ -978,7 +982,7 @@ ${chatSection}`;
     if (!appState.chatId) return;
     console.log('[Schedule] workload_checkin fired');
     try {
-      const checkinMsg = `Вов, понедельничный чек-ин 📋\n\nОтветь коротко (можно одним сообщением):\n\n1. Как ощущается эта неделя в целом — потянул или нет?\n2. Было ли время с семьёй / детьми?\n3. Как со сном и энергией?\n4. Было ли что-то личное — хобби, отдых, своё время?`;
+      const checkinMsg = `${userName}, понедельничный чек-ин 📋\n\nОтветь коротко (можно одним сообщением):\n\n1. Как ощущается эта неделя в целом — потянул или нет?\n2. Было ли время с семьёй / детьми?\n3. Как со сном и энергией?\n4. Было ли что-то личное — хобби, отдых, своё время?`;
       await sendToVova(checkinMsg);
 
       appState.awaitingWorkloadCheckin = { active: true, timestamp: Date.now() };
@@ -1023,6 +1027,7 @@ ${chatSection}`;
 
   // Strava sync — Sunday 09:30 Madrid (before weekly digest)
   cron.schedule('30 9 * * 0', async () => {
+    if (config.integrations?.strava === false) return;
     if (!strava.isConfigured()) return;
     console.log('[Schedule] strava_sync fired');
     try {
@@ -1050,7 +1055,7 @@ ${chatSection}`;
         console.error('[Schedule] Strava fitness block error:', e.message);
       }
 
-      const prompt = `Составь воскресный еженедельный дайджест для Вовочки.
+      const prompt = `Составь воскресный еженедельный дайджест для ${userName}.
 Включи: краткий обзор прошедшей недели, что важного на следующей неделе, бюрократические дедлайны.${fitnessBlock}`;
       const reply = await askClaudeOneShot(prompt);
       await sendToVova(reply);
@@ -1076,7 +1081,7 @@ ${chatSection}`;
           const timeStr = new Date(event.start.dateTime).toLocaleTimeString('ru-RU', {
             hour: '2-digit', minute: '2-digit', timeZone: config.timezone
           });
-          await sendToVova(`📅 Вовик, через 30 минут: *${event.summary}* в ${timeStr}`, { parse_mode: 'Markdown' });
+          await sendToVova(`📅 ${userName}, через 30 минут: *${event.summary}* в ${timeStr}`, { parse_mode: 'Markdown' });
         }
       }
     } catch (e) {
@@ -1135,7 +1140,7 @@ ${chatSection}`;
       ).join('\n\n');
 
       const prompt = `Пришли новые письма на почту (${fullMessages.length} шт.). \
-Проанализируй каждое и составь краткий дайджест для Вовы. \
+Проанализируй каждое и составь краткий дайджест для ${userName}. \
 Для каждого письма укажи:
 - Тип: 📋 Задача / 📅 Событие / 📁 Проектный апдейт / ℹ️ Инфо / 🗑 Спам
 - Суть в 1–2 предложениях
@@ -1200,7 +1205,7 @@ async function main() {
 
   if (appState.chatId) {
     try {
-      await sendToVova('Вов, я онлайн! 🦞');
+      await sendToVova(`${userName}, я онлайн! 🦞`);
       console.log('[Snezhanna] Startup message sent to chatId:', appState.chatId);
     } catch (e) {
       console.error('[Snezhanna] Failed to send startup message:', e.message);
