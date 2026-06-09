@@ -12,7 +12,7 @@
       "id": "evening_checkin",
       "name": "Вечерний чек-ин",
       "cron": "0 19 * * *",
-      "description": "Как прошёл день + события на завтра + сводка действий с Яндекс.Диском",
+      "description": "Как прошёл день + события на завтра + сводка операций с Google Drive",
       "enabled": true
     },
     {
@@ -30,35 +30,17 @@
       "enabled": true
     },
     {
-      "id": "index_incremental",
-      "name": "Инкрементальный индекс",
-      "cron": "0 2 * * *",
-      "description": "Обновить индекс файлов Яндекс.Диска (изменения за сутки)",
-      "enabled": true,
-      "type": "cron_job",
-      "command": "node /opt/snezhanna/lib/indexer.js --incremental"
-    },
-    {
       "id": "database_backup",
       "name": "Бэкап SQLite",
       "cron": "30 3 * * *",
-      "description": "Backup SQLite DB to /mnt/yadisk-agent/backups/; keep 7 most recent",
+      "description": "Backup SQLite DB to Google Drive backups/; keep 7 most recent",
       "enabled": true
-    },
-    {
-      "id": "index_full",
-      "name": "Полный реиндекс",
-      "cron": "0 3 * * 0",
-      "description": "Полный реиндекс всего Яндекс.Диска каждое воскресенье",
-      "enabled": true,
-      "type": "cron_job",
-      "command": "node /opt/snezhanna/lib/indexer.js --full"
     },
     {
       "id": "strava_sync",
       "name": "Strava Sync",
       "cron": "30 9 * * 0",
-      "description": "Fetch last 7 days of activities from Strava, save to Yandex.Disk",
+      "description": "Fetch last 7 days of activities from Strava, save to Google Drive fitness/weekly/",
       "enabled": true
     },
     {
