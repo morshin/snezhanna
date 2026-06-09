@@ -7,7 +7,8 @@
 - Node.js 18+
 - Telegram бот (создать через @BotFather)
 - Anthropic API key (claude.ai/api)
-- Опционально: OpenAI API key (для голосовых), Google OAuth credentials, Yandex Disk
+- Google OAuth credentials (Desktop-type) — для Calendar, Gmail, Drive
+- Опционально: OpenAI API key (для голосовых сообщений), GitHub token, Strava tokens
 
 ## Шаг 1: Клонировать репозиторий
 
@@ -28,9 +29,18 @@ nano .env
 Минимально необходимые переменные:
 ```
 ANTHROPIC_API_KEY=sk-ant-...
-TELEGRAM_BOT_TOKEN=...        # токен нового бота от @BotFather
-TELEGRAM_ALLOWED_USER_ID=...  # числовой Telegram ID пользователя
-OPENAI_API_KEY=sk-...         # только если нужны голосовые сообщения
+TELEGRAM_BOT_TOKEN=...           # токен нового бота от @BotFather
+TELEGRAM_ALLOWED_USER_ID=...     # числовой Telegram ID пользователя
+GOOGLE_CLIENT_ID=...             # Google OAuth2 (Desktop-type client)
+GOOGLE_CLIENT_SECRET=...
+OPENAI_API_KEY=sk-...            # опционально — только для голосовых
+```
+
+Если два инстанса на одном VPS — чтобы не конфликтовали файлы авторизации:
+```
+GOOGLE_TOKEN_FILE=/opt/snezhanna-alex/token.json
+GOOGLE_CREDENTIALS_FILE=/opt/snezhanna-alex/credentials.json
+STATE_FILE=/opt/snezhanna-alex/.nanobot/state.json
 ```
 
 ## Шаг 3: Настроить конфиг
@@ -44,22 +54,30 @@ OPENAI_API_KEY=sk-...         # только если нужны голосов�
     "assistant_name": "Алиса"
   },
   "timezone": "Europe/Moscow",
+  "gdrive": {
+    "root_folder": "Алиса"
+  },
   "mini_app": {
     "port": 3002
   },
   "integrations": {
-    "google": true,
-    "yandex_disk": false,
     "strava": false,
     "github": false,
     "chat_monitor": false
+  },
+  "chat_monitor": {
+    "chats": []
+  },
+  "github": {
+    "milestone_due_within_days": 14,
+    "repos": []
   }
 }
 ```
 
-Важно: если два инстанса на одном VPS, у каждого должен быть **уникальный порт** (`mini_app.port`).
+**Важно:** если два инстанса на одном VPS, у каждого должен быть **уникальный порт** (`mini_app.port`).
 
-Если Google не нужен — установить `"google": false` и убрать `GOOGLE_CLIENT_ID/SECRET` из `.env`.
+`gdrive.root_folder` — название корневой папки в Google Drive для этого инстанса. Каждый инстанс должен иметь свою папку.
 
 ## Шаг 4: Настроить личность бота
 
@@ -68,19 +86,11 @@ cp identity/IDENTITY.template.md identity/IDENTITY.md
 nano identity/IDENTITY.md
 ```
 
-Заполнить `IDENTITY.md` под нового пользователя: как обращаться, стиль общения, что умеет бот. Плейсхолдеры `{{USER_NAME}}` и `{{ASSISTANT_NAME}}` будут заменены из конфига при старте.
+Заполнить под нового пользователя: как обращаться, стиль общения, какие возможности включены. Плейсхолдеры `{{USER_NAME}}` и `{{ASSISTANT_NAME}}` будут заменены из `config.user` при старте.
 
-## Шаг 5: Настроить очистить chat_monitor и github из конфига
-
-В `config/nanobot.json` очистить:
-- `chat_monitor.chats` → пустой массив `[]`
-- `github.repos` → пустой массив `[]` (или добавить свои репозитории)
-- `index.include_folders` → пустой массив `[]` (если Yandex Disk отключён, не важно)
-
-## Шаг 6: Создать systemd-сервис
+## Шаг 5: Создать systemd-сервис
 
 ```bash
-# Создать файл сервиса на основе шаблона
 sed 's|INSTANCE_NAME|snezhanna-alex|g; s|INSTANCE_DIR|/opt/snezhanna-alex|g' \
   systemd/snezhanna.service.template \
   | sudo tee /etc/systemd/system/snezhanna-alex.service
@@ -95,19 +105,29 @@ sudo systemctl start snezhanna-alex
 journalctl -u snezhanna-alex -f
 ```
 
+## Шаг 6: Авторизовать Google
+
+После первого запуска бот пришлёт ссылку для Google OAuth. Если не прислал — написать `/status`.
+
+1. Перейти по ссылке, дать разрешения (Calendar + Gmail + Drive)
+2. Скопировать код из адресной строки
+3. Отправить боту: `/auth <код>`
+
+После этого бот создаст структуру папок в Google Drive (`gdrive.root_folder/memory/`, `fitness/`, `backups/` и т.д.) и будет готов к работе.
+
 ## Два инстанса на одном VPS
 
 ```
-/opt/snezhanna/          # Вова (порт 3001)
-/opt/snezhanna-alex/     # Алекс (порт 3002)
+/opt/snezhanna/          # Вова (порт 3001, Drive: «Снежанна»)
+/opt/snezhanna-alex/     # Алекс (порт 3002, Drive: «Алиса»)
 ```
 
 Каждый со своим:
-- `.env` — credentials Telegram, Anthropic, Google
-- `config/nanobot.json` — уникальный `mini_app.port`, `user.name`, включённые интеграции
-- `identity/IDENTITY.md` — личность и стиль бота
-- `data/snezhanna.db` — задачи и проекты
-- `token.json` — Google OAuth токен (или указать `GOOGLE_TOKEN_FILE` в `.env`)
+- `.env` — credentials Telegram, Anthropic, Google; `GOOGLE_TOKEN_FILE`, `STATE_FILE`
+- `config/nanobot.json` — уникальный `mini_app.port`, `user.name`, `gdrive.root_folder`
+- `identity/IDENTITY.md` — личность бота
+- `data/snezhanna.db` — задачи и проекты (локальная SQLite)
+- `token.json` — Google OAuth токен (путь задан через `GOOGLE_TOKEN_FILE`)
 
 ## Обновление кода
 
