@@ -121,36 +121,6 @@ async function checkTelegramApi() {
   });
 }
 
-async function checkMounts() {
-  const mounts = [
-    { path: '/mnt/yadisk-readonly', name: 'yadisk-readonly' },
-    { path: '/mnt/yadisk-agent', name: 'yadisk-agent' }
-  ];
-
-  const failed = [];
-  for (const mount of mounts) {
-    const { code } = await sh(`mountpoint -q ${mount.path}`);
-    if (code !== 0) {
-      failed.push(mount);
-    }
-  }
-
-  if (failed.length > 0) {
-    for (const mount of failed) {
-      console.log(`[Zhora] Mount ${mount.path} is DOWN. Remounting...`);
-      const remount = await sh(`mount ${mount.path}`);
-      const check = await sh(`mountpoint -q ${mount.path}`);
-      if (check.code === 0) {
-        await send(`⚠️ *Жора:* Диск \`${mount.name}\` отмонтировался, перемонтировал — OK ✅`);
-      } else {
-        await send(`🚨 *Жора:* Диск \`${mount.name}\` недоступен и не монтируется! Проверь WebDAV.`);
-      }
-    }
-    return false;
-  }
-  return true;
-}
-
 async function checkDiskSpace() {
   const { stdout } = await sh("df / --output=pcent | tail -1 | tr -d ' %'");
   const used = parseInt(stdout, 10);
@@ -245,16 +215,12 @@ async function handleStatusCommand(chatId) {
     }
 
     const telegramOk = await checkTelegramApi();
-    const mountRo = (await sh('mountpoint -q /mnt/yadisk-readonly')).code === 0;
-    const mountRw = (await sh('mountpoint -q /mnt/yadisk-agent')).code === 0;
     const disk = (await sh("df / --output=pcent | tail -1 | tr -d ' %'")).stdout;
 
     const report =
       `🤖 *Жора рапортует:*\n\n` +
       serviceLines.join('\n') + '\n' +
       `Telegram API: ${telegramOk ? '✅' : '❌'}\n` +
-      `Диск readonly: ${mountRo ? '✅' : '❌'}\n` +
-      `Диск агент: ${mountRw ? '✅' : '❌'}\n` +
       `Место на сервере: ${disk}%\n` +
       `Ошибки в логах: ${totalErrors > 0 ? '⚠️ ' + totalErrors + ' за 10 мин' : 'нет'}`;
 
@@ -267,8 +233,8 @@ async function handleStatusCommand(chatId) {
 
 async function handleLogsCommand(chatId, rawArg) {
   try {
-    // Парсим аргументы: /logs [snezhanna|max|index] [N]
-    // Примеры: /logs, /logs 50, /logs max, /logs max 20, /logs index
+    // Парсим аргументы: /logs [snezhanna|max] [N]
+    // Примеры: /logs, /logs 50, /logs max, /logs max 20
     const parts = (rawArg || '').trim().split(/\s+/);
 
     let target = 'snezhanna';
@@ -277,28 +243,17 @@ async function handleLogsCommand(chatId, rawArg) {
     for (const part of parts) {
       if (/^(snezhanna|снежанна)$/i.test(part)) { target = 'snezhanna'; }
       else if (/^(max|макс|tutor)$/i.test(part))  { target = 'tutor'; }
-      else if (/^(index|индекс)$/i.test(part))     { target = 'index'; }
       else if (/^\d+$/.test(part))                 { nRaw = part; }
     }
 
     const n = Math.min(Math.max(parseInt(nRaw, 10) || 30, 5), 100);
 
-    let stdout, label, errorUnit;
-
-    if (target === 'index') {
-      // Индексер пишет в файл, не в journalctl
-      const { stdout: tail } = await sh(`tail -n ${n} /var/log/snezhanna-index.log 2>/dev/null`);
-      stdout = tail;
-      label = 'Индексер Яндекс.Диска';
-      errorUnit = null;
-    } else {
-      const { stdout: jout } = await sh(
-        `journalctl -u ${target} -n ${n} --no-pager --output=cat 2>/dev/null`
-      );
-      stdout = jout;
-      label = target === 'snezhanna' ? 'Снежанны' : 'Макса';
-      errorUnit = target;
-    }
+    const { stdout: jout } = await sh(
+      `journalctl -u ${target} -n ${n} --no-pager --output=cat 2>/dev/null`
+    );
+    const stdout = jout;
+    const label = target === 'snezhanna' ? 'Снежанны' : 'Макса';
+    const errorUnit = target;
 
     if (!stdout || stdout.trim() === '') {
       await sendRaw(chatId, `📋 *Логи ${label}*\n\nЛоги пусты или сервис ещё не запускался.`);
@@ -512,7 +467,6 @@ async function runChecks() {
     if (ok) await checkLogs(svc.unit, svc.name);
   }
   const telegramOk = await checkTelegramApi();
-  await checkMounts();
   await checkDiskSpace();
 
   if (!telegramOk && !telegramWasDown) {
@@ -543,15 +497,11 @@ function setupSchedules() {
         if (!ok) allOk = false;
         serviceLines.push(`${svc.name}: ${ok ? '✅ работает' : '❌ ' + status}`);
       }
-      const mountRo = (await sh('mountpoint -q /mnt/yadisk-readonly')).code === 0 ? '✅' : '❌';
-      const mountRw = (await sh('mountpoint -q /mnt/yadisk-agent')).code === 0 ? '✅' : '❌';
       const disk = (await sh("df / --output=pcent | tail -1 | tr -d ' %'")).stdout;
 
       await send(
         `🤖 *Жора рапортует:*\n\n` +
         serviceLines.join('\n') + '\n' +
-        `Диск readonly: ${mountRo}\n` +
-        `Диск агент: ${mountRw}\n` +
         `Место на сервере: ${disk}%\n\n` +
         (allOk ? 'Все системы готовы к работе ✅' : '⚠️ Требуется внимание!')
       );
@@ -570,7 +520,7 @@ async function registerCommands() {
     await tgApi('setMyCommands', {
       commands: [
         { command: 'status',          description: 'Статус всех сервисов и инфраструктуры' },
-        { command: 'logs',            description: 'Логи: /logs [snezhanna|max|index] [N]' },
+        { command: 'logs',            description: 'Логи: /logs [snezhanna|max] [N]' },
         { command: 'restart',         description: 'Перезапустить сервис: /restart [snezhanna|max]' },
         { command: 'restart_confirm', description: 'Подтвердить перезапуск' },
         { command: 'lang',            description: 'Язык недели Макса: /lang [ru|es]' },

@@ -8,11 +8,12 @@
     "assistant_name": "Снежанна"
   },
   "integrations": {
-    "google": true,
-    "yandex_disk": true,
     "strava": true,
     "github": true,
     "chat_monitor": true
+  },
+  "gdrive": {
+    "root_folder": "Снежанна"
   },
   "language": "ru",
   "voice": {
@@ -24,18 +25,6 @@
   "history": {
     "max_messages": 40,
     "keep_last": 30
-  },
-  "yadisk": {
-    "readonly_mount": "/mnt/yadisk-readonly",
-    "agent_mount": "/mnt/yadisk-agent",
-    "index_file": "/mnt/yadisk-agent/index/file_index.json"
-  },
-  "index": {
-    "include_folders": ["Документы", "Clients", "Spain taxes", "morshin.pro", "Яндекс.Фото"],
-    "exclude_extensions": [".dt", ".cf", ".cf2", ".cfe", ".zip", ".rar", ".7z", ".tar", ".exe", ".msi", ".dmg", ".db", ".sqlite", ".mdf"],
-    "exclude_folders": ["Скриншоты", "Screenshots", "Клиент_", "Client_", "Архив клиентов", ".trash", "Корзина"],
-    "max_size_kb": 51200,
-    "max_age_years": 3
   },
   "mini_app": {
     "port": 3001

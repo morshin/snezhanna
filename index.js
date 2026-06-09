@@ -12,6 +12,7 @@ const axios = require('axios');
 const state = require('./lib/state');
 const db = require('./lib/db');
 const google = require('./lib/google');
+const gdrive = require('./lib/gdrive');
 const whisper = require('./lib/whisper');
 const { getAvailableTools, executeTool } = require('./lib/tools');
 const yadiskDirs = require('./lib/yadisk-dirs');
@@ -423,7 +424,7 @@ bot.on('message', async (msg) => {
           try {
             const data = await workload.collectData();
             const scoring = await workload.runScoring(data, userText);
-            const history = workload.loadHistory();
+            const history = await workload.loadHistory();
             const entry = {
               date: new Date().toLocaleDateString('sv-SE', { timeZone: config.timezone }),
               overall_score: scoring.overall_score,
@@ -438,7 +439,7 @@ bot.on('message', async (msg) => {
               key_risks: scoring.key_risks,
               suggestions: scoring.suggestions
             };
-            workload.saveHistory(history, entry);
+            await workload.saveHistory(history, entry);
             const report = workload.buildWeeklyReport(scoring, history);
             await sendLongMessage(chatId, report);
           } catch (e) {
@@ -461,7 +462,7 @@ bot.on('message', async (msg) => {
         try {
           const data = await workload.collectData();
           const scoring = await workload.runScoring(data, userText);
-          const history = workload.loadHistory();
+          const history = await workload.loadHistory();
           const entry = {
             date: new Date().toLocaleDateString('sv-SE', { timeZone: config.timezone }),
             overall_score: scoring.overall_score,
@@ -476,7 +477,7 @@ bot.on('message', async (msg) => {
             key_risks: scoring.key_risks,
             suggestions: scoring.suggestions
           };
-          workload.saveHistory(history, entry);
+          await workload.saveHistory(history, entry);
           const report = workload.buildWeeklyReport(scoring, history);
           await sendLongMessage(chatId, report);
         } catch (e) {
@@ -515,7 +516,7 @@ bot.on('message', async (msg) => {
       const rawCaption = msg.caption || '';
       if (DIRECT_SAVE_RE.test(rawCaption)) {
         const destPath = parseDirectSavePath(rawCaption, filename);
-        const result = yadiskDirs.saveFile(cacheKey, destPath);
+        const result = await yadiskDirs.saveFile(cacheKey, destPath);
         if (result.error) {
           await bot.sendMessage(chatId, `❌ Не удалось сохранить: ${result.error}`);
         } else {
@@ -532,7 +533,7 @@ bot.on('message', async (msg) => {
 
       if (parsedText.startsWith('[Ошибка') || parsedText.startsWith('[Неподдерживаемый')) {
         // Файл нельзя прочитать как текст, но Claude может его сохранить на диск
-        userText = `${fileHeader}\nСодержимое файла недоступно: ${parsedText}\nЕсли нужно — можешь сохранить файл на Яндекс.Диск через инструмент save_file.`;
+        userText = `${fileHeader}\nСодержимое файла недоступно: ${parsedText}\nЕсли нужно — можешь сохранить файл на Google Drive через инструмент save_file.`;
       } else {
         userText = `${fileHeader}\nСодержимое файла:\n\n${parsedText}`;
       }
@@ -941,8 +942,8 @@ ${tasksText}
 
       const diskSummary = diskLog.getSummary();
       const diskSection = diskSummary
-        ? `\nДействия с Яндекс.Диском за сегодня (${diskLog.getCount()} операций):\n${diskSummary}`
-        : '\nДействий с Яндекс.Диском сегодня не было.';
+        ? `\nДействия с Google Drive за сегодня (${diskLog.getCount()} операций):\n${diskSummary}`
+        : '\nДействий с Google Drive сегодня не было.';
 
       const chatDigest = chatMonitor.getDigest();
       const chatSection = chatDigest
@@ -998,7 +999,7 @@ ${chatSection}`;
         try {
           const data = await workload.collectData();
           const scoring = await workload.runScoring(data, null);
-          const history = workload.loadHistory();
+          const history = await workload.loadHistory();
           const entry = {
             date: new Date().toLocaleDateString('sv-SE', { timeZone: config.timezone }),
             overall_score: scoring.overall_score,
@@ -1013,7 +1014,7 @@ ${chatSection}`;
             key_risks: scoring.key_risks,
             suggestions: scoring.suggestions
           };
-          workload.saveHistory(history, entry);
+          await workload.saveHistory(history, entry);
           const report = workload.buildWeeklyReport(scoring, history);
           await sendToVova(report);
         } catch (e) {
@@ -1047,7 +1048,7 @@ ${chatSection}`;
     try {
       let fitnessBlock = '';
       try {
-        const block = strava.buildDigestFitnessBlock();
+        const block = await strava.buildDigestFitnessBlock();
         if (block) {
           fitnessBlock = `\n\n--- ФИТНЕС-БЛОК (Strava) ---\n${block}\n--- КОНЕЦ ФИТНЕС-БЛОКА ---`;
         }
@@ -1158,34 +1159,20 @@ ${emailsText}`;
     }
   }, { timezone: config.timezone });
 
-  // Database backup — 03:30 daily (after incremental indexer at 02:00)
+  // Database backup — 03:30 daily
   cron.schedule('30 3 * * *', async () => {
-    const AGENT_MOUNT = config.yadisk.agent_mount;
-    const backupsDir = path.join(AGENT_MOUNT, 'backups');
-    if (!fs.existsSync(AGENT_MOUNT)) {
-      console.warn('[Schedule] database_backup: Yandex.Disk not mounted, skipping');
-      return;
-    }
+    if (!gdrive.isConfigured()) return;
+    console.log('[Schedule] database_backup fired');
     try {
-      if (!fs.existsSync(backupsDir)) fs.mkdirSync(backupsDir, { recursive: true });
-
       const dateSuffix = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-      const backupPath = path.join(backupsDir, `snezhanna_${dateSuffix}.db`);
-      await db.backup(backupPath);
-      console.log(`[Schedule] database_backup: saved to ${backupPath}`);
+      const tmpPath = path.join('/tmp', `snezhanna_${dateSuffix}.db`);
+      await db.backup(tmpPath);
+      const buffer = fs.readFileSync(tmpPath);
+      fs.unlinkSync(tmpPath);
+      await gdrive.uploadBinary(`backups/snezhanna_${dateSuffix}.db`, buffer, 'application/x-sqlite3');
+      await gdrive.pruneBackups('backups', 7);
       diskLog.log('Бэкап базы данных', `backups/snezhanna_${dateSuffix}.db`);
-
-      // Keep only the 7 most recent backups
-      const files = fs.readdirSync(backupsDir)
-        .filter(f => f.match(/^snezhanna_\d{8}\.db$/))
-        .sort();
-      if (files.length > 7) {
-        const toDelete = files.slice(0, files.length - 7);
-        for (const f of toDelete) {
-          fs.unlinkSync(path.join(backupsDir, f));
-          console.log(`[Schedule] database_backup: removed old backup ${f}`);
-        }
-      }
+      console.log(`[Schedule] database_backup: uploaded snezhanna_${dateSuffix}.db`);
     } catch (e) {
       console.error('[Schedule] database_backup error:', e.message);
     }
@@ -1199,9 +1186,13 @@ ${emailsText}`;
 async function main() {
   console.log('[Snezhanna] Starting...');
 
-  yadiskDirs.ensureDirs();
   api.start();
   setupSchedules();
+
+  // Ensure Google Drive folder structure (non-blocking)
+  if (google.isAuthorized()) {
+    gdrive.ensureDirs().catch(e => console.warn('[GDrive] ensureDirs error:', e.message));
+  }
 
   if (appState.chatId) {
     try {
