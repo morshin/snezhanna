@@ -81,7 +81,7 @@ sudo systemctl daemon-reload
 - Startup message cooldown (4 hours) for both student and parent, to avoid spam on Zhora restarts
 - Commands (student): `/start`, `/done` / `/стоп` (end session), `/schedule` (view/reset timetable), `/homework` (pending tasks), `/reset`, `/status`
 - Scheduled tasks: afternoon checkin (15:00), **hourly homework reminder (16:00–20:00, Mon–Fri)** — sends short reminder to student if pending homework exists and no active session, evening reminder (21:00), daily summary (20:30), weekly digest (Sunday 18:00) + subject avoidance check, session auto-close (every 5 min, 30 min idle)
-- Reports to `/mnt/yadisk-agent/kids/`: daily sessions, progress.md, weekly digests, homework.json, quests.json, balance.json
+- Reports to `KIDS_DATA_DIR` (default: `/opt/snezhanna/data/kids`): daily sessions, progress.md, weekly digests, homework.json, quests.json, balance.json
 - Uses `dotenv` with absolute path to `/opt/snezhanna/.env`
 
 **`watchdog/zhora.js`** — Zhora watchdog (separate systemd service):
@@ -135,7 +135,7 @@ sudo systemctl daemon-reload
 | `systemd/snezhanna.service.template` | Systemd service template for new instances (parameterized WorkingDirectory + EnvironmentFile) |
 | `skills/*.md` | Capability descriptions (documentation only, not loaded at runtime) |
 | `tutor/index.js` | Max tutor bot entrypoint |
-| `tutor/lib/storage.js` | File I/O for `/mnt/yadisk-agent/kids/` (not yet migrated to Drive); quest CRUD; prize code pool CRUD; HMAC-signed balance |
+| `tutor/lib/storage.js` | File I/O for `KIDS_DATA_DIR` (default: `/opt/snezhanna/data/kids`); quest CRUD; prize code pool CRUD; HMAC-signed balance |
 | `tutor/lib/session.js` | In-memory tutoring session state |
 | `tutor/lib/claude.js` | Anthropic API wrapper for Max; injects active quests into system context; `askMaxOneShotWithImage()` for photo homework recognition |
 | `tutor/lib/report.js` | Session/daily/weekly report generation; `checkSubjectAvoidance()`; `checkStuckTopic()` |
@@ -181,7 +181,7 @@ All persistent data stored under a root folder (default `"Снежанна"`, se
 
 `lib/gdrive.js` caches folder and file IDs in memory to minimise Drive API calls.
 
-Max (tutor bot) still writes reports to `/mnt/yadisk-agent/kids/` — Drive migration for tutor is pending.
+Max (tutor bot) writes reports to local `KIDS_DATA_DIR` (`/opt/snezhanna/data/kids` by default). These files are not in Google Drive and are not accessible via the `search_files`/`read_file` tools.
 
 ### Timezone
 
@@ -214,7 +214,7 @@ GOOGLE_CLIENT_ID         # Google OAuth2 (Calendar + Gmail + Drive)
 GOOGLE_CLIENT_SECRET     # Google OAuth2
 TUTOR_BOT_TOKEN          # Max tutor bot (from @BotFather)
 TUTOR_ALLOWED_USER_ID    # Son's numeric Telegram ID
-KIDS_DATA_DIR            # local kids data dir (default: /mnt/yadisk-agent/kids — pending Drive migration)
+KIDS_DATA_DIR            # local kids data dir (default: /opt/snezhanna/data/kids)
 PARENT_CHAT_ID           # Vova's numeric Telegram ID (same as TELEGRAM_ALLOWED_USER_ID); receives parent notifications via Max's bot
 QUEST_HMAC_SECRET        # 64-char hex secret for HMAC-signing balance.json (shared with TimeGuard)
 GITHUB_TOKEN             # (optional) GitHub personal access token; scopes: public_repo or repo

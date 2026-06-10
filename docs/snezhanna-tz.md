@@ -170,7 +170,7 @@ snezhanna/
   │   │   ├── lang-week.js  # Weekly language topic rotation
   │   │   ├── report.js     # Session/daily/weekly report generation
   │   │   ├── session.js    # In-memory tutoring session state
-  │   │   ├── storage.js    # Yandex.Disk I/O for /mnt/yadisk-agent/kids/
+  │   │   ├── storage.js    # Local file I/O for KIDS_DATA_DIR (/opt/snezhanna/data/kids)
   │   │   └── telegram.js   # Telegram helpers for tutor bot
   │   ├── identity/
   │   │   └── IDENTITY.md   # Max's system prompt
@@ -254,7 +254,7 @@ STRAVA_REFRESH_TOKEN=
 # Tutor bot — Max (son's study assistant)
 TUTOR_BOT_TOKEN=           # bot token from @BotFather
 TUTOR_ALLOWED_USER_ID=     # son's numeric Telegram ID
-KIDS_DATA_DIR=             # kids data dir (default: /mnt/yadisk-agent/kids — tutor Drive migration pending)
+KIDS_DATA_DIR=             # kids data dir (default: /opt/snezhanna/data/kids)
 
 # Multi-instance overrides (optional)
 GOOGLE_TOKEN_FILE=         # path to OAuth token (default: ./token.json)
@@ -446,7 +446,7 @@ Root folder: `Снежанна` (configurable via `config.gdrive.root_folder`).
 ```
 
 **Note:** Tasks and projects are in local SQLite (`data/snezhanna.db`), not Drive.
-Max (tutor) still writes to `/mnt/yadisk-agent/kids/` — pending Drive migration.
+Max (tutor) writes to local `KIDS_DATA_DIR` (`/opt/snezhanna/data/kids`). These files are not in Drive.
 
 ---
 
@@ -637,15 +637,13 @@ Separate sysadmin service. Independent from Snezhanna. Uses its own Telegram bot
 1. **Snezhanna** process — `systemctl is-active snezhanna`
 2. **Max (tutor)** process — `systemctl is-active tutor`
 3. **Telegram Bot API** — ping api.telegram.org
-4. **Disk mounts** — both `/mnt/yadisk-readonly` and `/mnt/yadisk-agent`
-5. **Server disk** — not over 85%
+4. **Server disk** — not over 85%
 6. **Error logs** — no repeating critical errors in last 10 min
 
 ### Response scenarios
 
 - Snezhanna down → restart → report result
 - Tutor (Max) down → restart → report result
-- Disk unmounted → remount → report result
 - Disk > 85% → warn Vova
 - Telegram API down → report when restored
 - All good → silent
@@ -696,7 +694,7 @@ Separate Telegram bot for Vova's son. See `docs/tutor-bot-tz.md` for full spec.
 - Photo support (homework photos, textbook pages) via shared `lib/vision.js`
 - Voice support via shared `lib/whisper.js` with `language='es'`
 - Prompt caching enabled
-- Reports to `/mnt/yadisk-agent/kids/`
+- Reports to `KIDS_DATA_DIR` (`/opt/snezhanna/data/kids`)
 - Commands: `/start`, `/done`, `/schedule`, `/homework`, `/reset`, `/status`
 
 ---
@@ -730,18 +728,6 @@ Single source of truth for static runtime config. Dynamic user preferences are s
   "history": {
     "max_messages": 40,
     "keep_last": 30
-  },
-  "yadisk": {
-    "readonly_mount": "/mnt/yadisk-readonly",
-    "agent_mount": "/mnt/yadisk-agent",
-    "index_file": "/mnt/yadisk-agent/index/file_index.json"
-  },
-  "index": {
-    "include_folders": ["Документы", "Clients", "Spain taxes", "morshin.pro", "Яндекс.Фото"],
-    "exclude_extensions": ["..."],
-    "exclude_folders": ["..."],
-    "max_size_kb": 51200,
-    "max_age_years": 3
   },
   "mini_app": {
     "port": 3001

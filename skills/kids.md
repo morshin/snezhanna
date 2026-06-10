@@ -1,6 +1,6 @@
 # Skill: Дети — отчёты Макса
 
-Макс — бот-репетитор сына. Его отчёты в /mnt/yadisk-agent/kids/.
+Макс — бот-репетитор сына. Его отчёты хранятся локально в `KIDS_DATA_DIR` (`/opt/snezhanna/data/kids`) — не в Google Drive, поэтому недоступны через `search_files`/`read_file`.
 
 ## Как читать отчёты
 
