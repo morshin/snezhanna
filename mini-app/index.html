@@ -1798,6 +1798,15 @@
           <input class="settings-input time-input" id="si_btime_input" type="time" value="${esc(s.briefing_time || '08:00')}">
         </div>
       </div>
+      <div class="settings-row">
+        <span class="settings-row-label">Рабочее время</span>
+        <div class="settings-row-value" style="gap:6px">
+          ${makeSaveIndicator('wh')}
+          <input class="settings-input time-input" id="si_wh_start" type="time" value="${esc(s.work_hours_start || '09:00')}">
+          <span style="color:var(--tg-theme-hint-color,#999);font-size:13px;padding:0 2px">—</span>
+          <input class="settings-input time-input" id="si_wh_end" type="time" value="${esc(s.work_hours_end || '22:00')}">
+        </div>
+      </div>
       <div class="settings-row" id="quietRow">
         <span class="settings-row-label">Тихий режим</span>
         <div class="settings-row-value" id="quietValue">
@@ -2132,6 +2141,10 @@
     if (btimeInput) {
       btimeInput.addEventListener('change', () => saveSetting('briefing_time', btimeInput.value, 'btime'));
     }
+    const whStart = document.getElementById('si_wh_start');
+    const whEnd   = document.getElementById('si_wh_end');
+    if (whStart) whStart.addEventListener('change', () => saveSetting('work_hours_start', whStart.value, 'wh'));
+    if (whEnd)   whEnd.addEventListener('change',   () => saveSetting('work_hours_end',   whEnd.value,   'wh'));
 
     const charSaveBtn = document.getElementById('si_char_save');
     if (charSaveBtn) {

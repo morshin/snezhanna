@@ -368,7 +368,7 @@ async function runEmailPoll() {
       // Hard-alert emails requiring reply — bypass silence/vacation
       for (const m of messages) {
         if (briefing.looksLikeReplyRequest(m)) {
-          await sendToVova(`📬 Похоже нужен ответ: *${m.subject || '(без темы)'}* — от ${m.from || '?'} (${account.label})`, { parse_mode: 'Markdown' });
+          await sendToVova(`📬 Похоже нужен ответ: *${m.subject || '(без темы)'}* — от ${m.from || '?'} (${account.label})`, { parse_mode: 'Markdown' }, { urgent: true });
         }
       }
 
@@ -381,7 +381,7 @@ async function runEmailPoll() {
       const digestText = mailManager.buildEmailDigest(account, messages);
       if (!digestText) continue;
 
-      const prompt = `Пришли новые письма. Вот дайджест:\n\n${digestText}\n\nПроанализируй и скажи Вове что важного пришло и что нужно сделать. Кратко.`;
+      const prompt = `Пришли новые письма. Вот дайджест:\n\n${digestText}\n\nПроанализируй и скажи ${userName} что важного пришло и что нужно сделать. Кратко.`;
       const reply = await askClaudeOneShot(prompt);
       await sendToVova(reply);
     }
@@ -407,10 +407,27 @@ function isAllowed(msg) {
   return String(id) === ALLOWED || username === ALLOWED;
 }
 
-async function sendToVova(text, options = {}) {
+function isWithinWorkHours() {
+  const start = settings.get('work_hours_start') || '09:00';
+  const end   = settings.get('work_hours_end')   || '22:00';
+  const nowStr = new Date().toLocaleTimeString('sv-SE', { timeZone: config.timezone, hour: '2-digit', minute: '2-digit' });
+  if (start <= end) return nowStr >= start && nowStr < end;
+  // overnight range (e.g. 22:00–06:00): active outside the gap
+  return nowStr >= start || nowStr < end;
+}
+
+// urgent=true: send silently outside work hours instead of skipping
+async function sendToVova(text, options = {}, { urgent = false } = {}) {
   if (!appState.chatId) {
     console.log('[Snezhanna] chatId unknown, queuing startup message');
     return false;
+  }
+  if (!isWithinWorkHours()) {
+    if (!urgent) {
+      console.log('[Schedule] Off work hours — skipping non-urgent proactive message');
+      return false;
+    }
+    options = { ...options, disable_notification: true };
   }
   if (Object.keys(options).length > 0 || text.length <= 4096) {
     await bot.sendMessage(appState.chatId, text, options);
@@ -1167,7 +1184,7 @@ async function sendComebackDigest(chatId, daysAway) {
 
   if (overdueTasks.length === 0 && pastEvents.length === 0) return;
 
-  const lines = [`Вов, тебя не было ${daysAway} дн. Вот что накопилось:\n`];
+  const lines = [`${userName}, тебя не было ${daysAway} дн. Вот что накопилось:\n`];
   if (overdueTasks.length > 0) {
     lines.push('📋 Просроченные задачи:');
     overdueTasks.forEach(t => lines.push(`• ${t.title}${t.due_date ? ' (до ' + t.due_date + ')' : ''}`));
@@ -1239,7 +1256,7 @@ async function runMorningBriefing() {
     }
 
     // Step 5 — send the prompt question
-    await sendToVova('Доброе утро! Как дела? Готов к брифингу? 🌅');
+    await sendToVova('Доброе утро! Как дела? Готов к брифингу? 🌅', {}, { urgent: true });
     appState.briefingPending = true;
     appState.briefingPendingAt = new Date().toISOString();
     state.save(appState);
@@ -1428,7 +1445,7 @@ ${chatSection}`;
             const timeStr = new Date(event.start.dateTime).toLocaleTimeString('ru-RU', {
               hour: '2-digit', minute: '2-digit', timeZone: config.timezone
             });
-            await sendToVova(`📅 ${userName}, через 30 минут: *${event.summary}* в ${timeStr}`, { parse_mode: 'Markdown' });
+            await sendToVova(`📅 ${userName}, через 30 минут: *${event.summary}* в ${timeStr}`, { parse_mode: 'Markdown' }, { urgent: true });
           }
         }
       } catch (e) {
@@ -1444,7 +1461,7 @@ ${chatSection}`;
       );
       for (const t of dueTodayTasks) {
         alertedDeadlines.add(t.id);
-        await sendToVova(`📋 Вов, сегодня дедлайн: *${t.title}*`, { parse_mode: 'Markdown' });
+        await sendToVova(`📋 ${userName}, сегодня дедлайн: *${t.title}*`, { parse_mode: 'Markdown' }, { urgent: true });
       }
     } catch (e) {
       console.error('[Schedule] deadline_alert error:', e.message);
@@ -1506,7 +1523,7 @@ async function main() {
 
   if (appState.chatId) {
     try {
-      await sendToVova(`${userName}, я онлайн! 🦞`);
+      await sendToVova(`${userName}, я онлайн! 🦞`, {}, { urgent: true });
       console.log('[Snezhanna] Startup message sent to chatId:', appState.chatId);
     } catch (e) {
       console.error('[Snezhanna] Failed to send startup message:', e.message);
