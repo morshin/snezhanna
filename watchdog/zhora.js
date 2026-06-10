@@ -121,6 +121,69 @@ async function checkTelegramApi() {
   });
 }
 
+const TOKEN_FILE = process.env.GOOGLE_TOKEN_FILE || require('path').join(__dirname, '../token.json');
+
+let driveWasDown = false;
+
+async function checkDrive() {
+  // Check token.json exists
+  const fs = require('fs');
+  if (!fs.existsSync(TOKEN_FILE)) {
+    if (!driveWasDown) {
+      driveWasDown = true;
+      await send('🚨 *Жора:* Google Drive не авторизован — `token.json` отсутствует. Запусти `/auth` в Снежанне.');
+    }
+    return false;
+  }
+
+  let token;
+  try {
+    token = JSON.parse(fs.readFileSync(TOKEN_FILE, 'utf8'));
+  } catch (e) {
+    console.error('[Zhora] Failed to read token.json:', e.message);
+    return false;
+  }
+
+  if (!token.access_token) {
+    if (!driveWasDown) {
+      driveWasDown = true;
+      await send('🚨 *Жора:* Google Drive — токен повреждён, нет `access_token`.');
+    }
+    return false;
+  }
+
+  // Lightweight Drive API call — get root folder metadata
+  const ok = await new Promise((resolve) => {
+    const options = {
+      hostname: 'www.googleapis.com',
+      path: '/drive/v3/about?fields=kind',
+      method: 'GET',
+      headers: { Authorization: `Bearer ${token.access_token}` },
+      timeout: 6000
+    };
+    const req = https.request(options, (res) => {
+      resolve(res.statusCode < 500);
+    });
+    req.on('error', () => resolve(false));
+    req.on('timeout', () => { req.destroy(); resolve(false); });
+    req.end();
+  });
+
+  if (!ok) {
+    if (!driveWasDown) {
+      driveWasDown = true;
+      await send('🚨 *Жора:* Google Drive API недоступен или токен протух. Проверь авторизацию.');
+    }
+    return false;
+  }
+
+  if (driveWasDown) {
+    driveWasDown = false;
+    await send('✅ *Жора:* Google Drive снова доступен.');
+  }
+  return true;
+}
+
 async function checkDiskSpace() {
   const { stdout } = await sh("df / --output=pcent | tail -1 | tr -d ' %'");
   const used = parseInt(stdout, 10);
@@ -215,12 +278,14 @@ async function handleStatusCommand(chatId) {
     }
 
     const telegramOk = await checkTelegramApi();
+    const driveOk = await checkDrive();
     const disk = (await sh("df / --output=pcent | tail -1 | tr -d ' %'")).stdout;
 
     const report =
       `🤖 *Жора рапортует:*\n\n` +
       serviceLines.join('\n') + '\n' +
       `Telegram API: ${telegramOk ? '✅' : '❌'}\n` +
+      `Google Drive: ${driveOk ? '✅' : '❌'}\n` +
       `Место на сервере: ${disk}%\n` +
       `Ошибки в логах: ${totalErrors > 0 ? '⚠️ ' + totalErrors + ' за 10 мин' : 'нет'}`;
 
@@ -486,6 +551,11 @@ function setupSchedules() {
     runChecks().catch((e) => console.error('[Zhora] Check error:', e.message));
   });
 
+  // Drive health check — every 2 hours
+  cron.schedule('0 */2 * * *', () => {
+    checkDrive().catch((e) => console.error('[Zhora] Drive check error:', e.message));
+  });
+
   // Morning report — 07:55 Madrid
   cron.schedule('55 7 * * *', async () => {
     try {
@@ -497,13 +567,15 @@ function setupSchedules() {
         if (!ok) allOk = false;
         serviceLines.push(`${svc.name}: ${ok ? '✅ работает' : '❌ ' + status}`);
       }
+      const driveOk = await checkDrive();
       const disk = (await sh("df / --output=pcent | tail -1 | tr -d ' %'")).stdout;
 
       await send(
         `🤖 *Жора рапортует:*\n\n` +
         serviceLines.join('\n') + '\n' +
+        `Google Drive: ${driveOk ? '✅' : '❌'}\n` +
         `Место на сервере: ${disk}%\n\n` +
-        (allOk ? 'Все системы готовы к работе ✅' : '⚠️ Требуется внимание!')
+        (allOk && driveOk ? 'Все системы готовы к работе ✅' : '⚠️ Требуется внимание!')
       );
     } catch (e) {
       console.error('[Zhora] Morning report error:', e.message);
