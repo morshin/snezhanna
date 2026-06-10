@@ -29,6 +29,7 @@ const { logTokens } = require('./lib/token-log');
 const { buildReplyContext } = require('./lib/reply-chain');
 const { start: apiStart, setApiContext } = require('./lib/api');
 const mailManager = require('./lib/mail-manager');
+const onboarding = require('./lib/onboarding');
 
 // ── Config & Identity ─────────────────────────────────────────────────────────
 
@@ -449,11 +450,22 @@ bot.on('message', async (msg) => {
   // Send delayed startup message
   if (pendingStartup) {
     pendingStartup = false;
+    if (!appState.onboarding_completed) {
+      // New user — start onboarding wizard (has its own greeting)
+      await onboarding.start(bot, msg.chat.id, msg, appState, config);
+      return;
+    }
     await bot.sendMessage(msg.chat.id, `${userName}, я онлайн! 🦞`);
     // Prompt Google auth if needed
     if (!google.isAuthorized()) {
       setTimeout(() => offerGoogleAuth(msg.chat.id), 1500);
     }
+    return;
+  }
+
+  // Onboarding in progress — intercept before normal processing
+  if (!appState.onboarding_completed) {
+    await onboarding.handleMessage(bot, msg, appState);
     return;
   }
 
@@ -865,6 +877,20 @@ bot.on('message', async (msg) => {
   }
 });
 
+// ── Onboarding callback_query handler ────────────────────────────────────────
+
+bot.on('callback_query', async (query) => {
+  try {
+    await bot.answerCallbackQuery(query.id);
+    if (!isAllowed(query)) return;
+    if (!appState.onboarding_completed && query.data && query.data.startsWith('ob:')) {
+      await onboarding.handleCallback(bot, query, appState);
+    }
+  } catch (e) {
+    console.error('[Onboarding] callback_query error:', e.message);
+  }
+});
+
 // ── Chat Monitor handlers ─────────────────────────────────────────────────────
 
 bot.on('message', (msg) => {
@@ -889,14 +915,31 @@ bot.on('business_message', (msg) => {
 async function offerGoogleAuth(chatId) {
   const url = google.getAuthUrl();
   await bot.sendMessage(chatId,
-    `🔐 ${userName}, нужна авторизация Google!\n\nПерейди по ссылке:\n${url}\n\nПотом отправь мне код командой:\n/auth КОД`
+    `🔐 *Нужна авторизация Google*\n\n` +
+    `1\\. Нажми кнопку ниже — откроется браузер\n` +
+    `2\\. Войди в свой Google\\-аккаунт\n` +
+    `3\\. Разреши Calendar, Gmail, Drive\n` +
+    `4\\. Скопируй код из адресной строки, параметр \`code=\`\n` +
+    `5\\. Отправь: \`/auth КОД\``,
+    {
+      parse_mode: 'MarkdownV2',
+      reply_markup: {
+        inline_keyboard: [[
+          { text: '🔗 Открыть Google →', url }
+        ]]
+      }
+    }
   );
 }
 
 async function handleGoogleAuthCode(code, chatId) {
   try {
     await google.saveToken(code);
-    await bot.sendMessage(chatId, '✅ Google авторизован! Теперь работаю с Calendar и Gmail.');
+    if (appState.onboarding_step === 'waiting_google') {
+      await onboarding.resumeAfterGoogleAuth(bot, chatId, appState, config);
+    } else {
+      await bot.sendMessage(chatId, '✅ Google авторизован! Теперь работаю с Calendar и Gmail.');
+    }
   } catch (err) {
     await bot.sendMessage(chatId, `❌ Ошибка авторизации: ${err.message}`);
   }
@@ -1429,6 +1472,14 @@ ${chatSection}`;
 
 async function main() {
   console.log('[Snezhanna] Starting...');
+
+  // Migration: existing users skip onboarding
+  if (appState.chatId && !appState.onboarding_completed) {
+    appState.onboarding_completed = true;
+    appState.onboarding_step = null;
+    state.save(appState);
+    console.log('[Onboarding] Existing user — marked onboarding as completed');
+  }
 
   apiStart();
   setApiContext(appState, state.save, rescheduleBriefing, rescheduleEmailPoll);

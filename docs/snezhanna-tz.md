@@ -113,7 +113,7 @@ snezhanna/
   │   └── IDENTITY.template.md   # Neutral starter template for new instances
   ├── lib/
   │   ├── attachments.js    # Email attachment parsing (PDF/XLSX/DOCX)
-  │   ├── api.js            # HTTP API server for Mini App (task/calendar/settings/chats/projects/contacts CRUD)
+  │   ├── api.js            # HTTP API server for Mini App (task/calendar/settings/chats/projects/contacts CRUD + GET /api/system/status + POST /api/system/restart)
   │   ├── chat-monitor.js   # Telegram chat monitor — reads from SQLite monitored_chats; addChat/removeChat
   │   ├── db.js             # SQLite init (better-sqlite3), all table schemas, helper exports
   │   ├── disk-log.js       # In-memory Google Drive write operation log
@@ -123,7 +123,8 @@ snezhanna/
   │   ├── memory.js         # Memory CRUD backed by SQLite memory table
   │   ├── races.js          # Strava race management (Google Drive)
   │   ├── settings.js       # Key-value user settings (SQLite user_settings); getSystemPromptBlock()
-  │   ├── state.js          # Persist chatId + briefing/silence/vacation state to .nanobot/state.json (overrideable via STATE_FILE)
+  │   ├── state.js          # Persist chatId + briefing/silence/vacation state + onboarding progress to .nanobot/state.json (overrideable via STATE_FILE)
+  │   ├── onboarding.js     # First-run onboarding wizard state machine (check→name→style→briefing…chats)
   │   ├── strava.js         # Strava API: weekly sync, fitness digest (Google Drive)
   │   ├── tasks.js          # Task tracking (Eisenhower matrix, SQLite)
   │   ├── tools.js          # All Claude tool definitions + executeTool dispatcher
@@ -137,7 +138,8 @@ snezhanna/
   │   └── index.html        # Telegram Mini App frontend — Tasks + Calendar + Settings modal
   ├── docs/
   │   ├── snezhanna-tz.md           # This document
-  │   ├── new-instance-setup.md     # Guide for deploying a new bot instance
+  │   ├── new-instance-setup.md     # Guide for deploying a second instance on the same VPS
+  │   ├── deploy-new-server.md      # Guide for deploying a tenant on a fresh server (no Zhora; Mini App status/restart)
   │   ├── tutor-bot-tz.md           # Max tutor bot spec
   │   ├── tz-strava.md              # Strava integration spec
   │   ├── tz-task-tracking.md       # Task tracking spec

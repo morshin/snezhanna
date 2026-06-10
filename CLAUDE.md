@@ -60,6 +60,8 @@ sudo systemctl daemon-reload
 - Voice messages: downloaded from Telegram → transcribed via OpenAI Whisper → sent to Claude
 - Reply context: when user replies to a specific message, `lib/reply-chain.js` builds a context block from `msg.reply_to_message` (+ `msg.quote` if present) and walks the reply chain via `message_id` lookups in history; context is prepended to the user message before Claude sees it
 - Identity template: `identity/IDENTITY.md` uses `{{USER_NAME}}` and `{{ASSISTANT_NAME}}` placeholders resolved at startup from `config.user.name` and `config.user.assistant_name`
+- **Onboarding wizard**: new users see a step-by-step setup on first message (`lib/onboarding.js`): integration check (Claude/Google/OpenAI) with animated ⏳→✅ edit, then questions for name, communication style, briefing/check-in schedule, email poll interval, GitHub/Strava/chat-monitor toggles. State tracked via `onboarding_completed` / `onboarding_step` in `.nanobot/state.json`. Existing users are auto-migrated (skips wizard). `callback_query` handler in `index.js` routes inline-keyboard button presses to `onboarding.handleCallback()`. If Google is not yet authorized, wizard pauses at `waiting_google` step and resumes via `resumeAfterGoogleAuth()` after successful `/auth`.
+- **Google auth UX**: `offerGoogleAuth()` sends an inline-keyboard URL button `🔗 Открыть Google →` with step-by-step instructions (MarkdownV2) instead of a raw link
 
 **`tutor/index.js`** — Max tutor bot (separate systemd service):
 - Telegram bot for Vova's son (13 y/o, Spanish school), access-controlled by `TUTOR_ALLOWED_USER_ID`
@@ -104,7 +106,7 @@ sudo systemctl daemon-reload
 | `lib/whisper.js` | OpenAI Whisper transcription + TTS (language param: `'ru'` default, `'es'` for Max) |
 | `lib/vision.js` | Shared photo handler: download from Telegram, base64 encode, build Claude image blocks |
 | `lib/reply-chain.js` | Shared reply context builder: extracts `reply_to_message` / `quote` from Telegram messages, walks reply chains via `message_id` in history, formats context block prepended to user messages |
-| `lib/state.js` | Persist chatId, businessConnectionId, awaitingWorkloadCheckin, briefing/silence/vacation state to `.nanobot/state.json` (path overrideable via `STATE_FILE` env var) |
+| `lib/state.js` | Persist chatId, businessConnectionId, awaitingWorkloadCheckin, briefing/silence/vacation state, and onboarding progress (`onboarding_completed`, `onboarding_step`) to `.nanobot/state.json` (path overrideable via `STATE_FILE` env var) |
 | `lib/briefing.js` | `hasSomethingToSay()` (value check for morning gate), `computeSilenceLevel()`, `looksLikeReplyRequest()` (email hard-alert heuristic) |
 | `lib/workload.js` | Workload & Wellbeing scoring: data collection, Claude scoring call, history persisted in SQLite `workload_history` table, weekly report and overload coach block |
 | `lib/workload-scoring-prompt.md` | System prompt for the workload scoring Claude call (JSON output schema, domain weights, tone rules) |
@@ -123,15 +125,17 @@ sudo systemctl daemon-reload
 | `data/snezhanna.db` | SQLite database (gitignored) — tasks, projects, docs, logs |
 | `data/analytics/` | Local token usage logs (gitignored) |
 | `lib/settings.js` | Key-value user settings in SQLite `user_settings`; `get(key)`, `set(key,val)`, `getAll()`, `getSystemPromptBlock()` (injected into every Claude system prompt) |
-| `lib/api.js` | HTTP API server for Mini App; validates Telegram initData, serves static files from `mini-app/`, exposes task CRUD + calendar + settings/chats/projects/contacts/email-accounts CRUD + `GET /api/github/milestones` |
-| `mini-app/index.html` | Telegram Mini App frontend — Tasks + Calendar + Settings (gear icon → full-screen modal) single-file HTML/JS/CSS |
+| `lib/api.js` | HTTP API server for Mini App; validates Telegram initData, serves static files from `mini-app/`, exposes task CRUD + calendar + settings/chats/projects/contacts/email-accounts CRUD + `GET /api/github/milestones` + `GET /api/system/status` + `POST /api/system/restart` |
+| `lib/onboarding.js` | First-run onboarding wizard state machine; exports `start`, `handleMessage`, `handleCallback`, `resumeAfterGoogleAuth`; steps: check→name→style→briefing→briefing_time→checkin→weekends→email→github→strava→chats |
+| `mini-app/index.html` | Telegram Mini App frontend — Tasks + Calendar + Settings (gear icon → full-screen modal) single-file HTML/JS/CSS; Settings includes СИСТЕМА section with live service status and restart button |
 | `lib/disk-log.js` | In-memory log of Google Drive write operations; flushed after evening check-in |
 | `identity/IDENTITY.md` | Snezhanna's system prompt — uses `{{USER_NAME}}` and `{{ASSISTANT_NAME}}` placeholders resolved at startup |
 | `identity/IDENTITY.template.md` | Neutral starter template for new bot instances (without Vova-specific content) |
 | `config/nanobot.json` | Model, token limits, timezone, history window, `gdrive.root_folder`, `user.name`/`user.assistant_name`, `integrations` flags, `database.path` |
 | `schedules/heartbeats.json` | Documentation of all scheduled tasks (not loaded at runtime) |
 | `docs/snezhanna-tz.md` | Technical specification (TZ) — infrastructure, integrations, architecture decisions |
-| `docs/new-instance-setup.md` | Guide for deploying a new bot instance on the same VPS |
+| `docs/new-instance-setup.md` | Guide for deploying a second bot instance on the same VPS |
+| `docs/deploy-new-server.md` | Step-by-step guide for deploying a Snezhanna tenant on a fresh server (no Zhora; service management via Mini App) |
 | `systemd/snezhanna.service.template` | Systemd service template for new instances (parameterized WorkingDirectory + EnvironmentFile) |
 | `skills/*.md` | Capability descriptions (documentation only, not loaded at runtime) |
 | `tutor/index.js` | Max tutor bot entrypoint |
@@ -228,4 +232,4 @@ GOOGLE_CREDENTIALS_FILE  # path to credentials.json (default: ./credentials.json
 STATE_FILE               # path to state file (default: ./.nanobot/state.json)
 ```
 
-See `docs/new-instance-setup.md` for instructions on deploying a second instance.
+See `docs/new-instance-setup.md` for a second instance on the **same VPS**; see `docs/deploy-new-server.md` for a tenant on a **fresh server** (includes sudoers rule for Mini App restart, onboarding flow).

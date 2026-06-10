@@ -1692,6 +1692,41 @@
     return `<span class="save-indicator" id="si_${id}"></span>`;
   }
 
+  async function loadSystemStatus() {
+    try {
+      const data = await api('GET', '/api/system/status');
+      const badge = document.getElementById('systemStatusBadge');
+      const uptimeRow = document.getElementById('systemUptimeRow');
+      const uptimeText = document.getElementById('systemUptimeText');
+      if (!badge) return;
+
+      if (data.active) {
+        badge.textContent = '✅ активен';
+        badge.style.color = 'var(--tg-theme-hint-color,#999)';
+        if (data.since && uptimeRow && uptimeText) {
+          const started = new Date(data.since);
+          if (!isNaN(started)) {
+            const diff = Date.now() - started.getTime();
+            const days = Math.floor(diff / 86400000);
+            const hours = Math.floor((diff % 86400000) / 3600000);
+            const mins = Math.floor((diff % 3600000) / 60000);
+            uptimeText.textContent = days > 0 ? `${days}д ${hours}ч` : hours > 0 ? `${hours}ч ${mins}м` : `${mins}м`;
+            uptimeRow.style.display = '';
+          }
+        }
+      } else {
+        badge.textContent = '❌ не работает';
+        badge.style.color = '#e53935';
+      }
+      if (data.recentErrors > 0) {
+        badge.textContent += ` (⚠️ ${data.recentErrors} ошибок за 10 мин)`;
+      }
+    } catch {
+      const badge = document.getElementById('systemStatusBadge');
+      if (badge) badge.textContent = '—';
+    }
+  }
+
   async function saveSetting(key, value, indicatorId) {
     const el = indicatorId ? document.getElementById('si_' + indicatorId) : null;
     try {
@@ -2049,8 +2084,27 @@
       </div>
     </div>`;
 
+    // ── СИСТЕМА ──
+    html += `<div class="settings-section">
+      <div class="settings-section-title">Система</div>
+      <div class="settings-row" id="systemStatusRow">
+        <span class="settings-row-label">Сервис</span>
+        <span id="systemStatusBadge" style="font-size:13px;color:var(--tg-theme-hint-color,#999)">…</span>
+      </div>
+      <div class="settings-row" id="systemUptimeRow" style="display:none">
+        <span class="settings-row-label">Запущен</span>
+        <span id="systemUptimeText" style="font-size:13px;color:var(--tg-theme-hint-color,#999)"></span>
+      </div>
+      <div class="settings-row">
+        <span class="settings-row-label">Перезапустить бота</span>
+        <button class="settings-form-btn secondary" id="systemRestartBtn" style="width:auto;padding:6px 14px">Перезапустить</button>
+        <span class="save-indicator" id="si_restart"></span>
+      </div>
+    </div>`;
+
     document.getElementById('settingsModalBody').innerHTML = html;
     bindSettingsEvents();
+    loadSystemStatus();
   }
 
   function bindSettingsEvents() {
@@ -2431,6 +2485,27 @@
         loadSettingsData();
       });
     });
+
+    // System restart button
+    const restartBtn = document.getElementById('systemRestartBtn');
+    if (restartBtn) {
+      restartBtn.addEventListener('click', async () => {
+        if (!confirm('Перезапустить бота? Соединение прервётся на несколько секунд.')) return;
+        const el = document.getElementById('si_restart');
+        restartBtn.disabled = true;
+        try {
+          const res = await api('POST', '/api/system/restart');
+          if (res.ok) {
+            if (el) { el.textContent = '✓'; el.className = 'save-indicator ok'; setTimeout(() => { el.textContent = ''; el.className = 'save-indicator'; }, 3000); }
+          } else {
+            if (el) { el.textContent = '✗'; el.className = 'save-indicator err'; setTimeout(() => { el.textContent = ''; el.className = 'save-indicator'; }, 3000); }
+          }
+        } catch {
+          if (el) { el.textContent = '✗'; el.className = 'save-indicator err'; setTimeout(() => { el.textContent = ''; el.className = 'save-indicator'; }, 3000); }
+        }
+        setTimeout(() => { restartBtn.disabled = false; }, 4000);
+      });
+    }
   }
 
   const PARAM_TOGGLES = [
