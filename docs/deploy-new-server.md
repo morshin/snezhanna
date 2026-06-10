@@ -127,7 +127,7 @@ sudo nano /opt/snezhanna/identity/IDENTITY.md
 ## Шаг 7. Создать systemd-сервис
 
 ```bash
-sed 's|INSTANCE_NAME|snezhanna|g; s|INSTANCE_DIR|/opt/snezhanna|g' \
+sed 's|INSTANCE_NAME|snezhanna|g; s|INSTANCE_USER|snezhanna|g; s|INSTANCE_DIR|/opt/snezhanna|g' \
   /opt/snezhanna/systemd/snezhanna.service.template \
   | sudo tee /etc/systemd/system/snezhanna.service
 
