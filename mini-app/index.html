@@ -1859,7 +1859,7 @@
               <input class="settings-inline-input" id="e_port_${aid}" placeholder="993" value="${ci.port || 993}" style="flex:1" type="number">
             </div>
             <input class="settings-inline-input" id="e_user_${aid}" placeholder="Логин (user@example.com)" value="${escAttr(ci.user || '')}">
-            <input class="settings-inline-input" id="e_pass_${aid}" placeholder="App Password (16 символов)" type="password">
+            <input class="settings-inline-input" id="e_pass_${aid}" placeholder="${ci.has_password ? '●●●●●●●●●●●●●●●● (пароль задан, оставь пустым чтобы не менять)' : 'App Password (16 символов)'}" type="password">
             <div style="margin-top:4px;font-size:13px;font-weight:600;color:var(--tg-theme-hint-color,#999)">SMTP (необязательно)</div>
             <div style="display:flex;gap:6px">
               <input class="settings-inline-input" id="e_smtp_host_${aid}" placeholder="smtp.gmail.com" value="${escAttr(ci.smtp_host || '')}" style="flex:3">
