@@ -1050,7 +1050,7 @@ ${tasksText}
 
   // Overload coach block (only when last score ≤ 5)
   try {
-    const lastScore = workload.getLastScore();
+    const lastScore = await workload.getLastScore();
     if (lastScore !== null && lastScore <= 5) {
       let todayEvents = [];
       let tomorrowEvents = [];
