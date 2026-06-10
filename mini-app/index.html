@@ -1858,7 +1858,7 @@
             <input class="settings-inline-input" id="e_smtp_host_${aid}" placeholder="smtp.example.com" value="${escAttr(ci.smtp_host || '')}" style="flex:3">
             <input class="settings-inline-input" id="e_smtp_port_${aid}" placeholder="587" value="${ci.smtp_port || ''}" style="flex:1" type="number">
           </div>
-          ` : googleAuthorized ? `
+          ` : a.gmail_authorized ? `
           <div style="display:flex;align-items:center;gap:8px;padding:8px 0;color:#34c759;font-size:14px">
             <span>✓</span><span>Gmail подключён через OAuth</span>
           </div>
@@ -2225,7 +2225,7 @@
         gmailOpenBtn.addEventListener('click', async (e) => {
           e.stopPropagation();
           try {
-            const res = await api('GET', '/api/google/auth-url');
+            const res = await api('GET', `/api/email-accounts/${aid}/auth-url`);
             if (res.url) {
               if (tg && tg.openLink) tg.openLink(res.url);
               else window.open(res.url, '_blank');
@@ -2245,7 +2245,7 @@
           resultEl.style.color = 'var(--tg-theme-hint-color,#999)';
           resultEl.textContent = 'Подключаю...';
           try {
-            const res = await api('POST', '/api/google/auth-code', { code });
+            const res = await api('POST', `/api/email-accounts/${aid}/auth-code`, { code });
             if (res.ok) {
               resultEl.style.color = '#34c759';
               resultEl.textContent = '✓ Gmail успешно подключён!';

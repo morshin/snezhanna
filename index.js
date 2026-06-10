@@ -468,10 +468,54 @@ bot.on('message', async (msg) => {
     if (msg.text) {
       userText = msg.text;
 
-      // /auth <code> — Google OAuth callback
+      // /auth <code> — Google OAuth callback (main account)
       if (userText.startsWith('/auth ')) {
         const code = userText.slice(6).trim();
         await handleGoogleAuthCode(code, chatId);
+        return;
+      }
+
+      // /auth2 <accountId> [code] — per-account Gmail OAuth
+      if (userText.startsWith('/auth2')) {
+        const parts = userText.slice(6).trim().split(/\s+/);
+        const accountId = parseInt(parts[0], 10);
+        if (!accountId) {
+          await bot.sendMessage(chatId, '❌ Укажи ID ящика: `/auth2 <id> [код]`', { parse_mode: 'Markdown' });
+          return;
+        }
+        const account = db.prepare('SELECT id, label, email, type FROM email_accounts WHERE id = ?').get(accountId);
+        if (!account) {
+          await bot.sendMessage(chatId, `❌ Ящик с ID ${accountId} не найден`);
+          return;
+        }
+        if (account.type !== 'gmail') {
+          await bot.sendMessage(chatId, `❌ Ящик «${account.label}» — IMAP, OAuth не нужен`);
+          return;
+        }
+        if (parts[1]) {
+          // /auth2 <id> <code> — save token
+          try {
+            const tokens = await google.saveTokenForAccount(parts[1]);
+            db.prepare("UPDATE email_accounts SET credentials = ?, bootstrapped = 0, updated_at = datetime('now') WHERE id = ?")
+              .run(JSON.stringify(tokens), accountId);
+            await bot.sendMessage(chatId, `✅ Gmail «${account.label}» (${account.email}) подключён!`);
+          } catch (e) {
+            await bot.sendMessage(chatId, `❌ Ошибка авторизации: ${e.message}`);
+          }
+        } else {
+          // /auth2 <id> — send auth URL
+          try {
+            const url = google.getAuthUrl();
+            await bot.sendMessage(chatId,
+              `🔐 Авторизация Gmail для «${account.label}» (${account.email})\n\n` +
+              `1. Открой ссылку ниже и войди под нужным Google-аккаунтом\n` +
+              `2. Скопируй код и отправь: \`/auth2 ${accountId} КОД\`\n\n${url}`,
+              { parse_mode: 'Markdown' }
+            );
+          } catch (e) {
+            await bot.sendMessage(chatId, `❌ Не удалось получить URL: ${e.message}`);
+          }
+        }
         return;
       }
 
