@@ -35,10 +35,30 @@ const onboarding = require('./lib/onboarding');
 
 const config = JSON.parse(fs.readFileSync(path.join(__dirname, 'config/nanobot.json'), 'utf8'));
 const userName = config.user?.name || 'хозяин';
-const identityRaw = fs.readFileSync(path.join(__dirname, 'identity/IDENTITY.md'), 'utf8');
-const identity = identityRaw
-  .replace(/\{\{USER_NAME\}\}/g, userName)
-  .replace(/\{\{ASSISTANT_NAME\}\}/g, config.user?.assistant_name || 'Ассистент');
+const assistantName = config.user?.assistant_name || 'Ассистент';
+
+function resolveIdentityPlaceholders(raw) {
+  return raw
+    .replace(/\{\{USER_NAME\}\}/g, userName)
+    .replace(/\{\{ASSISTANT_NAME\}\}/g, assistantName);
+}
+
+const coreIdentity = resolveIdentityPlaceholders(
+  fs.readFileSync(path.join(__dirname, 'identity/CORE.md'), 'utf8')
+);
+const defaultIdentity = resolveIdentityPlaceholders(
+  fs.readFileSync(path.join(__dirname, 'identity/IDENTITY.md'), 'utf8')
+);
+
+function buildSystemPrompt(nowStr) {
+  const identity = resolveIdentityPlaceholders(settings.getIdentity(defaultIdentity));
+  return [
+    { type: 'text', text: coreIdentity, cache_control: { type: 'ephemeral' } },
+    { type: 'text', text: identity, cache_control: { type: 'ephemeral' } },
+    { type: 'text', text: settings.getSystemPromptBlock() },
+    { type: 'text', text: `Сейчас: ${nowStr} (${config.timezone}).` },
+  ];
+}
 
 // ── Anthropic ─────────────────────────────────────────────────────────────────
 
@@ -66,10 +86,7 @@ async function askClaudeOneShot(userMessage, requestType = 'scheduled') {
     hour: '2-digit', minute: '2-digit',
     timeZone: config.timezone
   });
-  const system = [
-    { type: 'text', text: `Сейчас: ${nowStr} (${config.timezone}).\n\n${settings.getSystemPromptBlock()}` },
-    { type: 'text', text: identity, cache_control: { type: 'ephemeral' } }
-  ];
+  const system = buildSystemPrompt(nowStr);
 
   let localHistory = [{ role: 'user', content: userMessage }];
 
@@ -165,10 +182,7 @@ async function _askClaude(userMessage, requestType = 'text', meta = {}) {
     hour: '2-digit', minute: '2-digit',
     timeZone: config.timezone
   });
-  const system = [
-    { type: 'text', text: `Сейчас: ${nowStr} (${config.timezone}).\n\n${settings.getSystemPromptBlock()}` },
-    { type: 'text', text: identity, cache_control: { type: 'ephemeral' } }
-  ];
+  const system = buildSystemPrompt(nowStr);
 
   try {
     for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
