@@ -38,13 +38,6 @@ sudo cp watchdog/zhora.service /etc/systemd/system/
 sudo systemctl daemon-reload
 ```
 
-## Yandex Disk indexer
-
-```bash
-node lib/indexer.js               # full index
-node lib/indexer.js --incremental # incremental update
-```
-
 ## Architecture
 
 ### Three-process design
@@ -57,15 +50,16 @@ node lib/indexer.js --incremental # incremental update
 - Auto-fetches Google Calendar / Gmail context when keywords are detected in user messages (Russian keywords: "календар", "встреч", "сегодня", "почт", etc.)
 - System prompt = timestamp block + `settings.getSystemPromptBlock()` (preferred name, formality, response style from SQLite) + `identity/IDENTITY.md` (cached). User can change preferences via Mini App settings or by telling Snezhanna (→ `update_my_preferences` tool).
 - Morning briefing time is controlled by `settings.get('briefing_time')` (default 08:00); changing it via Mini App or chat calls `rescheduleBriefing(newTime)` which stops the old cron job and creates a new one.
-- On startup: initialises SQLite DB (`lib/db.js`, creates `data/snezhanna.db` if missing), calls `yadiskDirs.ensureDirs()` to create any missing agent subdirs (`index/`, `memory/`, `fitness/`, `drafts/`, `digests/`, `backups/`), then starts the Mini App HTTP API server (`lib/api.js`) on the port from `config.mini_app.port` (default 3001)
-- Task and project storage: local SQLite (`data/snezhanna.db`) via `better-sqlite3` (synchronous). Tasks have subtasks (`parent_id`) and dependencies (`task_deps` table). New tools: `add_task_dependency`, `get_task_with_subtasks`. Daily DB backup to `/mnt/yadisk-agent/backups/snezhanna_YYYYMMDD.db` at 03:30 (keep 7).
+- On startup: initialises SQLite DB (`lib/db.js`, creates `data/snezhanna.db` if missing), calls `gdrive.ensureDirs()` non-blocking to create required Google Drive folder structure (`memory/`, `fitness/weekly/`, `fitness/races/`, `drafts/`, `digests/`, `backups/`), then starts the Mini App HTTP API server (`lib/api.js`) on the port from `config.mini_app.port` (default 3001)
+- Task and project storage: local SQLite (`data/snezhanna.db`) via `better-sqlite3` (synchronous). Tasks have subtasks (`parent_id`) and dependencies (`task_deps` table). New tools: `add_task_dependency`, `get_task_with_subtasks`. Daily DB backup to Google Drive `backups/snezhanna_YYYYMMDD.db` at 03:30 (keep 7).
 - Scheduled tasks via `node-cron`: morning briefing gate (08:00), workload weekly check-in (Monday 09:00), evening check-in (19:00), weekly digest (Sunday 10:00), calendar reminders every 10 min (fires at 30-min mark), deadline alerts every 10 min, email poll (interval from `settings.email_poll_interval`, default 30 min, reschedules dynamically), DB backup (03:30)
 - Conversational briefing (TZ-1): morning cron sends "Готов к брифингу?" only if `hasSomethingToSay()` returns true; waits for positive reply (up to 8 h) before sending full briefing; silence tracking (`silenceDaysCount` / `silenceLevel` 0–2) reduces frequency after 3+ ignored days; vacation mode via `/quiet [N]` command or `set_quiet_mode` tool (`quietUntil` ISO timestamp); comeback digest sent on first message after 3+ silent days; hard alerts (calendar reminders, deadline alerts, email reply-request alerts) bypass silence/vacation; evening check-in suppressed at silenceLevel ≥ 1
-- Workload & Wellbeing scoring: weekly life-balance score (0–10) across 4 domains (work, family, health, personal). Monday 09:00 check-in collects self-reported data, then `lib/workload.js` aggregates Calendar/Gmail/Tasks/Strava data and runs a standalone Claude scoring call. Morning briefing appends an overload coach block when score ≤ 5. On-demand via phrases like "мой скор", "как я справляюсь". History persisted to `/mnt/yadisk-agent/workload-history.json` (last 12 weeks)
-- Evening check-in includes a summary of all Yandex Disk write operations logged during the day (via `lib/disk-log.js`); log is cleared after sending
+- Workload & Wellbeing scoring: weekly life-balance score (0–10) across 4 domains (work, family, health, personal). Monday 09:00 check-in collects self-reported data, then `lib/workload.js` aggregates Calendar/Gmail/Tasks/Strava data and runs a standalone Claude scoring call. Morning briefing appends an overload coach block when score ≤ 5. On-demand via phrases like "мой скор", "как я справляюсь". History persisted in SQLite `workload_history` table (last 12 weeks)
+- Evening check-in includes a summary of all Google Drive write operations logged during the day (via `lib/disk-log.js`); log is cleared after sending
 - Bot commands: `/reset` (clear history), `/status`, `/auth <code>` (Google OAuth callback)
 - Voice messages: downloaded from Telegram → transcribed via OpenAI Whisper → sent to Claude
 - Reply context: when user replies to a specific message, `lib/reply-chain.js` builds a context block from `msg.reply_to_message` (+ `msg.quote` if present) and walks the reply chain via `message_id` lookups in history; context is prepended to the user message before Claude sees it
+- Identity template: `identity/IDENTITY.md` uses `{{USER_NAME}}` and `{{ASSISTANT_NAME}}` placeholders resolved at startup from `config.user.name` and `config.user.assistant_name`
 
 **`tutor/index.js`** — Max tutor bot (separate systemd service):
 - Telegram bot for Vova's son (13 y/o, Spanish school), access-controlled by `TUTOR_ALLOWED_USER_ID`
@@ -91,10 +85,10 @@ node lib/indexer.js --incremental # incremental update
 - Uses `dotenv` with absolute path to `/opt/snezhanna/.env`
 
 **`watchdog/zhora.js`** — Zhora watchdog (separate systemd service):
-- Checks every 5 minutes: snezhanna + tutor systemd status, Telegram API reachability, Yandex Disk WebDAV mount points, disk space (>85% threshold), recent error logs
+- Checks every 5 minutes: snezhanna + tutor systemd status, Telegram API reachability, disk space (>85% threshold), recent error logs
 - Auto-restarts Snezhanna or Max if down; reports to Vova via its own Telegram bot (`WATCHDOG_BOT_TOKEN`)
 - Morning report at 07:55 Madrid time shows status of both bots
-- Commands: `/status` (all services), `/logs [N]`, `/restart [snezhanna|max]` with confirmation
+- Commands: `/status` (all services), `/logs [snezhanna|max] [N]`, `/restart [snezhanna|max]` with confirmation, `/lang [ru|es]` (set Max's weekly language)
 - Uses zero npm dependencies — pure Node.js `https` module for Telegram calls
 
 ### Key files
@@ -102,37 +96,46 @@ node lib/indexer.js --incremental # incremental update
 | File | Purpose |
 |------|---------|
 | `index.js` | Main bot entrypoint |
-| `lib/google.js` | Google Calendar + Gmail via googleapis OAuth2; Gmail thin-wrappers delegate to `lib/gmail.js` |
+| `lib/google.js` | Google Calendar + Gmail + Drive OAuth2 (scopes: calendar, gmail.modify, drive); Gmail thin-wrappers delegate to `lib/gmail.js` |
+| `lib/gdrive.js` | Google Drive abstraction: folder/file CRUD, search, binary uploads, backup pruning, `ensureDirs()` |
 | `lib/gmail.js` | Gmail API adapter (credentials-based, no file I/O); unified message format; functions: `getMessages`, `getMessage`, `createDraft`, `sendMessage`, `markAsRead`, `getAttachment` |
 | `lib/imap.js` | IMAP/SMTP adapter using `imap`, `mailparser`, `nodemailer`; auto-detects Office 365; functions: `getMessages`, `getMessage`, `createDraft` (IMAP APPEND), `sendMessage` (nodemailer), `markAsRead` |
 | `lib/mail-manager.js` | Multi-account email coordinator; `pollAll()` dispatches to gmail/imap adapters, bootstraps new accounts (seeds seen IDs without digest on first poll), categorizes messages, detects subprojects; `buildEmailDigest()` formats per-account digest; seen tracking in SQLite `email_seen` table |
 | `lib/whisper.js` | OpenAI Whisper transcription + TTS (language param: `'ru'` default, `'es'` for Max) |
 | `lib/vision.js` | Shared photo handler: download from Telegram, base64 encode, build Claude image blocks |
 | `lib/reply-chain.js` | Shared reply context builder: extracts `reply_to_message` / `quote` from Telegram messages, walks reply chains via `message_id` in history, formats context block prepended to user messages |
-| `lib/state.js` | Persist chatId, businessConnectionId, awaitingWorkloadCheckin, briefing/silence/vacation state to `.nanobot/state.json` |
+| `lib/state.js` | Persist chatId, businessConnectionId, awaitingWorkloadCheckin, briefing/silence/vacation state to `.nanobot/state.json` (path overrideable via `STATE_FILE` env var) |
 | `lib/briefing.js` | `hasSomethingToSay()` (value check for morning gate), `computeSilenceLevel()`, `looksLikeReplyRequest()` (email hard-alert heuristic) |
-| `lib/workload.js` | Workload & Wellbeing scoring: data collection, Claude scoring call, history persistence, weekly report and overload coach block |
+| `lib/workload.js` | Workload & Wellbeing scoring: data collection, Claude scoring call, history persisted in SQLite `workload_history` table, weekly report and overload coach block |
 | `lib/workload-scoring-prompt.md` | System prompt for the workload scoring Claude call (JSON output schema, domain weights, tone rules) |
 | `lib/briefing-overload-prompt.md` | System prompt for the morning briefing overload coach block |
 | `docs/snezhanna-workload-scoring-tz.md` | Technical specification for the Workload & Wellbeing Scoring feature |
 | `lib/db.js` | better-sqlite3 init, WAL mode, schema (tasks, projects, project_log, project_notes, project_docs, task_deps, project_params, project_history, contacts, project_contacts, workload_history, memory, file_index, email_accounts, email_seen); exports `{ db, getProject, getProjectById, listProjects, upsertProjectParam, getProjectParam, backup }` |
-| `lib/indexer.js` | Walk Yandex Disk and build JSON file index |
-| `lib/yadisk-dirs.js` | Ensure agent subdirs exist; project CRUD backed by SQLite (`create_project`, `list_projects`, `read_project_file`, `write_project_file`) and project docs (`list_project_docs`, `read_project_doc`, `write_project_doc`); `saveFile()` still writes to Yandex.Disk |
+| `lib/yadisk-dirs.js` | Project CRUD backed by SQLite (`create_project`, `list_projects`, `read_project_file`, `write_project_file`) and project docs (`list_project_docs`, `read_project_doc`, `write_project_doc`); `saveFile()` uploads to Google Drive via `lib/gdrive.js` |
+| `lib/yadisk.js` | `search_files` and `read_file` tools — delegates to `lib/gdrive.js` for Google Drive search and content fetch |
+| `lib/memory.js` | Memory CRUD backed by SQLite `memory` table |
+| `lib/races.js` | Race folder creation in Google Drive `fitness/races/` |
+| `lib/token-log.js` | Per-request token analytics — written to local `data/analytics/tokens-YYYY-MM.json` (NDJSON) |
 | `lib/github.js` | GitHub Milestones: open milestones with `due_on` in the configured window (`github.milestone_due_within_days`, default 14 calendar days in `timezone`, including overdue); used in workload scoring, morning briefing, Mini App API |
 | `scripts/migrate-to-sqlite.js` | One-time migration: tasks + projects from Yandex.Disk JSON → SQLite; `--dry-run` available |
 | `scripts/migrate-memory-workload.js` | One-time migration: memory/*.md + workload-history.json → SQLite; `--dry-run` available |
+| `scripts/migrate-yadisk-to-gdrive.js` | One-time migration: fitness/races, strava weekly data from Yandex.Disk → Google Drive; `--dry-run` available |
 | `data/snezhanna.db` | SQLite database (gitignored) — tasks, projects, docs, logs |
+| `data/analytics/` | Local token usage logs (gitignored) |
 | `lib/settings.js` | Key-value user settings in SQLite `user_settings`; `get(key)`, `set(key,val)`, `getAll()`, `getSystemPromptBlock()` (injected into every Claude system prompt) |
 | `lib/api.js` | HTTP API server for Mini App; validates Telegram initData, serves static files from `mini-app/`, exposes task CRUD + calendar + settings/chats/projects/contacts/email-accounts CRUD + `GET /api/github/milestones` |
 | `mini-app/index.html` | Telegram Mini App frontend — Tasks + Calendar + Settings (gear icon → full-screen modal) single-file HTML/JS/CSS |
-| `lib/disk-log.js` | In-memory log of Yandex Disk write operations; flushed after evening check-in |
-| `identity/IDENTITY.md` | Snezhanna's system prompt (personality, capabilities, prompt injection defense) |
-| `config/nanobot.json` | Model, token limits, timezone, history window, Yandex Disk mount paths, indexer rules, `database.path` |
+| `lib/disk-log.js` | In-memory log of Google Drive write operations; flushed after evening check-in |
+| `identity/IDENTITY.md` | Snezhanna's system prompt — uses `{{USER_NAME}}` and `{{ASSISTANT_NAME}}` placeholders resolved at startup |
+| `identity/IDENTITY.template.md` | Neutral starter template for new bot instances (without Vova-specific content) |
+| `config/nanobot.json` | Model, token limits, timezone, history window, `gdrive.root_folder`, `user.name`/`user.assistant_name`, `integrations` flags, `database.path` |
 | `schedules/heartbeats.json` | Documentation of all scheduled tasks (not loaded at runtime) |
 | `docs/snezhanna-tz.md` | Technical specification (TZ) — infrastructure, integrations, architecture decisions |
+| `docs/new-instance-setup.md` | Guide for deploying a new bot instance on the same VPS |
+| `systemd/snezhanna.service.template` | Systemd service template for new instances (parameterized WorkingDirectory + EnvironmentFile) |
 | `skills/*.md` | Capability descriptions (documentation only, not loaded at runtime) |
 | `tutor/index.js` | Max tutor bot entrypoint |
-| `tutor/lib/storage.js` | Yandex Disk I/O for `/mnt/yadisk-agent/kids/`; quest CRUD; prize code pool CRUD (`codes_DDMMYYYY.md`); HMAC-signed balance |
+| `tutor/lib/storage.js` | File I/O for `/mnt/yadisk-agent/kids/` (not yet migrated to Drive); quest CRUD; prize code pool CRUD; HMAC-signed balance |
 | `tutor/lib/session.js` | In-memory tutoring session state |
 | `tutor/lib/claude.js` | Anthropic API wrapper for Max; injects active quests into system context; `askMaxOneShotWithImage()` for photo homework recognition |
 | `tutor/lib/report.js` | Session/daily/weekly report generation; `checkSubjectAvoidance()`; `checkStuckTopic()` |
@@ -155,17 +158,30 @@ node lib/indexer.js --incremental # incremental update
 1. On startup (or on `/status`), if `token.json` is missing, Snezhanna sends Vova a Google auth URL
 2. Vova visits the URL, copies the code, sends `/auth <code>` to the bot
 3. `lib/google.js::saveToken()` exchanges the code and writes `token.json`
-4. Scopes: `calendar` (read/write) and `gmail.modify`
+4. Scopes: `calendar` (read/write), `gmail.modify`, `drive` (full file storage)
+5. Token file path overrideable via `GOOGLE_TOKEN_FILE` env var (for multi-instance deploys)
 
-### Yandex Disk mounts
+### Google Drive structure
 
-Two WebDAV mounts managed via davfs2 (set up by `setup.sh`, run as root):
-- `/mnt/yadisk-readonly` — full Yandex Disk, read-only
-- `/mnt/yadisk-agent` — Snezhanna's write area (`/mnt/yadisk-agent/memory/`, `/mnt/yadisk-agent/index/`)
+All persistent data stored under a root folder (default `"Снежанна"`, set via `config.gdrive.root_folder`):
 
-Zhora monitors both mount points and re-mounts if they go down.
+```
+Снежанна/
+  ├── memory/          — health.md, kids.md, finance.md, bureaucracy.md, decisions.md
+  ├── fitness/
+  │   ├── weekly/      — YYYY-WNN.json + YYYY-WNN-summary.md (Strava)
+  │   └── races/       — {date}_{name}/README.md, plan.md, gear.md, result.md
+  ├── drafts/          — file attachments saved from Telegram
+  ├── digests/         — generated digests
+  ├── inbox/           — default destination for save_file tool
+  ├── analytics/       — not used (token analytics are local only)
+  ├── backups/         — snezhanna_YYYYMMDD.db (SQLite backups, keep 7)
+  └── workload-history.json
+```
 
-Max writes reports to `/mnt/yadisk-agent/kids/` (sessions, progress, weekly digests, homework.json, schedule.json, quests.json, balance.json).
+`lib/gdrive.js` caches folder and file IDs in memory to minimise Drive API calls.
+
+Max (tutor bot) still writes reports to `/mnt/yadisk-agent/kids/` — Drive migration for tutor is pending.
 
 ### Timezone
 
@@ -178,10 +194,13 @@ All cron schedules use `Europe/Madrid`. Dates/times shown to Vova are localized 
 - `max_tokens`: per-response token limit
 - `history.max_messages` / `history.keep_last`: conversation window
 - `timezone`: Europe/Madrid
-- `yadisk.*`: mount paths and index file location
-- `index.*`: which folders/extensions to include/exclude when indexing Yandex Disk
+- `user.name`: owner's name for `{{USER_NAME}}` substitution in IDENTITY.md (default `"хозяин"`)
+- `user.assistant_name`: bot's name for `{{ASSISTANT_NAME}}` substitution (default `"Ассистент"`)
+- `gdrive.root_folder`: root folder name in Google Drive (default `"Snezhanna"`)
+- `integrations.strava` / `integrations.github` / `integrations.chat_monitor`: enable/disable optional integrations
 - `mini_app.port`: HTTP port for the Tasks Mini App API server (default 3001)
-- `github.repos`: list of `{ repo: "owner/repo", project: "ProjectName" }` for GitHub Milestones; `project` is optional and links milestones to task-tracker project names; `github.milestone_due_within_days`: show milestones due within this many days or already overdue (default 14)
+- `github.repos`: list of `{ repo: "owner/repo", project: "ProjectName" }` for GitHub Milestones; `project` is optional; `github.milestone_due_within_days`: show milestones due within this many days or already overdue (default 14)
+- `database.path`: path to SQLite DB file (default `"data/snezhanna.db"`)
 
 ## Required environment variables
 
@@ -191,14 +210,22 @@ TELEGRAM_BOT_TOKEN       # Snezhanna's Telegram bot
 TELEGRAM_ALLOWED_USER_ID # Vova's numeric Telegram ID (or @username)
 WATCHDOG_BOT_TOKEN       # Zhora's Telegram bot
 OPENAI_API_KEY           # Whisper transcription + TTS
-GOOGLE_CLIENT_ID         # Google OAuth2
+GOOGLE_CLIENT_ID         # Google OAuth2 (Calendar + Gmail + Drive)
 GOOGLE_CLIENT_SECRET     # Google OAuth2
-YANDEX_WEBDAV_LOGIN      # Yandex Disk WebDAV credentials
-YANDEX_WEBDAV_PASSWORD
 TUTOR_BOT_TOKEN          # Max tutor bot (from @BotFather)
 TUTOR_ALLOWED_USER_ID    # Son's numeric Telegram ID
-KIDS_DATA_DIR            # /mnt/yadisk-agent/kids (default if unset)
+KIDS_DATA_DIR            # local kids data dir (default: /mnt/yadisk-agent/kids — pending Drive migration)
 PARENT_CHAT_ID           # Vova's numeric Telegram ID (same as TELEGRAM_ALLOWED_USER_ID); receives parent notifications via Max's bot
 QUEST_HMAC_SECRET        # 64-char hex secret for HMAC-signing balance.json (shared with TimeGuard)
 GITHUB_TOKEN             # (optional) GitHub personal access token; scopes: public_repo or repo
+STRAVA_CLIENT_ID         # (optional) Strava API
+STRAVA_CLIENT_SECRET     # (optional) Strava API
+STRAVA_REFRESH_TOKEN     # (optional) Strava OAuth2
+
+# Multi-instance overrides (optional — for running multiple instances on the same VPS)
+GOOGLE_TOKEN_FILE        # path to OAuth token (default: ./token.json)
+GOOGLE_CREDENTIALS_FILE  # path to credentials.json (default: ./credentials.json)
+STATE_FILE               # path to state file (default: ./.nanobot/state.json)
 ```
+
+See `docs/new-instance-setup.md` for instructions on deploying a second instance.

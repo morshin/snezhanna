@@ -12,6 +12,7 @@ const axios = require('axios');
 const state = require('./lib/state');
 const { db, backup: dbBackup } = require('./lib/db');
 const google = require('./lib/google');
+const gdrive = require('./lib/gdrive');
 const whisper = require('./lib/whisper');
 const { getAvailableTools, executeTool, setContext: setToolsContext } = require('./lib/tools');
 const settings = require('./lib/settings');
@@ -32,7 +33,11 @@ const mailManager = require('./lib/mail-manager');
 // ── Config & Identity ─────────────────────────────────────────────────────────
 
 const config = JSON.parse(fs.readFileSync(path.join(__dirname, 'config/nanobot.json'), 'utf8'));
-const identity = fs.readFileSync(path.join(__dirname, 'identity/IDENTITY.md'), 'utf8');
+const userName = config.user?.name || 'хозяин';
+const identityRaw = fs.readFileSync(path.join(__dirname, 'identity/IDENTITY.md'), 'utf8');
+const identity = identityRaw
+  .replace(/\{\{USER_NAME\}\}/g, userName)
+  .replace(/\{\{ASSISTANT_NAME\}\}/g, config.user?.assistant_name || 'Ассистент');
 
 // ── Anthropic ─────────────────────────────────────────────────────────────────
 
@@ -121,7 +126,7 @@ async function askClaudeOneShot(userMessage, requestType = 'scheduled') {
     return textBlocks.map(b => b.text).join('\n') || '';
   }
 
-  return 'Извини, Вовик, слишком долго думала над этим.';
+  return `Извини, ${userName}, слишком долго думала над этим.`;
 }
 
 async function askClaude(userMessage, requestType = 'text', meta = {}) {
@@ -250,7 +255,7 @@ async function _askClaude(userMessage, requestType = 'text', meta = {}) {
     }
 
     // Safety: if we hit max rounds, return whatever we have
-    return 'Извини, Вовик, я слишком долго думала. Попробуй переформулировать вопрос.';
+    return `Извини, ${userName}, я слишком долго думала. Попробуй переформулировать вопрос.`;
   } catch (err) {
     // При любой ошибке откатываем историю в состояние до вызова.
     // Иначе в истории могут остаться осиротевшие tool_use без tool_result,
@@ -444,7 +449,7 @@ bot.on('message', async (msg) => {
   // Send delayed startup message
   if (pendingStartup) {
     pendingStartup = false;
-    await bot.sendMessage(msg.chat.id, 'Вов, я онлайн! 🦞');
+    await bot.sendMessage(msg.chat.id, `${userName}, я онлайн! 🦞`);
     // Prompt Google auth if needed
     if (!google.isAuthorized()) {
       setTimeout(() => offerGoogleAuth(msg.chat.id), 1500);
@@ -548,7 +553,7 @@ bot.on('message', async (msg) => {
           try {
             const data = await workload.collectData();
             const scoring = await workload.runScoring(data, userText);
-            const history = workload.loadHistory();
+            const history = await workload.loadHistory();
             const entry = {
               date: new Date().toLocaleDateString('sv-SE', { timeZone: config.timezone }),
               overall_score: scoring.overall_score,
@@ -563,12 +568,12 @@ bot.on('message', async (msg) => {
               key_risks: scoring.key_risks,
               suggestions: scoring.suggestions
             };
-            workload.saveHistory(history, entry);
+            await workload.saveHistory(history, entry);
             const report = workload.buildWeeklyReport(scoring, history);
             await sendLongMessage(chatId, report);
           } catch (e) {
             console.error('[Workload] Checkin scoring error:', e.message);
-            await bot.sendMessage(chatId, 'Вов, что-то не смогла собрать отчёт. Попробую позже.');
+            await bot.sendMessage(chatId, `${userName}, что-то не смогла собрать отчёт. Попробую позже.`);
           }
           return;
         }
@@ -586,7 +591,7 @@ bot.on('message', async (msg) => {
         try {
           const data = await workload.collectData();
           const scoring = await workload.runScoring(data, userText);
-          const history = workload.loadHistory();
+          const history = await workload.loadHistory();
           const entry = {
             date: new Date().toLocaleDateString('sv-SE', { timeZone: config.timezone }),
             overall_score: scoring.overall_score,
@@ -601,12 +606,12 @@ bot.on('message', async (msg) => {
             key_risks: scoring.key_risks,
             suggestions: scoring.suggestions
           };
-          workload.saveHistory(history, entry);
+          await workload.saveHistory(history, entry);
           const report = workload.buildWeeklyReport(scoring, history);
           await sendLongMessage(chatId, report);
         } catch (e) {
           console.error('[Workload] On-demand scoring error:', e.message);
-          await bot.sendMessage(chatId, `Вов, ${formatErrorForUser(e)}`);
+          await bot.sendMessage(chatId, `${userName}, ${formatErrorForUser(e)}`);
         }
         return;
       }
@@ -640,7 +645,7 @@ bot.on('message', async (msg) => {
       const rawCaption = msg.caption || '';
       if (DIRECT_SAVE_RE.test(rawCaption)) {
         const destPath = parseDirectSavePath(rawCaption, filename);
-        const result = yadiskDirs.saveFile(cacheKey, destPath);
+        const result = await yadiskDirs.saveFile(cacheKey, destPath);
         if (result.error) {
           await bot.sendMessage(chatId, `❌ Не удалось сохранить: ${result.error}`);
         } else {
@@ -657,7 +662,7 @@ bot.on('message', async (msg) => {
 
       if (parsedText.startsWith('[Ошибка') || parsedText.startsWith('[Неподдерживаемый')) {
         // Файл нельзя прочитать как текст, но Claude может его сохранить на диск
-        userText = `${fileHeader}\nСодержимое файла недоступно: ${parsedText}\nЕсли нужно — можешь сохранить файл на Яндекс.Диск через инструмент save_file.`;
+        userText = `${fileHeader}\nСодержимое файла недоступно: ${parsedText}\nЕсли нужно — можешь сохранить файл на Google Drive через инструмент save_file.`;
       } else {
         userText = `${fileHeader}\nСодержимое файла:\n\n${parsedText}`;
       }
@@ -707,7 +712,7 @@ bot.on('message', async (msg) => {
     if (isRateLimitError(err) && userText) {
       // Сообщаем, что попробуем позже
       await bot.sendMessage(chatId,
-        'Вов, сейчас небольшой перелимит запросов к Claude — подожди 2 минуты, попробую ещё раз и сразу вернусь к тебе 🕐'
+        `${userName}, сейчас небольшой перелимит запросов к Claude — подожди 2 минуты, попробую ещё раз и сразу вернусь к тебе 🕐`
       ).catch(() => {});
 
       // История уже откачена внутри askClaude — просто ждём и повторяем
@@ -719,10 +724,10 @@ bot.on('message', async (msg) => {
         await sendLongMessage(chatId, retryReply);
       } catch (retryErr) {
         console.error('[Snezhanna] Retry failed:', retryErr.message);
-        await bot.sendMessage(chatId, `Вов, ${formatErrorForUser(retryErr)}`).catch(() => {});
+        await bot.sendMessage(chatId, `${userName}, ${formatErrorForUser(retryErr)}`).catch(() => {});
       }
     } else {
-      await bot.sendMessage(chatId, `Вов, ${formatErrorForUser(err)}`).catch(() => {});
+      await bot.sendMessage(chatId, `${userName}, ${formatErrorForUser(err)}`).catch(() => {});
     }
   }
 });
@@ -777,7 +782,7 @@ bot.on('photo', async (msg) => {
     }
   } catch (err) {
     console.error('[Snezhanna] Photo error:', err.message);
-    await bot.sendMessage(chatId, `Вов, ${formatErrorForUser(err)}`).catch(() => {});
+    await bot.sendMessage(chatId, `${userName}, ${formatErrorForUser(err)}`).catch(() => {});
   }
 });
 
@@ -839,7 +844,7 @@ bot.on('business_message', (msg) => {
 async function offerGoogleAuth(chatId) {
   const url = google.getAuthUrl();
   await bot.sendMessage(chatId,
-    `🔐 Вова, нужна авторизация Google!\n\nПерейди по ссылке:\n${url}\n\nПотом отправь мне код командой:\n/auth КОД`
+    `🔐 ${userName}, нужна авторизация Google!\n\nПерейди по ссылке:\n${url}\n\nПотом отправь мне код командой:\n/auth КОД`
   );
 }
 
@@ -989,7 +994,7 @@ async function sendMorningBriefingFull(chatId) {
     console.error('[Briefing] Failed to load tasks:', e.message);
   }
 
-  const prompt = `Составь утренний брифинг для Вовочки. Сегодня ${todayStr()}.
+  const prompt = `Составь утренний брифинг для ${userName}. Сегодня ${todayStr()}.
 События в Calendar:
 ${eventsText}
 
@@ -1178,15 +1183,15 @@ function setupSchedules() {
 
       const diskSummary = diskLog.getSummary();
       const diskSection = diskSummary
-        ? `\nДействия с Яндекс.Диском за сегодня (${diskLog.getCount()} операций):\n${diskSummary}`
-        : '\nДействий с Яндекс.Диском сегодня не было.';
+        ? `\nДействия с Google Drive за сегодня (${diskLog.getCount()} операций):\n${diskSummary}`
+        : '\nДействий с Google Drive сегодня не было.';
 
       const chatDigest = chatMonitor.getDigest();
       const chatSection = chatDigest
         ? `\nСообщения из чатов за сегодня:\n${chatDigest}\n\nПроанализируй дайджест чатов: для рабочих — выдели задачи, решения, вопросы требующие внимания; для личных — важные моменты и планы.`
         : '\nНовых сообщений в отслеживаемых чатах не было.';
 
-      const prompt = `Сделай вечерний чек-ин для Вовочки. Спроси как прошёл день.
+      const prompt = `Сделай вечерний чек-ин для ${userName}. Спроси как прошёл день.
 Завтра в Calendar:
 ${eventsText}
 ${diskSection}
@@ -1219,7 +1224,7 @@ ${chatSection}`;
     if (!appState.chatId) return;
     console.log('[Schedule] workload_checkin fired');
     try {
-      const checkinMsg = `Вов, понедельничный чек-ин 📋\n\nОтветь коротко (можно одним сообщением):\n\n1. Как ощущается эта неделя в целом — потянул или нет?\n2. Было ли время с семьёй / детьми?\n3. Как со сном и энергией?\n4. Было ли что-то личное — хобби, отдых, своё время?`;
+      const checkinMsg = `${userName}, понедельничный чек-ин 📋\n\nОтветь коротко (можно одним сообщением):\n\n1. Как ощущается эта неделя в целом — потянул или нет?\n2. Было ли время с семьёй / детьми?\n3. Как со сном и энергией?\n4. Было ли что-то личное — хобби, отдых, своё время?`;
       await sendToVova(checkinMsg);
 
       appState.awaitingWorkloadCheckin = { active: true, timestamp: Date.now() };
@@ -1235,7 +1240,7 @@ ${chatSection}`;
         try {
           const data = await workload.collectData();
           const scoring = await workload.runScoring(data, null);
-          const history = workload.loadHistory();
+          const history = await workload.loadHistory();
           const entry = {
             date: new Date().toLocaleDateString('sv-SE', { timeZone: config.timezone }),
             overall_score: scoring.overall_score,
@@ -1250,7 +1255,7 @@ ${chatSection}`;
             key_risks: scoring.key_risks,
             suggestions: scoring.suggestions
           };
-          workload.saveHistory(history, entry);
+          await workload.saveHistory(history, entry);
           const report = workload.buildWeeklyReport(scoring, history);
           await sendToVova(report);
         } catch (e) {
@@ -1264,6 +1269,7 @@ ${chatSection}`;
 
   // Strava sync — Sunday 09:30 Madrid (before weekly digest)
   cron.schedule('30 9 * * 0', async () => {
+    if (config.integrations?.strava === false) return;
     if (!strava.isConfigured()) return;
     console.log('[Schedule] strava_sync fired');
     try {
@@ -1283,7 +1289,7 @@ ${chatSection}`;
     try {
       let fitnessBlock = '';
       try {
-        const block = strava.buildDigestFitnessBlock();
+        const block = await strava.buildDigestFitnessBlock();
         if (block) {
           fitnessBlock = `\n\n--- ФИТНЕС-БЛОК (Strava) ---\n${block}\n--- КОНЕЦ ФИТНЕС-БЛОКА ---`;
         }
@@ -1291,7 +1297,7 @@ ${chatSection}`;
         console.error('[Schedule] Strava fitness block error:', e.message);
       }
 
-      const prompt = `Составь воскресный еженедельный дайджест для Вовочки.
+      const prompt = `Составь воскресный еженедельный дайджест для ${userName}.
 Включи: краткий обзор прошедшей недели, что важного на следующей неделе, бюрократические дедлайны.${fitnessBlock}`;
       const reply = await askClaudeOneShot(prompt);
       await sendToVova(reply);
@@ -1320,7 +1326,7 @@ ${chatSection}`;
             const timeStr = new Date(event.start.dateTime).toLocaleTimeString('ru-RU', {
               hour: '2-digit', minute: '2-digit', timeZone: config.timezone
             });
-            await sendToVova(`📅 Вовик, через 30 минут: *${event.summary}* в ${timeStr}`, { parse_mode: 'Markdown' });
+            await sendToVova(`📅 ${userName}, через 30 минут: *${event.summary}* в ${timeStr}`, { parse_mode: 'Markdown' });
           }
         }
       } catch (e) {
@@ -1352,34 +1358,20 @@ ${chatSection}`;
   const emailInterval = parseInt(settings.get('email_poll_interval') || '30', 10);
   scheduleEmailPoll(emailInterval);
 
-  // Database backup — 03:30 daily (after incremental indexer at 02:00)
+  // Database backup — 03:30 daily
   cron.schedule('30 3 * * *', async () => {
-    const AGENT_MOUNT = config.yadisk.agent_mount;
-    const backupsDir = path.join(AGENT_MOUNT, 'backups');
-    if (!fs.existsSync(AGENT_MOUNT)) {
-      console.warn('[Schedule] database_backup: Yandex.Disk not mounted, skipping');
-      return;
-    }
+    if (!gdrive.isConfigured()) return;
+    console.log('[Schedule] database_backup fired');
     try {
-      if (!fs.existsSync(backupsDir)) fs.mkdirSync(backupsDir, { recursive: true });
-
       const dateSuffix = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-      const backupPath = path.join(backupsDir, `snezhanna_${dateSuffix}.db`);
-      await dbBackup(backupPath);
-      console.log(`[Schedule] database_backup: saved to ${backupPath}`);
+      const tmpPath = path.join('/tmp', `snezhanna_${dateSuffix}.db`);
+      await db.backup(tmpPath);
+      const buffer = fs.readFileSync(tmpPath);
+      fs.unlinkSync(tmpPath);
+      await gdrive.uploadBinary(`backups/snezhanna_${dateSuffix}.db`, buffer, 'application/x-sqlite3');
+      await gdrive.pruneBackups('backups', 7);
       diskLog.log('Бэкап базы данных', `backups/snezhanna_${dateSuffix}.db`);
-
-      // Keep only the 7 most recent backups
-      const files = fs.readdirSync(backupsDir)
-        .filter(f => f.match(/^snezhanna_\d{8}\.db$/))
-        .sort();
-      if (files.length > 7) {
-        const toDelete = files.slice(0, files.length - 7);
-        for (const f of toDelete) {
-          fs.unlinkSync(path.join(backupsDir, f));
-          console.log(`[Schedule] database_backup: removed old backup ${f}`);
-        }
-      }
+      console.log(`[Schedule] database_backup: uploaded snezhanna_${dateSuffix}.db`);
     } catch (e) {
       console.error('[Schedule] database_backup error:', e.message);
     }
@@ -1393,14 +1385,18 @@ ${chatSection}`;
 async function main() {
   console.log('[Snezhanna] Starting...');
 
-  yadiskDirs.ensureDirs();
   apiStart();
   setApiContext(appState, state.save, rescheduleBriefing, rescheduleEmailPoll);
   setupSchedules();
 
+  // Ensure Google Drive folder structure (non-blocking)
+  if (google.isAuthorized()) {
+    gdrive.ensureDirs().catch(e => console.warn('[GDrive] ensureDirs error:', e.message));
+  }
+
   if (appState.chatId) {
     try {
-      await sendToVova('Вов, я онлайн! 🦞');
+      await sendToVova(`${userName}, я онлайн! 🦞`);
       console.log('[Snezhanna] Startup message sent to chatId:', appState.chatId);
     } catch (e) {
       console.error('[Snezhanna] Failed to send startup message:', e.message);

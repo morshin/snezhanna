@@ -9,7 +9,7 @@ Snezhanna syncs Vova's Strava activities weekly and provides fitness analysis in
 ### Weekly Activity Sync
 - **Schedule**: Every Sunday at 09:30 Madrid time
 - **Source**: Strava API (`GET /athlete/activities`)
-- **Storage**: `/mnt/yadisk-agent/fitness/weekly/YYYY-Www.json` + `YYYY-Www-summary.md`
+- **Storage**: Google Drive `fitness/weekly/YYYY-Www.json` + `YYYY-Www-summary.md`
 - Fetches all activities for the current ISO week (Monday–Sunday)
 - Calculates totals: distance, time, elevation, breakdown by sport
 
@@ -20,7 +20,7 @@ Snezhanna syncs Vova's Strava activities weekly and provides fitness analysis in
 - Snezhanna provides coaching-style commentary in Russian
 
 ### Race Management
-- **Tool**: `create_race` — creates a race folder structure on Yandex.Disk
+- **Tool**: `create_race` — creates a race folder structure on Google Drive
 - **Path**: `fitness/races/YYYY-MM-DD_slug-name/`
 - **Files created**: README.md, plan.md, gear.md, result.md
 - Triggered by natural language: "Добавь старт...", "Создай гонку..."

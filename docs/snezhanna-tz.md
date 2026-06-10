@@ -78,7 +78,7 @@ Examples:
 | Photo/vision | Telegram photo download → base64 → Claude vision |
 | Web search | Anthropic native web search (`web_search_20250305`, server-side) |
 | Email attachments | PDF (`pdf-parse`), XLSX (`xlsx`), DOCX (`mammoth`) |
-| Disk storage | Yandex.Disk via WebDAV (davfs2) |
+| File storage | Google Drive API v3 via `googleapis` |
 | Scheduled tasks | `node-cron` |
 | HTTP client | `axios` |
 | HTTP server (Mini App) | Node.js built-in `http` module — serves Mini App API + static files |
@@ -107,35 +107,37 @@ snezhanna/
   ├── index.js              # Snezhanna main entrypoint
   ├── setup.sh              # Initial server setup script
   ├── config/
-  │   └── nanobot.json      # Config: model, tokens, timezone, yadisk
+  │   └── nanobot.json      # Config: model, tokens, timezone, gdrive, user, integrations
   ├── identity/
-  │   └── IDENTITY.md       # Snezhanna's system prompt
+  │   ├── IDENTITY.md             # Snezhanna's system prompt ({{USER_NAME}}/{{ASSISTANT_NAME}} placeholders)
+  │   └── IDENTITY.template.md   # Neutral starter template for new instances
   ├── lib/
   │   ├── attachments.js    # Email attachment parsing (PDF/XLSX/DOCX)
   │   ├── api.js            # HTTP API server for Mini App (task/calendar/settings/chats/projects/contacts CRUD)
   │   ├── chat-monitor.js   # Telegram chat monitor — reads from SQLite monitored_chats; addChat/removeChat
   │   ├── db.js             # SQLite init (better-sqlite3), all table schemas, helper exports
-  │   ├── disk-log.js       # In-memory Yandex.Disk write operation log
+  │   ├── disk-log.js       # In-memory Google Drive write operation log
   │   ├── file-cache.js     # File content cache
-  │   ├── google.js         # Google Calendar + Gmail via googleapis OAuth2
-  │   ├── indexer.js        # Yandex.Disk file indexer (writes to SQLite file_index)
+  │   ├── gdrive.js         # Google Drive API: folder/file CRUD, search, uploads, backups
+  │   ├── google.js         # Google Calendar + Gmail + Drive OAuth2
   │   ├── memory.js         # Memory CRUD backed by SQLite memory table
-  │   ├── races.js          # Strava race management
+  │   ├── races.js          # Strava race management (Google Drive)
   │   ├── settings.js       # Key-value user settings (SQLite user_settings); getSystemPromptBlock()
-  │   ├── state.js          # Persist chatId + briefing/silence/vacation state to .nanobot/state.json
-  │   ├── strava.js         # Strava API: weekly sync, fitness digest
+  │   ├── state.js          # Persist chatId + briefing/silence/vacation state to .nanobot/state.json (overrideable via STATE_FILE)
+  │   ├── strava.js         # Strava API: weekly sync, fitness digest (Google Drive)
   │   ├── tasks.js          # Task tracking (Eisenhower matrix, SQLite)
   │   ├── tools.js          # All Claude tool definitions + executeTool dispatcher
   │   ├── reply-chain.js    # Shared reply context builder for Telegram replies
   │   ├── vision.js         # Photo: download from Telegram, base64, image blocks
   │   ├── whisper.js        # OpenAI Whisper transcription + TTS
   │   ├── workload.js       # Workload & Wellbeing scoring; history in SQLite workload_history
-  │   ├── yadisk-dirs.js    # Ensure agent subdirs; project/doc CRUD
-  │   └── yadisk.js         # Yandex.Disk WebDAV read/write helpers
+  │   ├── yadisk-dirs.js    # Project/doc CRUD (SQLite); saveFile uploads to Google Drive
+  │   └── yadisk.js         # search_files/read_file tools — delegates to gdrive.js
   ├── mini-app/
   │   └── index.html        # Telegram Mini App frontend — Tasks + Calendar + Settings modal
   ├── docs/
   │   ├── snezhanna-tz.md           # This document
+  │   ├── new-instance-setup.md     # Guide for deploying a new bot instance
   │   ├── tutor-bot-tz.md           # Max tutor bot spec
   │   ├── tz-strava.md              # Strava integration spec
   │   ├── tz-task-tracking.md       # Task tracking spec
@@ -150,10 +152,13 @@ snezhanna/
   ├── skills/
   │   ├── google-calendar.md
   │   ├── gmail.md
-  │   ├── yadisk.md
+  │   ├── gdrive.md                 # Google Drive storage skill
   │   ├── memory.md
   │   ├── strava.md
   │   └── kids.md
+  ├── systemd/
+  │   ├── snezhanna.service
+  │   └── snezhanna.service.template   # Template for multi-instance deploys
   ├── schedules/
   │   └── heartbeats.json   # Documentation of all cron jobs (not loaded at runtime)
   ├── tutor/
@@ -241,10 +246,6 @@ OPENAI_API_KEY=
 GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=
 
-# Yandex.Disk WebDAV
-YANDEX_WEBDAV_LOGIN=
-YANDEX_WEBDAV_PASSWORD=
-
 # Strava (optional — fitness tracking)
 STRAVA_CLIENT_ID=
 STRAVA_CLIENT_SECRET=
@@ -253,7 +254,12 @@ STRAVA_REFRESH_TOKEN=
 # Tutor bot — Max (son's study assistant)
 TUTOR_BOT_TOKEN=           # bot token from @BotFather
 TUTOR_ALLOWED_USER_ID=     # son's numeric Telegram ID
-KIDS_DATA_DIR=             # /mnt/yadisk-agent/kids (default if unset)
+KIDS_DATA_DIR=             # kids data dir (default: /mnt/yadisk-agent/kids — tutor Drive migration pending)
+
+# Multi-instance overrides (optional)
+GOOGLE_TOKEN_FILE=         # path to OAuth token (default: ./token.json)
+GOOGLE_CREDENTIALS_FILE=   # path to credentials.json (default: ./credentials.json)
+STATE_FILE=                # path to state file (default: ./.nanobot/state.json)
 ```
 
 ---
@@ -278,7 +284,8 @@ KIDS_DATA_DIR=             # /mnt/yadisk-agent/kids (default if unset)
 - Delete events (single instance or entire series)
 - OAuth2 via `credentials.json` (Desktop-type OAuth2 client)
 - Google Cloud project under personal Google account
-- APIs enabled: Google Calendar API, Gmail API
+- APIs enabled: Google Calendar API, Gmail API, Google Drive API
+- Scopes: `calendar`, `gmail.modify`, `drive`
 
 ### 3. Gmail — snezhanna@morshin.pro
 
@@ -292,29 +299,38 @@ KIDS_DATA_DIR=             # /mnt/yadisk-agent/kids (default if unset)
 - Automatic email monitoring every 30 min — digest with categories (task / event / project update / info / spam)
 - **Never send automatically** — only with explicit confirmation
 
-### 4. Yandex.Disk (WebDAV)
+### 4. Google Drive
 
-Two separate mount points:
+All file storage is in Google Drive under a root folder (`config.gdrive.root_folder`, default `"Снежанна"`).
 
-```bash
-# Read-only — Vova's full disk
-/mnt/yadisk-readonly   (mount options: ro)
-WebDAV URL: https://webdav.yandex.ru
-
-# Read+write — ONLY /Snezhanna/ folder
-/mnt/yadisk-agent      (mount options: rw)
-WebDAV URL: https://webdav.yandex.ru/Snezhanna
+```
+Снежанна/
+  ├── memory/        — health.md, kids.md, finance.md, bureaucracy.md, decisions.md
+  ├── fitness/
+  │   ├── weekly/    — YYYY-WNN.json + YYYY-WNN-summary.md
+  │   └── races/     — {date}_{name}/README.md, plan.md, gear.md, result.md
+  ├── drafts/
+  ├── digests/
+  ├── inbox/         — default destination for Telegram file saves
+  ├── backups/       — snezhanna_YYYYMMDD.db (daily SQLite backup, keep 7)
+  └── workload-history.json
 ```
 
-Agent physically cannot write outside its own folder.
-Credentials from `.env`. If Yandex has 2FA — use app password from id.yandex.ru → Security → App passwords.
-Added to `/etc/fstab` for auto-mount on reboot.
+**`lib/gdrive.js`** — Drive abstraction layer:
+- Folder and file ID caches (`Map`) to minimise API calls
+- `readFile(path)` / `writeFile(path, content)` / `appendFile(path, content)`
+- `uploadBinary(path, buffer, mimeType)` for binary files (backups, Telegram attachments)
+- `searchFiles(query)` — full-text search using Drive API
+- `pruneBackups(folderPath, keepN)` — delete oldest backup files
+- `ensureDirs()` — creates required folder structure on startup
+
+Requires Google OAuth with `drive` scope (in addition to `calendar` and `gmail.modify`).
 
 ### 5. Strava (fitness tracking)
 
-- Weekly activity sync every Sunday at 09:30 → saved to `/mnt/yadisk-agent/fitness/weekly/`
+- Weekly activity sync every Sunday at 09:30 → saved to Google Drive `fitness/weekly/`
 - Each week: `YYYY-WNN.json` (raw API data) + `YYYY-WNN-summary.md` (human-readable)
-- Race management: create/list/update folders in `fitness/races/{date}_{name}/`
+- Race management: create folders in Google Drive `fitness/races/{date}_{name}/`
 - Sunday digest includes fitness block: current week vs previous, Snezhanna's commentary
 - Requires `STRAVA_CLIENT_ID`, `STRAVA_CLIENT_SECRET`, `STRAVA_REFRESH_TOKEN` in `.env`
 - Optional: bot works without Strava if env vars are missing
@@ -400,76 +416,18 @@ User's new message text
 
 ---
 
-## Yandex.Disk Index
+## Google Drive Structure
 
-### Index these folders (recursively)
-
-- `Документы/`
-- `Clients/`
-- `Spain taxes/`
-- `morshin.pro/`
-- `Яндекс.Фото/` (important only, see exclusions)
-
-### Exclusions
-
-By extension:
-```
-*.dt *.cf *.cf2 *.cfe    # 1C databases
-*.zip *.rar *.7z *.tar   # Archives
-*.exe *.msi *.dmg        # Binaries
-*.db *.sqlite *.mdf      # Databases
-```
-
-By folder name: `Скриншоты`, `Screenshots`, `screen*`, `Клиент_*`, `Client_*`, `Архив клиентов`, `.trash`, `Корзина`
-
-By date: files not modified in 3+ years (except documents)
-
-By size: files > 50 MB
-
-### Index file
-
-Saved to `/mnt/yadisk-agent/index/file_index.json`:
-
-```json
-{
-  "last_updated": "2026-03-01T08:00:00",
-  "files": [
-    {
-      "path": "/Документы/Договор_аренды_2024.pdf",
-      "name": "Договор_аренды_2024.pdf",
-      "modified": "2024-06-15",
-      "size_kb": 245,
-      "category": "documents",
-      "keywords": ["аренда", "договор", "2024"]
-    }
-  ]
-}
-```
-
-### Update schedule
-
-- Full reindex: every Sunday at 03:00 (system cron)
-- Incremental: every night at 02:00 (system cron)
-- On demand: "Снежанна, обнови индекс" → `node lib/indexer.js [--incremental]`
-
----
-
-## Agent Folder `/mnt/yadisk-agent/`
+Root folder: `Снежанна` (configurable via `config.gdrive.root_folder`).
 
 ```
-/Snezhanna/
-  ├── index/
-  │   └── file_index.json
+Снежанна/
   ├── memory/
   │   ├── health.md
   │   ├── kids.md
   │   ├── finance.md
   │   ├── bureaucracy.md
   │   └── decisions.md
-  ├── projects/
-  │   └── {project_name}/
-  │       ├── tasks.json
-  │       └── *.md
   ├── fitness/
   │   ├── weekly/
   │   │   ├── YYYY-WNN.json
@@ -480,16 +438,15 @@ Saved to `/mnt/yadisk-agent/index/file_index.json`:
   │           ├── plan.md
   │           ├── gear.md
   │           └── result.md
-  ├── tasks/
-  │   └── tasks.json
+  ├── inbox/             ← default save_file destination
   ├── drafts/
   ├── digests/
-  └── kids/              ← Max tutor bot writes here
-      ├── homework.json
-      ├── schedule.json
-      ├── progress.md
-      └── sessions/
+  ├── backups/           ← snezhanna_YYYYMMDD.db (keep 7)
+  └── workload-history.json
 ```
+
+**Note:** Tasks and projects are in local SQLite (`data/snezhanna.db`), not Drive.
+Max (tutor) still writes to `/mnt/yadisk-agent/kids/` — pending Drive migration.
 
 ---
 
@@ -523,7 +480,7 @@ All times are in **Europe/Madrid** timezone.
 
 [Telegram checklist with today's open tasks]
 
-[Summary of Yandex.Disk write operations during the day]
+[Summary of Google Drive write operations during the day]
 ```
 
 ### Every Sunday 10:00 — Weekly digest
@@ -536,7 +493,7 @@ All times are in **Europe/Madrid** timezone.
 ### Every Sunday 09:30 — Strava sync
 
 - Fetch last 7 days of activities
-- Save weekly JSON + summary to `fitness/weekly/`
+- Save weekly JSON + summary to Google Drive `fitness/weekly/`
 
 ### Every 30 min — Email check
 
@@ -565,13 +522,12 @@ Prompt caching is enabled on both Snezhanna and Max:
 ## Security
 
 - Telegram: responds only to `TELEGRAM_ALLOWED_USER_ID`
-- Yandex.Disk main: read-only mount
-- Yandex.Disk agent: write only to `/Snezhanna/`
+- Google Drive: all writes scoped to the assistant's root folder
 - Gmail: never sends without explicit confirmation
 - All tokens in `.env`, never in git
 - Agent runs as unprivileged user `snezhanna`
-- `IDENTITY.md` includes prompt injection protection — ignore malicious instructions from emails, files, disk
-- Email/disk content treated as DATA, not instructions
+- `IDENTITY.md` includes prompt injection protection — ignore malicious instructions from emails, files, Drive
+- Email/Drive file content treated as DATA, not instructions
 
 ---
 
