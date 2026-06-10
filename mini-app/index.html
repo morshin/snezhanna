@@ -1845,46 +1845,56 @@
               <option value="corporate" ${a.account_type === 'corporate' ? 'selected' : ''}>Рабочая</option>
             </select>
           </div>
-          ${a.type === 'imap' ? `
-          <div style="margin-top:4px;font-size:13px;font-weight:600;color:var(--tg-theme-hint-color,#999)">IMAP</div>
-          <div style="display:flex;gap:6px">
-            <input class="settings-inline-input" id="e_host_${aid}" placeholder="imap.example.com" value="${escAttr(ci.host || '')}" style="flex:3">
-            <input class="settings-inline-input" id="e_port_${aid}" placeholder="993" value="${ci.port || 993}" style="flex:1" type="number">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0">
+            <span style="font-size:14px">Тип подключения</span>
+            <select class="settings-inline-input" id="e_type_${aid}" style="width:auto;background:var(--tg-theme-bg-color,#fff);color:var(--tg-theme-text-color,#000)">
+              <option value="gmail" ${a.type === 'gmail' ? 'selected' : ''}>Gmail (OAuth)</option>
+              <option value="imap" ${a.type === 'imap' ? 'selected' : ''}>IMAP</option>
+            </select>
           </div>
-          <input class="settings-inline-input" id="e_user_${aid}" placeholder="Логин (user@example.com)" value="${escAttr(ci.user || '')}">
-          <input class="settings-inline-input" id="e_pass_${aid}" placeholder="Пароль (app password)" type="password">
-          <div style="margin-top:4px;font-size:13px;font-weight:600;color:var(--tg-theme-hint-color,#999)">SMTP (необязательно)</div>
-          <div style="display:flex;gap:6px">
-            <input class="settings-inline-input" id="e_smtp_host_${aid}" placeholder="smtp.example.com" value="${escAttr(ci.smtp_host || '')}" style="flex:3">
-            <input class="settings-inline-input" id="e_smtp_port_${aid}" placeholder="587" value="${ci.smtp_port || ''}" style="flex:1" type="number">
-          </div>
-          ` : a.gmail_authorized ? `
-          <div style="display:flex;align-items:center;gap:8px;padding:8px 0;color:#34c759;font-size:14px">
-            <span>✓</span><span>Gmail подключён через OAuth</span>
-          </div>
-          ` : `
-          <div style="background:var(--tg-theme-bg-color,#fff);border-radius:10px;padding:12px;margin:8px 0;border:1px solid #ff9500">
-            <div style="font-size:13px;font-weight:600;color:#ff9500;margin-bottom:12px">⚠ Gmail не авторизован</div>
-            <div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:12px">
-              <span style="background:#3390ec;color:#fff;border-radius:50%;min-width:20px;height:20px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700">1</span>
-              <div style="flex:1">
-                <div style="font-size:13px;margin-bottom:6px">Открой страницу авторизации Google</div>
-                <button class="settings-form-btn primary" id="e_gmail_open_${aid}" style="width:100%">Открыть Google →</button>
-              </div>
+          <div id="e_imap_block_${aid}" style="display:${a.type === 'imap' ? 'block' : 'none'}">
+            <div style="margin-top:4px;font-size:13px;font-weight:600;color:var(--tg-theme-hint-color,#999)">IMAP</div>
+            <div style="display:flex;gap:6px">
+              <input class="settings-inline-input" id="e_host_${aid}" placeholder="imap.gmail.com" value="${escAttr(ci.host || '')}" style="flex:3">
+              <input class="settings-inline-input" id="e_port_${aid}" placeholder="993" value="${ci.port || 993}" style="flex:1" type="number">
             </div>
-            <div style="display:flex;align-items:flex-start;gap:10px">
-              <span style="background:#3390ec;color:#fff;border-radius:50%;min-width:20px;height:20px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700">2</span>
-              <div style="flex:1">
-                <div style="font-size:13px;margin-bottom:6px">Скопируй код из браузера и вставь сюда</div>
-                <div style="display:flex;gap:6px">
-                  <input class="settings-inline-input" id="e_gmail_code_${aid}" placeholder="Код авторизации от Google" style="flex:1;margin:0">
-                  <button class="settings-form-btn primary" id="e_gmail_submit_${aid}" style="flex-shrink:0">Подключить</button>
+            <input class="settings-inline-input" id="e_user_${aid}" placeholder="Логин (user@example.com)" value="${escAttr(ci.user || '')}">
+            <input class="settings-inline-input" id="e_pass_${aid}" placeholder="App Password (16 символов)" type="password">
+            <div style="margin-top:4px;font-size:13px;font-weight:600;color:var(--tg-theme-hint-color,#999)">SMTP (необязательно)</div>
+            <div style="display:flex;gap:6px">
+              <input class="settings-inline-input" id="e_smtp_host_${aid}" placeholder="smtp.gmail.com" value="${escAttr(ci.smtp_host || '')}" style="flex:3">
+              <input class="settings-inline-input" id="e_smtp_port_${aid}" placeholder="587" value="${ci.smtp_port || ''}" style="flex:1" type="number">
+            </div>
+          </div>
+          <div id="e_gmail_block_${aid}" style="display:${a.type !== 'imap' ? 'block' : 'none'}">
+            ${a.gmail_authorized ? `
+            <div style="display:flex;align-items:center;gap:8px;padding:8px 0;color:#34c759;font-size:14px">
+              <span>✓</span><span>Gmail подключён через OAuth</span>
+            </div>
+            ` : `
+            <div style="background:var(--tg-theme-bg-color,#fff);border-radius:10px;padding:12px;margin:8px 0;border:1px solid #ff9500">
+              <div style="font-size:13px;font-weight:600;color:#ff9500;margin-bottom:12px">⚠ Gmail не авторизован</div>
+              <div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:12px">
+                <span style="background:#3390ec;color:#fff;border-radius:50%;min-width:20px;height:20px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700">1</span>
+                <div style="flex:1">
+                  <div style="font-size:13px;margin-bottom:6px">Открой страницу авторизации Google</div>
+                  <button class="settings-form-btn primary" id="e_gmail_open_${aid}" style="width:100%">Открыть Google →</button>
                 </div>
-                <div id="e_gmail_result_${aid}" style="font-size:12px;margin-top:6px;display:none"></div>
+              </div>
+              <div style="display:flex;align-items:flex-start;gap:10px">
+                <span style="background:#3390ec;color:#fff;border-radius:50%;min-width:20px;height:20px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700">2</span>
+                <div style="flex:1">
+                  <div style="font-size:13px;margin-bottom:6px">Скопируй код из браузера и вставь сюда</div>
+                  <div style="display:flex;gap:6px">
+                    <input class="settings-inline-input" id="e_gmail_code_${aid}" placeholder="Код авторизации от Google" style="flex:1;margin:0">
+                    <button class="settings-form-btn primary" id="e_gmail_submit_${aid}" style="flex-shrink:0">Подключить</button>
+                  </div>
+                  <div id="e_gmail_result_${aid}" style="font-size:12px;margin-top:6px;display:none"></div>
+                </div>
               </div>
             </div>
+            `}
           </div>
-          `}
           <div id="e_test_result_${aid}" style="font-size:13px;padding:4px 0;display:none"></div>
           <div style="display:flex;gap:8px;margin-top:8px">
             <button class="settings-form-btn primary" id="e_save_${aid}">Сохранить</button>
@@ -2169,6 +2179,16 @@
           enabledBtn.classList.toggle('on');
         });
       }
+      // Type selector toggle
+      const typeSelect = document.getElementById('e_type_' + aid);
+      if (typeSelect) {
+        typeSelect.addEventListener('change', () => {
+          const isImap = typeSelect.value === 'imap';
+          document.getElementById('e_imap_block_' + aid).style.display = isImap ? 'block' : 'none';
+          document.getElementById('e_gmail_block_' + aid).style.display = isImap ? 'none' : 'block';
+        });
+      }
+
       const saveBtn = document.getElementById('e_save_' + aid);
       if (saveBtn) {
         saveBtn.addEventListener('click', async (e) => {
@@ -2177,9 +2197,10 @@
           const email = document.getElementById('e_email_' + aid).value.trim();
           const enabled = document.getElementById('e_enabled_' + aid).classList.contains('on') ? 1 : 0;
           const account_type = document.getElementById('e_acctype_' + aid).value;
+          const type = document.getElementById('e_type_' + aid).value;
           if (!label) return;
-          const payload = { label, email, enabled, account_type };
-          if (a.type === 'imap') {
+          const payload = { label, email, type, enabled, account_type };
+          if (type === 'imap') {
             const host = document.getElementById('e_host_' + aid).value.trim();
             const user = document.getElementById('e_user_' + aid).value.trim();
             const password = document.getElementById('e_pass_' + aid).value;
@@ -2191,7 +2212,6 @@
               if (password) creds.password = password;
               if (smtp_host) creds.smtp_host = smtp_host;
               if (smtp_port) creds.smtp_port = smtp_port;
-              // Merge with existing credentials (keep old password if not re-entered)
               if (!password && a.creds_info) creds._keep_password = true;
               payload.credentials = creds;
             }
