@@ -530,6 +530,7 @@ bot.on('message', async (msg) => {
       if (userText === '/status') {
         const gcal = google.isAuthorized() ? '✅' : '❌ нет авторизации';
         await bot.sendMessage(chatId, `📊 Статус:\n• Google: ${gcal}\n• Claude: ✅\n• Я работаю 🟢`);
+        if (!google.isAuthorized()) await offerGoogleAuth(chatId);
         return;
       }
 
