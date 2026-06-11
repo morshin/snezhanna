@@ -9,6 +9,13 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), [Semantic Vers
 <!-- Format: - <One-sentence description> (#<issue or branch ref>) -->
 <!-- Categories: Added | Changed | Fixed | Security | Removed -->
 
+## [1.3.1] — 2026-06-11
+
+### Added
+
+- **Snezhanna:** `lib/skills.js` — auto-generates a "Мои актуальные возможности" block from the live tools list and injects it as Layer 3 of the system prompt; bot now always knows its exact current capabilities and can answer "что ты умеешь?" accurately without manual maintenance
+- **Snezhanna:** `/update-docs` skill now includes a mandatory step to keep `lib/skills.js` in sync whenever tools or always-on capabilities change
+
 ## [1.3.0] — 2026-06-11
 
 ### Added

@@ -15,6 +15,7 @@ const google = require('./lib/google');
 const gdrive = require('./lib/gdrive');
 const whisper = require('./lib/whisper');
 const { getAvailableTools, executeTool, setContext: setToolsContext } = require('./lib/tools');
+const { buildSkillsBlock } = require('./lib/skills');
 const settings = require('./lib/settings');
 const briefing = require('./lib/briefing');
 const yadiskDirs = require('./lib/yadisk-dirs');
@@ -52,9 +53,11 @@ const defaultIdentity = resolveIdentityPlaceholders(
 
 function buildSystemPrompt(nowStr) {
   const identity = resolveIdentityPlaceholders(settings.getIdentity(defaultIdentity));
+  const tools = getAvailableTools();
   return [
     { type: 'text', text: coreIdentity, cache_control: { type: 'ephemeral' } },
     { type: 'text', text: identity, cache_control: { type: 'ephemeral' } },
+    { type: 'text', text: buildSkillsBlock(tools) },
     { type: 'text', text: settings.getSystemPromptBlock() },
     { type: 'text', text: `Сейчас: ${nowStr} (${config.timezone}).` },
   ];

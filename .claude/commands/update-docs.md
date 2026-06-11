@@ -41,9 +41,18 @@ Review all recent changes to the codebase and update all project documentation t
 
 7. Update `schedules/heartbeats.json` if any cron job was added, removed, or its timing/description changed.
 
+### lib/skills.js
+
+8. **Always** review `lib/skills.js` after any code change and keep it in sync:
+   - If a new tool was added to `lib/tools.js` — add or update the matching group in `GROUPS` (sentinel tool name(s), label, text).
+   - If a tool was removed or renamed — update or remove its group.
+   - If a new always-on capability was added (voice, photo, briefing, etc.) — add a line to `ALWAYS_ON`.
+   - If a group's description became stale — update the `text` field.
+   - The goal: `buildSkillsBlock()` must accurately reflect every real capability the bot has at the moment of the change.
+
 ### docs/tz-*.md
 
-8. If the change relates to a feature that has its own spec file (`docs/tz-strava.md`, `docs/tz-task-tracking.md`, etc.) — update that spec file too if the implementation diverged from it.
+9. If the change relates to a feature that has its own spec file (`docs/tz-strava.md`, `docs/tz-task-tracking.md`, etc.) — update that spec file too if the implementation diverged from it.
 
 ---
 
