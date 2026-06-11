@@ -42,6 +42,57 @@ curl -fsSL https://raw.githubusercontent.com/morshin/snezhanna/master/deploy.sh 
 
 ---
 
+## Mini App
+
+Mini App работает как HTTP-сервер на порту из `nanobot.json`. Telegram требует HTTPS — нужен обратный прокси.
+
+### Вариант 1: nginx + Let's Encrypt (рекомендуется, нужен домен)
+
+```bash
+sudo apt-get install -y nginx certbot python3-certbot-nginx
+
+# Создать конфиг (замени alice.example.com на свой домен)
+sudo tee /etc/nginx/sites-available/<имя> <<'EOF'
+server {
+    server_name alice.example.com;
+    location / {
+        proxy_pass http://localhost:3001;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+}
+EOF
+
+sudo ln -s /etc/nginx/sites-available/<имя> /etc/nginx/sites-enabled/
+sudo nginx -t && sudo systemctl reload nginx
+
+# Получить SSL-сертификат
+sudo certbot --nginx -d alice.example.com
+```
+
+### Вариант 2: Cloudflare Tunnel (без домена и открытых портов)
+
+```bash
+# Установить cloudflared, создать туннель — см. developers.cloudflare.com/cloudflare-one/connections/connect-networks/
+cloudflared tunnel create <имя>
+cloudflared tunnel route dns <имя> alice.example.com
+# Запустить туннель как сервис: cloudflared service install
+```
+
+### Настройка кнопки в BotFather
+
+После того как Mini App доступен по HTTPS-адресу:
+
+1. Открыть @BotFather → `/mybots` → выбрать бота
+2. **Bot Settings → Menu Button → Configure Menu Button**
+3. Ввести URL: `https://alice.example.com`
+4. Ввести текст кнопки: `Открыть` (или любой другой)
+
+После этого кнопка Mini App появится рядом с полем ввода в Telegram.
+
+---
+
 ## Обновление
 
 ```bash
