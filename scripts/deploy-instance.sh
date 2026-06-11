@@ -1,5 +1,5 @@
 #!/bin/bash
-# Deploy a new bot instance on the same VPS.
+# Deploy a new bot instance on the same VPS (repo already cloned).
 #
 # Usage (run from anywhere, as root or with sudo):
 #   sudo bash /opt/ira/scripts/deploy-instance.sh
@@ -7,6 +7,10 @@
 # Prerequisites:
 #   - Repo already cloned to /opt/<name>/
 #   - credentials.json placed in /opt/<name>/
+#
+# Deploying on a FRESH server? Use deploy.sh instead:
+#   curl -fsSL https://raw.githubusercontent.com/morshin/snezhanna/master/deploy.sh \
+#     -o /tmp/deploy.sh && sudo bash /tmp/deploy.sh
 
 set -euo pipefail
 

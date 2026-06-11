@@ -8,31 +8,63 @@
 
 - **Telegram-бот**: создать через @BotFather → получить `TELEGRAM_BOT_TOKEN`
 - **Telegram ID пользователя**: узнать через @userinfobot → числовой ID
-- **Google OAuth credentials**: Google Cloud Console → APIs & Services → Credentials → OAuth 2.0 Client ID → тип **Desktop app** → скачать `credentials.json`
+- **Google OAuth credentials**: Google Cloud Console → APIs & Services → Credentials → OAuth 2.0 Client ID → тип **Desktop app** → скопировать `Client ID` и `Client Secret`
   - Можно использовать тот же Google Cloud Project, что и у основного инстанса
 - **Anthropic API key**: platform.anthropic.com
 - **OpenAI API key** _(опционально — только для голосовых сообщений)_
 
 ---
 
-## Шаг 1. Подготовка сервера
+## Деплой
+
+На сервере должны быть установлены **Node.js 18+** и **git**:
+
+```bash
+# Debian/Ubuntu — если ещё не установлен Node.js 18+:
+curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+sudo apt-get install -y nodejs git
+```
+
+Затем — одна команда:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/morshin/snezhanna/master/deploy.sh \
+  -o /tmp/deploy.sh && sudo bash /tmp/deploy.sh
+```
+
+Скрипт запросит:
+- Имя каталога, имя бота и пользователя, часовой пояс
+- API-ключи: Anthropic, Telegram бот-токен, Telegram ID, Google Client ID + Secret, OpenAI (опционально)
+
+Далее скрипт сам: клонирует последний релиз в `/opt/<имя>/`, генерирует `credentials.json`, настраивает сервис, создаёт systemd-юнит и запускает бота.
+
+**После запуска:** бот пришлёт ссылку для авторизации Google. Перейди по ней, разреши доступ к Calendar + Gmail + Drive, скопируй `code=...` из адресной строки и отправь боту: `/auth <код>`. Онбординг запустится автоматически при первом сообщении.
+
+---
+
+## Обновление
+
+```bash
+sudo bash /opt/<имя>/scripts/update.sh
+```
+
+---
+
+<details>
+<summary>Ручной деплой (пошагово)</summary>
+
+### Шаг 1. Подготовка сервера
 
 ```bash
 # Node.js 18+
 curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
 sudo apt-get install -y nodejs git
 
-# Проверить версии
-node --version   # >= 18
-npm --version
-
 # Системный пользователь для сервиса
 sudo useradd -r -m -s /bin/bash snezhanna
 ```
 
----
-
-## Шаг 2. Клонировать репозиторий и установить зависимости
+### Шаг 2. Клонировать репозиторий и установить зависимости
 
 ```bash
 cd /opt
@@ -41,9 +73,7 @@ sudo chown -R snezhanna:snezhanna /opt/snezhanna
 sudo -u snezhanna bash -c "cd /opt/snezhanna && npm install"
 ```
 
----
-
-## Шаг 3. Скопировать Google credentials
+### Шаг 3. Скопировать Google credentials
 
 ```bash
 # С локальной машины на новый сервер
@@ -51,9 +81,7 @@ scp credentials.json user@new-server:/opt/snezhanna/credentials.json
 sudo chown snezhanna:snezhanna /opt/snezhanna/credentials.json
 ```
 
----
-
-## Шаг 4. Настроить .env
+### Шаг 4. Настроить .env
 
 ```bash
 sudo -u snezhanna cp /opt/snezhanna/.env.example /opt/snezhanna/.env
@@ -76,9 +104,7 @@ OPENAI_API_KEY=...               # для голосовых сообщений
 
 **Не нужны** на отдельном сервере: `WATCHDOG_BOT_TOKEN`, `GOOGLE_TOKEN_FILE`, `STATE_FILE`, `GOOGLE_CREDENTIALS_FILE`, `TUTOR_BOT_TOKEN`.
 
----
-
-## Шаг 5. Настроить config/nanobot.json
+### Шаг 5. Настроить config/nanobot.json
 
 ```bash
 sudo nano /opt/snezhanna/config/nanobot.json
@@ -110,9 +136,7 @@ sudo nano /opt/snezhanna/config/nanobot.json
 
 `gdrive.root_folder` — уникальное имя папки в Google Drive для этого инстанса.
 
----
-
-## Шаг 6. Настроить личность бота
+### Шаг 6. Настроить личность бота
 
 ```bash
 sudo -u snezhanna cp /opt/snezhanna/identity/IDENTITY.template.md \
@@ -122,9 +146,7 @@ sudo nano /opt/snezhanna/identity/IDENTITY.md
 
 `{{USER_NAME}}` и `{{ASSISTANT_NAME}}` подставляются автоматически из `config.user` при старте.
 
----
-
-## Шаг 7. Создать systemd-сервис
+### Шаг 7. Создать systemd-сервис
 
 ```bash
 sed 's|INSTANCE_NAME|snezhanna|g; s|INSTANCE_USER|snezhanna|g; s|INSTANCE_DIR|/opt/snezhanna|g' \
@@ -149,9 +171,7 @@ journalctl -u snezhanna -f
 [Bot] started
 ```
 
----
-
-## Шаг 8. Настроить sudoers для управления сервисом из Mini App
+### Шаг 8. Настроить sudoers для управления сервисом из Mini App
 
 ```bash
 printf 'snezhanna ALL=(ALL) NOPASSWD: /bin/systemctl restart snezhanna\nsnezhanna ALL=(ALL) NOPASSWD: /bin/systemctl start snezhanna\n' \
@@ -159,9 +179,7 @@ printf 'snezhanna ALL=(ALL) NOPASSWD: /bin/systemctl restart snezhanna\nsnezhann
 sudo chmod 440 /etc/sudoers.d/snezhanna-restart
 ```
 
----
-
-## Шаг 9. Авторизовать Google
+### Шаг 9. Авторизовать Google
 
 Бот пришлёт ссылку авторизации при первом старте (или написать `/status`):
 
@@ -173,17 +191,13 @@ sudo chmod 440 /etc/sudoers.d/snezhanna-restart
 
 Бот создаст структуру папок в Google Drive и будет готов к работе.
 
----
-
-## Шаг 10. Онбординг
+### Шаг 10. Онбординг
 
 При первом сообщении бот автоматически запустит визард настройки: проверит интеграции, спросит имя, стиль общения, настройки брифинга и чекина. Занимает ~2 минуты.
 
 После онбординга дополнительные настройки доступны в Mini App (кнопка в меню бота).
 
----
-
-## Шаг 11. Проверка
+### Шаг 11. Проверка
 
 ```bash
 journalctl -u snezhanna -n 100
@@ -191,13 +205,4 @@ journalctl -u snezhanna -n 100
 
 В Mini App → Настройки → раздел **Система**: сервис Active ✅
 
----
-
-## Обновление
-
-```bash
-cd /opt/snezhanna
-sudo -u snezhanna git pull
-sudo -u snezhanna npm install   # если изменились зависимости
-sudo systemctl restart snezhanna
-```
+</details>
