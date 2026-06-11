@@ -142,6 +142,15 @@ PORT="${PORT:-$SUGGESTED_PORT}"
 read -rp "  Google Drive folder name (e.g. Алиса): " GDRIVE_FOLDER
 [ -z "$GDRIVE_FOLDER" ] && die "Google Drive folder name is required"
 
+read -rp "  Domain for Mini App (e.g. alice.example.com, Enter to skip): " DOMAIN
+if [ -n "$DOMAIN" ]; then
+  while true; do
+    read -rp "  Admin email for Let's Encrypt: " LE_EMAIL
+    [[ "$LE_EMAIL" =~ ^[^@]+@[^@]+\.[^@]+$ ]] && break
+    red "  Enter a valid email address"
+  done
+fi
+
 # ── API keys ──────────────────────────────────────────────────────────────────
 
 step "API keys"
@@ -194,6 +203,11 @@ echo "  Bot:        $ASSISTANT_NAME  (user: $USER_NAME)"
 echo "  Timezone:   $TIMEZONE"
 echo "  Port:       $PORT"
 echo "  Drive:      $GDRIVE_FOLDER/"
+if [ -n "$DOMAIN" ]; then
+  echo "  Domain:     $DOMAIN  (TLS via Let's Encrypt, $LE_EMAIL)"
+else
+  echo "  Domain:     — (Mini App HTTPS skipped)"
+fi
 printf "  Secrets:    ANTHROPIC ✓  TELEGRAM ✓  GOOGLE ✓"
 [ -n "$OPENAI_API_KEY" ] && printf "  OPENAI ✓"
 echo
@@ -353,6 +367,56 @@ echo "  Last log lines:"
 journalctl -u "$INSTANCE_NAME" -n 8 --no-pager 2>/dev/null \
   | sed 's/^/    /' || true
 
+# ── nginx + TLS ───────────────────────────────────────────────────────────────
+
+MINI_APP_URL=""
+if [ -n "$DOMAIN" ]; then
+  step "nginx + TLS ($DOMAIN)"
+
+  if ! command -v nginx &>/dev/null; then
+    echo "  Installing nginx..."
+    apt-get install -y nginx -q
+    ok "nginx installed"
+  else
+    skip "nginx already installed"
+  fi
+
+  if ! command -v certbot &>/dev/null; then
+    echo "  Installing certbot..."
+    apt-get install -y certbot python3-certbot-nginx -q
+    ok "certbot installed"
+  else
+    skip "certbot already installed"
+  fi
+
+  NGINX_CONF="/etc/nginx/sites-available/$INSTANCE_NAME"
+  cat > "$NGINX_CONF" <<EOF
+server {
+    server_name $DOMAIN;
+    location / {
+        proxy_pass http://localhost:$PORT;
+        proxy_http_version 1.1;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+    }
+}
+EOF
+  ln -sf "$NGINX_CONF" "/etc/nginx/sites-enabled/$INSTANCE_NAME"
+  nginx -t -q && systemctl reload nginx
+  ok "nginx configured for $DOMAIN"
+
+  echo "  Requesting TLS certificate (domain DNS must point to this server)..."
+  if certbot --nginx -d "$DOMAIN" \
+       --non-interactive --agree-tos -m "$LE_EMAIL" -q 2>/dev/null; then
+    ok "TLS certificate issued — auto-renewal via certbot.timer"
+    MINI_APP_URL="https://$DOMAIN"
+  else
+    yellow "certbot failed — DNS may not point here yet, or port 80 is blocked."
+    yellow "Run manually later:  certbot --nginx -d $DOMAIN -m $LE_EMAIL --agree-tos"
+    MINI_APP_URL="https://$DOMAIN  (TLS pending)"
+  fi
+fi
+
 # ── Done ──────────────────────────────────────────────────────────────────────
 
 echo
@@ -371,11 +435,17 @@ bold "║  5. Send to bot: /auth <code>                            ║"
 bold "║                                                          ║"
 bold "║  After auth → onboarding wizard starts automatically     ║"
 bold "║                                                          ║"
-bold "║  Mini App (optional):                                    ║"
-bold "║  Set up nginx + HTTPS, then in @BotFather:               ║"
-bold "║  /mybots → bot → Menu Button → Web App URL               ║"
-printf "║  See: %-51s ║\n" "$INSTANCE_DIR/docs/deploy-new-server.md"
+if [ -n "$MINI_APP_URL" ]; then
+printf "║  Mini App ready: %-40s ║\n" "$MINI_APP_URL"
+bold "║  In @BotFather: /mybots → bot →                          ║"
+bold "║    Menu Button → Configure → paste URL above             ║"
 bold "║                                                          ║"
+else
+bold "║  Mini App: set up nginx + HTTPS when ready, then         ║"
+bold "║    @BotFather → /mybots → bot → Menu Button → URL        ║"
+printf "║  See: %-51s ║\n" "docs/deploy-new-server.md → Mini App"
+bold "║                                                          ║"
+fi
 printf "║  Logs:   journalctl -u %-34s ║\n" "$INSTANCE_NAME -f"
 printf "║  Update: sudo bash %-39s ║\n" "$INSTANCE_DIR/scripts/update.sh"
 bold "╚══════════════════════════════════════════════════════════╝"

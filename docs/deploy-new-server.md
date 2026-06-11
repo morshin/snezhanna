@@ -12,6 +12,7 @@
   - Можно использовать тот же Google Cloud Project, что и у основного инстанса
 - **Anthropic API key**: platform.anthropic.com
 - **OpenAI API key** _(опционально — только для голосовых сообщений)_
+- **Домен** _(опционально — нужен для Mini App)_: DNS A-запись должна указывать на IP сервера. Скрипт выпустит TLS-сертификат через Let's Encrypt автоматически.
 
 ---
 
@@ -44,40 +45,17 @@ curl -fsSL https://raw.githubusercontent.com/morshin/snezhanna/master/deploy.sh 
 
 ## Mini App
 
-Mini App работает как HTTP-сервер на порту из `nanobot.json`. Telegram требует HTTPS — нужен обратный прокси.
+Mini App работает как HTTP-сервер на порту из `nanobot.json`. Telegram требует HTTPS.
 
-### Вариант 1: nginx + Let's Encrypt (рекомендуется, нужен домен)
+**Если указать домен при запуске `deploy.sh`** — скрипт сам установит nginx, выпустит TLS-сертификат через Let's Encrypt и настроит автопродление (`certbot.timer`). DNS A-запись домена должна указывать на IP сервера до запуска скрипта.
 
-```bash
-sudo apt-get install -y nginx certbot python3-certbot-nginx
-
-# Создать конфиг (замени alice.example.com на свой домен)
-sudo tee /etc/nginx/sites-available/<имя> <<'EOF'
-server {
-    server_name alice.example.com;
-    location / {
-        proxy_pass http://localhost:3001;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-    }
-}
-EOF
-
-sudo ln -s /etc/nginx/sites-available/<имя> /etc/nginx/sites-enabled/
-sudo nginx -t && sudo systemctl reload nginx
-
-# Получить SSL-сертификат
-sudo certbot --nginx -d alice.example.com
-```
-
-### Вариант 2: Cloudflare Tunnel (без домена и открытых портов)
+**Альтернатива без домена — Cloudflare Tunnel:**
 
 ```bash
-# Установить cloudflared, создать туннель — см. developers.cloudflare.com/cloudflare-one/connections/connect-networks/
+# см. developers.cloudflare.com/cloudflare-one/connections/connect-networks/
 cloudflared tunnel create <имя>
 cloudflared tunnel route dns <имя> alice.example.com
-# Запустить туннель как сервис: cloudflared service install
+# cloudflared service install  — запустить как сервис
 ```
 
 ### Настройка кнопки в BotFather
