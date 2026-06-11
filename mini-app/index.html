@@ -1700,6 +1700,8 @@
       const uptimeText = document.getElementById('systemUptimeText');
       if (!badge) return;
 
+      const startBtn = document.getElementById('systemStartBtn');
+      const restartBtn = document.getElementById('systemRestartBtn');
       if (data.active) {
         badge.textContent = '✅ активен';
         badge.style.color = 'var(--tg-theme-hint-color,#999)';
@@ -1714,9 +1716,13 @@
             uptimeRow.style.display = '';
           }
         }
+        if (startBtn) startBtn.style.display = 'none';
+        if (restartBtn) restartBtn.style.display = '';
       } else {
         badge.textContent = '❌ не работает';
         badge.style.color = '#e53935';
+        if (startBtn) startBtn.style.display = '';
+        if (restartBtn) restartBtn.style.display = 'none';
       }
       if (data.recentErrors > 0) {
         badge.textContent += ` (⚠️ ${data.recentErrors} ошибок за 10 мин)`;
@@ -2118,9 +2124,15 @@
         <span id="systemUptimeText" style="font-size:13px;color:var(--tg-theme-hint-color,#999)"></span>
       </div>
       <div class="settings-row">
-        <span class="settings-row-label">Перезапустить бота</span>
+        <span class="settings-row-label">Управление</span>
+        <button class="settings-form-btn secondary" id="systemStartBtn" style="display:none;width:auto;padding:6px 14px">Запустить</button>
         <button class="settings-form-btn secondary" id="systemRestartBtn" style="width:auto;padding:6px 14px">Перезапустить</button>
         <span class="save-indicator" id="si_restart"></span>
+      </div>
+      <div class="settings-row">
+        <span class="settings-row-label">Обновить бота</span>
+        <button class="settings-form-btn secondary" id="systemUpdateBtn" style="width:auto;padding:6px 14px">Обновить</button>
+        <span class="save-indicator" id="si_update"></span>
       </div>
     </div>`;
 
@@ -2520,16 +2532,16 @@
       });
     });
 
-    // System restart button
-    const restartBtn = document.getElementById('systemRestartBtn');
-    if (restartBtn) {
-      restartBtn.addEventListener('click', async () => {
-        if (!confirm('Перезапустить бота? Соединение прервётся на несколько секунд.')) return;
-        const el = document.getElementById('si_restart');
-        restartBtn.disabled = true;
+    function bindSystemBtn(btnId, endpoint, confirmMsg, indicatorId) {
+      const btn = document.getElementById(btnId);
+      if (!btn) return;
+      btn.addEventListener('click', async () => {
+        if (confirmMsg && !confirm(confirmMsg)) return;
+        const el = document.getElementById(indicatorId);
+        btn.disabled = true;
         try {
-          const res = await api('POST', '/api/system/restart');
-          if (res.ok) {
+          const res = await api('POST', endpoint);
+          if (res.ok || res.started) {
             if (el) { el.textContent = '✓'; el.className = 'save-indicator ok'; setTimeout(() => { el.textContent = ''; el.className = 'save-indicator'; }, 3000); }
           } else {
             if (el) { el.textContent = '✗'; el.className = 'save-indicator err'; setTimeout(() => { el.textContent = ''; el.className = 'save-indicator'; }, 3000); }
@@ -2537,9 +2549,13 @@
         } catch {
           if (el) { el.textContent = '✗'; el.className = 'save-indicator err'; setTimeout(() => { el.textContent = ''; el.className = 'save-indicator'; }, 3000); }
         }
-        setTimeout(() => { restartBtn.disabled = false; }, 4000);
+        setTimeout(() => { btn.disabled = false; }, 4000);
       });
     }
+
+    bindSystemBtn('systemRestartBtn', '/api/system/restart', 'Перезапустить бота? Соединение прервётся на несколько секунд.', 'si_restart');
+    bindSystemBtn('systemStartBtn',   '/api/system/start',   null, 'si_restart');
+    bindSystemBtn('systemUpdateBtn',  '/api/system/update',  'Обновить бота? git pull + npm install + перезапуск. Займёт несколько секунд.', 'si_update');
   }
 
   const PARAM_TOGGLES = [

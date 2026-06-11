@@ -1,0 +1,6 @@
+'use strict';
+
+// Example: adding a column to an existing table
+module.exports = function(db) {
+  db.exec(`ALTER TABLE tasks ADD COLUMN priority INTEGER NOT NULL DEFAULT 0`);
+};

@@ -151,10 +151,10 @@ journalctl -u snezhanna -f
 
 ---
 
-## Шаг 8. Настроить sudoers для restart из Mini App
+## Шаг 8. Настроить sudoers для управления сервисом из Mini App
 
 ```bash
-echo "snezhanna ALL=(ALL) NOPASSWD: /bin/systemctl restart snezhanna" \
+printf 'snezhanna ALL=(ALL) NOPASSWD: /bin/systemctl restart snezhanna\nsnezhanna ALL=(ALL) NOPASSWD: /bin/systemctl start snezhanna\n' \
   | sudo tee /etc/sudoers.d/snezhanna-restart
 sudo chmod 440 /etc/sudoers.d/snezhanna-restart
 ```
