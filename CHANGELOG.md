@@ -9,8 +9,15 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), [Semantic Vers
 <!-- Format: - <One-sentence description> (#<issue or branch ref>) -->
 <!-- Categories: Added | Changed | Fixed | Security | Removed -->
 
+## [1.3.0] — 2026-06-11
+
 ### Added
 
+- **Snezhanna:** Mini App СИСТЕМА — Start button (shown when service is down), Update button (git pull + npm install + restart via background scripts/update.sh); start/restart buttons toggle based on live service status
+- **Snezhanna:** `scripts/update.sh` — self-update script for bot instances: git pull, npm install, systemctl restart
+- **Snezhanna:** DB migration runner — `lib/db.js` scans `migrations/*.js` on startup, applies unapplied files in order inside transactions; crash on failure so Zhora catches it; `_migrations` tracking table in SQLite
+- **Zhora:** skip monitoring for disabled (inactive) systemd services — avoids false restart attempts when tutor bot is intentionally stopped
+- **Snezhanna:** `scripts/deploy-instance.sh` — automated same-VPS multi-tenant setup script; parameterised by instance name and port
 - **Snezhanna:** Settings Mini App — step-by-step Gmail OAuth guide in email account editor; new API endpoints /api/google/auth-url and /api/google/auth-code; auto-expand new Gmail account after adding (fixes #11)
 - **Snezhanna:** Settings Mini App — toggle to skip briefing and check-in on weekends (fixes #10)
 - **Snezhanna:** Settings Mini App — toggles to enable/disable morning briefing and evening check-in (fixes #9)
