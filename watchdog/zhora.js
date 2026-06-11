@@ -90,12 +90,13 @@ async function send(text) {
 
 const SERVICES = [
   { name: 'Снежанна', unit: 'snezhanna' },
-  { name: 'Макс',     unit: 'tutor'     },
+  { name: 'Макс',     unit: 'tutor',     disabled: true },
 ];
 
 // ── Checks ────────────────────────────────────────────────────────────────────
 
 async function checkService(service) {
+  if (service.disabled) return true;
   const { code } = await sh(`systemctl is-active ${service.unit}`);
   if (code !== 0) {
     console.log(`[Zhora] ${service.name} (${service.unit}) is DOWN. Restarting...`);
@@ -247,6 +248,7 @@ function isAllowed(msg) {
 }
 
 async function getServiceStatusLine(service) {
+  if (service.disabled) return `${service.name}: ⏸ отключён`;
   const statusResult = (await sh(`systemctl is-active ${service.unit}`)).stdout;
   const isOk = statusResult === 'active';
   let uptimeStr = '';
@@ -562,6 +564,7 @@ function setupSchedules() {
       const serviceLines = [];
       let allOk = true;
       for (const svc of SERVICES) {
+        if (svc.disabled) { serviceLines.push(`${svc.name}: ⏸ отключён`); continue; }
         const status = (await sh(`systemctl is-active ${svc.unit}`)).stdout;
         const ok = status === 'active';
         if (!ok) allOk = false;
