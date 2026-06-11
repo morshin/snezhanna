@@ -1733,6 +1733,27 @@
     }
   }
 
+  async function loadVersionInfo() {
+    const footer = document.getElementById('settingsFooter');
+    const updateBtn = document.getElementById('systemUpdateBtn');
+    const versionBadge = document.getElementById('systemVersionBadge');
+    try {
+      const data = await api('GET', '/api/system/version');
+      if (footer) footer.textContent = `v${data.current}`;
+      if (data.updateAvailable && data.latest) {
+        if (updateBtn) updateBtn.disabled = false;
+        if (versionBadge) versionBadge.textContent = `→ v${data.latest}`;
+      } else {
+        if (updateBtn) updateBtn.disabled = true;
+        if (versionBadge) versionBadge.textContent = data.latest ? 'актуальная' : '';
+      }
+    } catch {
+      if (footer) footer.textContent = '';
+      if (updateBtn) updateBtn.disabled = true;
+    }
+  }
+
+
   async function saveSetting(key, value, indicatorId) {
     const el = indicatorId ? document.getElementById('si_' + indicatorId) : null;
     try {
@@ -2131,14 +2152,17 @@
       </div>
       <div class="settings-row">
         <span class="settings-row-label">Обновить бота</span>
-        <button class="settings-form-btn secondary" id="systemUpdateBtn" style="width:auto;padding:6px 14px">Обновить</button>
+        <button class="settings-form-btn secondary" id="systemUpdateBtn" style="width:auto;padding:6px 14px" disabled>Обновить</button>
+        <span id="systemVersionBadge" style="font-size:12px;color:var(--tg-theme-hint-color,#999);margin-left:6px"></span>
         <span class="save-indicator" id="si_update"></span>
       </div>
-    </div>`;
+    </div>
+    <div style="text-align:center;padding:12px 0 4px;font-size:12px;color:var(--tg-theme-hint-color,#999)" id="settingsFooter">…</div>`;
 
     document.getElementById('settingsModalBody').innerHTML = html;
     bindSettingsEvents();
     loadSystemStatus();
+    loadVersionInfo();
   }
 
   function bindSettingsEvents() {
