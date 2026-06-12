@@ -9,6 +9,13 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), [Semantic Vers
 <!-- Format: - <One-sentence description> (#<issue or branch ref>) -->
 <!-- Categories: Added | Changed | Fixed | Security | Removed -->
 
+## [1.3.6] — 2026-06-12
+
+### Fixed
+
+- **Deploy:** добавлен ERR trap — при неожиданном выходе показывает номер строки и код ошибки вместо тихого падения
+- **Deploy:** `|| true` в pipeline получения последнего тега — предотвращает выход из-за `pipefail` если `grep` не находит совпадений
+
 ## [1.3.5] — 2026-06-12
 
 ### Fixed
