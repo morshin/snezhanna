@@ -94,7 +94,12 @@ if [ "$IN_REPO" = false ]; then
   INSTANCE_DIR="/opt/$DIR_NAME"
 
   if [ -d "$INSTANCE_DIR" ]; then
-    die "Directory $INSTANCE_DIR already exists. Remove it first:\n  sudo rm -rf $INSTANCE_DIR"
+    echo
+    yellow "  Directory $INSTANCE_DIR already exists (previous failed deploy?)."
+    read -rp "  Remove it and start fresh? [y/N]: " REMOVE_DIR
+    [[ "$REMOVE_DIR" =~ ^[Yy]$ ]] || die "Aborted. Remove $INSTANCE_DIR manually and re-run."
+    rm -rf "$INSTANCE_DIR"
+    ok "Removed $INSTANCE_DIR"
   fi
 
   echo "  Fetching latest release tag..."
