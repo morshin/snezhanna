@@ -9,6 +9,17 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), [Semantic Vers
 <!-- Format: - <One-sentence description> (#<issue or branch ref>) -->
 <!-- Categories: Added | Changed | Fixed | Security | Removed -->
 
+## [1.3.7] — 2026-06-12
+
+### Fixed
+
+- **Deploy:** отключение bracketed paste и focus events (`\e[?2004l\e[?1004l`) предотвращает вставку escape-последовательностей в `read`
+- **Deploy:** имя директории очищается от недопустимых символов после ввода; путь сразу отображается для проверки
+- **Deploy:** API-ключи извлекаются по паттерну (`grep -oE`) вместо попытки вычистить мусор вокруг них
+- **Deploy:** валидация timezone по `/usr/share/zoneinfo/` с примерами популярных значений
+- **Deploy:** `TELEGRAM_ALLOWED_USER_ID` выводится в summary перед подтверждением
+- **Deploy:** версия скрипта отображается при старте (`1.3.9`)
+
 ## [1.3.6] — 2026-06-12
 
 ### Fixed
