@@ -56,10 +56,13 @@ check_node() {
 
 require_root
 
+DEPLOY_SCRIPT_VERSION="1.3.6"
+
 echo
 bold "╔══════════════════════════════════════════════════╗"
 bold "║        Snezhanna — Deployment Script              ║"
 bold "╚══════════════════════════════════════════════════╝"
+echo "  Script version: $DEPLOY_SCRIPT_VERSION"
 echo
 
 # ── Detect mode: clone needed or already in repo ─────────────────────────────
