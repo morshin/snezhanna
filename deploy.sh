@@ -56,7 +56,7 @@ check_node() {
 
 require_root
 
-DEPLOY_SCRIPT_VERSION="1.3.7"
+DEPLOY_SCRIPT_VERSION="1.3.8"
 
 # Disable terminal modes that inject escape sequences into stdin during read:
 #   ?2004l — bracketed paste mode (sends \e[200~ / \e[201~ around pasted text)
