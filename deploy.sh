@@ -99,7 +99,9 @@ if [ "$IN_REPO" = false ]; then
   REPO_URL="${REPO_URL:-$DEFAULT_REPO}"
 
   read -rp "  Bot directory name (e.g. alice): " DIR_NAME
+  DIR_NAME=$(printf '%s' "$DIR_NAME" | tr -cd 'a-zA-Z0-9_-')
   [ -z "$DIR_NAME" ] && die "Directory name is required"
+  echo "  → /opt/$DIR_NAME"
   INSTANCE_DIR="/opt/$DIR_NAME"
 
   if [ -d "$INSTANCE_DIR" ]; then
