@@ -56,7 +56,12 @@ check_node() {
 
 require_root
 
-DEPLOY_SCRIPT_VERSION="1.3.6"
+DEPLOY_SCRIPT_VERSION="1.3.7"
+
+# Disable terminal modes that inject escape sequences into stdin during read:
+#   ?2004l — bracketed paste mode (sends \e[200~ / \e[201~ around pasted text)
+#   ?1004l — focus event reporting (sends \e[I on focus-in, \e[O on focus-out)
+printf '\e[?2004l\e[?1004l' 2>/dev/null || true
 
 echo
 bold "╔══════════════════════════════════════════════════╗"
