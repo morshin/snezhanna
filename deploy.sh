@@ -165,10 +165,13 @@ step "API keys"
 echo "  (input is hidden)"
 echo
 
+# strip non-printable/non-ASCII chars (bracketed paste sequences, spaces, etc.)
+strip_key() { printf '%s' "$1" | sed 's/[^a-zA-Z0-9:_\.\-]//g'; }
+
 # Anthropic
 while true; do
   read -rsp "  ANTHROPIC_API_KEY: " ANTHROPIC_API_KEY; echo
-  ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY// /}"   # trim spaces (paste artifacts)
+  ANTHROPIC_API_KEY=$(strip_key "$ANTHROPIC_API_KEY")
   [[ "$ANTHROPIC_API_KEY" == sk-ant-* ]] && break
   red "  Must start with sk-ant-  (got: ${ANTHROPIC_API_KEY:0:10}...)"
 done
@@ -176,6 +179,7 @@ done
 # Telegram bot token
 while true; do
   read -rsp "  TELEGRAM_BOT_TOKEN: " TELEGRAM_BOT_TOKEN; echo
+  TELEGRAM_BOT_TOKEN=$(strip_key "$TELEGRAM_BOT_TOKEN")
   [[ "$TELEGRAM_BOT_TOKEN" =~ ^[0-9]+:[A-Za-z0-9_-]+$ ]] && break
   red "  Invalid format (expected 123456:ABC-xyz)"
 done
@@ -190,17 +194,20 @@ done
 # Google OAuth
 while true; do
   read -rsp "  GOOGLE_CLIENT_ID: " GOOGLE_CLIENT_ID; echo
+  GOOGLE_CLIENT_ID=$(strip_key "$GOOGLE_CLIENT_ID")
   [ -n "$GOOGLE_CLIENT_ID" ] && break
   red "  Cannot be empty"
 done
 while true; do
   read -rsp "  GOOGLE_CLIENT_SECRET: " GOOGLE_CLIENT_SECRET; echo
+  GOOGLE_CLIENT_SECRET=$(strip_key "$GOOGLE_CLIENT_SECRET")
   [ -n "$GOOGLE_CLIENT_SECRET" ] && break
   red "  Cannot be empty"
 done
 
 # OpenAI (optional)
 read -rsp "  OPENAI_API_KEY (optional, Enter to skip): " OPENAI_API_KEY; echo
+OPENAI_API_KEY=$(strip_key "$OPENAI_API_KEY")
 
 # ── Confirmation ──────────────────────────────────────────────────────────────
 
