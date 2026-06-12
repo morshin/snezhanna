@@ -11,6 +11,7 @@ LATEST_TAG=$(curl -fsSL "https://api.github.com/repos/morshin/snezhanna/releases
 [ -z "$LATEST_TAG" ] && { echo "Could not fetch latest tag"; exit 1; }
 echo "Latest release: $LATEST_TAG"
 
+git config --global --add safe.directory "$INSTANCE_DIR" 2>/dev/null || true
 git fetch --tags -q
 git checkout -q "$LATEST_TAG"
 npm install --production --ignore-scripts -q
