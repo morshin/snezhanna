@@ -144,8 +144,14 @@ read -rp "  Bot name (e.g. Алиса): "           ASSISTANT_NAME
 read -rp "  User name (e.g. Алекс): "          USER_NAME
 [ -z "$USER_NAME" ] && die "User name is required"
 
-read -rp "  Timezone [Europe/Madrid]: "         TIMEZONE
-TIMEZONE="${TIMEZONE:-Europe/Madrid}"
+while true; do
+  echo "  Common timezones: Europe/Moscow  Europe/Madrid  Europe/London"
+  echo "                    America/New_York  Asia/Almaty  Asia/Dubai"
+  read -rp "  Timezone [Europe/Madrid]: " TIMEZONE
+  TIMEZONE="${TIMEZONE:-Europe/Madrid}"
+  [ -f "/usr/share/zoneinfo/$TIMEZONE" ] && break
+  red "  Unknown timezone '$TIMEZONE'. Use format Region/City (e.g. Europe/Moscow)"
+done
 
 # Auto-detect next available port
 USED_PORTS=$(grep -h '"port"' /opt/*/config/nanobot.json 2>/dev/null \
