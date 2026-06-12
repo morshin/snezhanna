@@ -9,6 +9,13 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), [Semantic Vers
 <!-- Format: - <One-sentence description> (#<issue or branch ref>) -->
 <!-- Categories: Added | Changed | Fixed | Security | Removed -->
 
+## [1.3.4] — 2026-06-12
+
+### Fixed
+
+- **Deploy:** trim пробелов и escape-артефактов из вставленных API-ключей; при неверном формате показывает первые 10 символов для диагностики
+- **Deploy:** подавлено сообщение о detached HEAD при клонировании тега (через `2>/dev/null`)
+
 ## [1.3.3] — 2026-06-12
 
 ### Fixed
