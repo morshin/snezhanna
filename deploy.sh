@@ -11,6 +11,7 @@
 # For adding a second instance on the SAME VPS see scripts/deploy-instance.sh
 
 set -euo pipefail
+trap 'echo ""; red "Deploy failed at line $LINENO (exit code: $?)"; exit 1' ERR
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -104,8 +105,8 @@ if [ "$IN_REPO" = false ]; then
 
   echo "  Fetching latest release tag..."
   REPO_SLUG=$(echo "$REPO_URL" | sed 's|https://github.com/||')
-  LATEST_TAG=$(curl -fsSL "https://api.github.com/repos/$REPO_SLUG/releases/latest" \
-    | grep '"tag_name"' | head -1 | cut -d'"' -f4)
+  LATEST_TAG=$(curl -fsSL "https://api.github.com/repos/$REPO_SLUG/releases/latest" 2>/dev/null \
+    | grep '"tag_name"' | head -1 | cut -d'"' -f4 || true)
   [ -z "$LATEST_TAG" ] && die "Could not determine latest release tag from $REPO_URL"
   echo "  Latest release: $LATEST_TAG"
 
