@@ -161,8 +161,9 @@ echo
 # Anthropic
 while true; do
   read -rsp "  ANTHROPIC_API_KEY: " ANTHROPIC_API_KEY; echo
+  ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY// /}"   # trim spaces (paste artifacts)
   [[ "$ANTHROPIC_API_KEY" == sk-ant-* ]] && break
-  red "  Must start with sk-ant-"
+  red "  Must start with sk-ant-  (got: ${ANTHROPIC_API_KEY:0:10}...)"
 done
 
 # Telegram bot token
