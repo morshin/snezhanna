@@ -56,7 +56,7 @@ check_node() {
 
 require_root
 
-DEPLOY_SCRIPT_VERSION="1.3.8"
+DEPLOY_SCRIPT_VERSION="1.3.9"
 
 # Disable terminal modes that inject escape sequences into stdin during read:
 #   ?2004l — bracketed paste mode (sends \e[200~ / \e[201~ around pasted text)
@@ -240,6 +240,7 @@ fi
 printf "  Secrets:    ANTHROPIC ✓  TELEGRAM ✓  GOOGLE ✓"
 [ -n "$OPENAI_API_KEY" ] && printf "  OPENAI ✓"
 echo
+echo "  Telegram user ID: $TELEGRAM_ALLOWED_USER_ID"
 bold "──────────────────────────────────────────────────"
 echo
 read -rp "Proceed? [y/N] " CONFIRM
