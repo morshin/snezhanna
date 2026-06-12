@@ -103,7 +103,7 @@ if [ "$IN_REPO" = false ]; then
   [ -z "$LATEST_TAG" ] && die "Could not determine latest release tag from $REPO_URL"
   echo "  Latest release: $LATEST_TAG"
 
-  git clone --depth 1 --branch "$LATEST_TAG" "$REPO_URL" "$INSTANCE_DIR" -q
+  git -c advice.detachedHead=false clone --depth 1 --branch "$LATEST_TAG" "$REPO_URL" "$INSTANCE_DIR" -q
   ok "Cloned $LATEST_TAG → $INSTANCE_DIR"
 
   cd "$INSTANCE_DIR"

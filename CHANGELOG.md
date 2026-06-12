@@ -9,6 +9,16 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), [Semantic Vers
 <!-- Format: - <One-sentence description> (#<issue or branch ref>) -->
 <!-- Categories: Added | Changed | Fixed | Security | Removed -->
 
+## [1.3.3] — 2026-06-12
+
+### Fixed
+
+- **Deploy:** подавлено git-сообщение о detached HEAD при клонировании тега — оно некорректно воспринималось как ошибка
+
+### Security
+
+- Очищены личные данные из публичных файлов репозитория: удалены Telegram chat_id и имена контактов из `config/nanobot.json`, реальные IP-адреса из документации, личный email и ссылки на личные репозитории
+
 ## [1.3.2] — 2026-06-12
 
 ### Added
