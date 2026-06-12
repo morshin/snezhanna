@@ -28,9 +28,9 @@ The project consists of **three independent processes**:
 | Hypervisor | Proxmox VE |
 | VM | Ubuntu 22.04 LTS, 2 vCPU, 2GB RAM, 20GB disk |
 | VM ID | 101, name: Snezhanna |
-| VM network | vmbr1 (internal), IP: 192.168.78.10 |
-| Proxmox host | 5.9.69.196 (vmbr0, external) |
-| SSH access | Via Jump Host: `ssh -J root@5.9.69.196 vova@192.168.78.10` |
+| VM network | vmbr1 (internal), IP: `<VM_IP>` |
+| Proxmox host | `<SERVER_IP>` (vmbr0, external) |
+| SSH access | Via Jump Host: `ssh -J root@<SERVER_IP> vova@<VM_IP>` |
 | VS Code / Cursor | Remote SSH profile: `snezhanna` (via ProxyJump) |
 | Project path | `/opt/snezhanna` |
 | System user | `snezhanna` (runs all agent processes) |
@@ -39,14 +39,14 @@ The project consists of **three independent processes**:
 
 ```
 Host proxmox
-    HostName 5.9.69.196
+    HostName <SERVER_IP>
     User root
 
 Host snezhanna
-    HostName 192.168.78.10
+    HostName <VM_IP>
     User vova
     ProxyJump proxmox
-    IdentityFile C:/Users/demor/.ssh/id_ed25519
+    IdentityFile ~/.ssh/id_ed25519
 ```
 
 ---
@@ -85,7 +85,7 @@ Examples:
 | Process manager | systemd |
 | Runtime | Node.js 22.x |
 | Package manager | npm 10.x |
-| Repository | GitHub private: `github.com/morshin/snezhanna` |
+| Repository | GitHub: `github.com/morshin/snezhanna` |
 
 ---
 
@@ -289,9 +289,9 @@ STATE_FILE=                # path to state file (default: ./.nanobot/state.json)
 - APIs enabled: Google Calendar API, Gmail API, Google Drive API
 - Scopes: `calendar`, `gmail.modify`, `drive`
 
-### 3. Gmail — snezhanna@morshin.pro
+### 3. Gmail
 
-- Dedicated email for Snezhanna: `snezhanna@morshin.pro`
+- Dedicated email for Snezhanna (configured per instance)
 - Vova's work mail is auto-forwarded here
 - Read inbox (last N unread emails, metadata)
 - Read full email content by ID
@@ -767,7 +767,7 @@ Dynamic preferences edited via Mini App or Claude conversation (`update_my_prefe
 
 ## What Was Done — Infrastructure ✅
 
-- ✅ Proxmox VM created (ID 101, Ubuntu 22.04, 2CPU, 2GB RAM, 20GB disk, vmbr1, IP 192.168.78.10)
+- ✅ Proxmox VM created (ID 101, Ubuntu 22.04, 2CPU, 2GB RAM, 20GB disk, vmbr1)
 - ✅ Ubuntu 22.04 installed, user `vova` created
 - ✅ Node.js v22.x installed
 - ✅ tmux and git installed
@@ -781,7 +781,7 @@ Dynamic preferences edited via Mini App or Claude conversation (`update_my_prefe
 - ✅ Google Calendar API + Gmail API enabled
 - ✅ OAuth 2.0 Desktop credentials → `credentials.json`
 - ✅ Personal Gmail added as OAuth test user
-- ✅ Snezhanna email created: snezhanna@morshin.pro
+- ✅ Snezhanna dedicated email created
 - ✅ Telegram bot Snezhanna created
 - ✅ Telegram bot Zhora created
 - ✅ Telegram bot Max created

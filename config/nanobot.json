@@ -34,24 +34,9 @@
   },
   "github": {
     "milestone_due_within_days": 14,
-    "repos": [
-      { "repo": "morshin/snezhanna", "project": "snezhanna" },
-      { "repo": "morshin/QueTal", "project": "Que-tal" },
-      { "repo": "morshin/ai-lytics", "project": "AI-lytics" }
-    ]
+    "repos": []
   },
   "chat_monitor": {
-    "chats": [
-      { "chat_id": 8271850037, "name": "Рома Моршин (сын)", "type": "personal", "category": "kids" },
-      { "chat_id": 782192489, "name": "Аня моршина", "type": "personal", "category": "family" },
-      { "chat_id": 931329753, "name": "Маша (дочь)", "type": "personal", "category": "kids" },
-      { "chat_id": 136625295, "name": "Лена Казакова (жена)", "type": "personal", "category": "family" },
-      { "chat_id": 438354213, "name": "Nikolay Shukshin", "type": "work", "project": "AMC" },
-      { "chat_id": -5042716682, "name": "New DB 1c Drive for Colombia", "type": "work", "project": "AMC" },
-      { "chat_id": -4240906075, "name": "Operations Team (global)", "type": "work", "project": "AMC" },
-      { "chat_id": -4569367802, "name": "Rarus", "type": "work", "project": "AMC" },
-      { "chat_id": -4783246337, "name": "SEALONG (Thailand)", "type": "work", "project": "AMC" },
-      { "chat_id": -5137370015, "name": "Формекс - вопросы по переходу на КА", "type": "work", "project": "Формекс — Переход на КА" }
-    ]
+    "chats": []
   }
 }

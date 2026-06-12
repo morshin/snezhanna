@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-Snezhanna is a personal AI assistant for Vova (Vladimir Morshin) that runs as a systemd service on a Linux VPS. It operates through Telegram and uses Claude (claude-sonnet-4-6) as its brain. The project has three processes: **Snezhanna** (main bot), **Max** (tutor bot for Vova's son), and **Zhora** (watchdog monitoring both).
+Snezhanna is a personal AI assistant for Vova that runs as a systemd service on a Linux VPS. It operates through Telegram and uses Claude (claude-sonnet-4-6) as its brain. The project has three processes: **Snezhanna** (main bot), **Max** (tutor bot for Vova's son), and **Zhora** (watchdog monitoring both).
 
 ## Running the bot
 

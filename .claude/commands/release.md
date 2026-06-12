@@ -53,7 +53,7 @@ If `## [Unreleased]` has no entries — stop and tell the user: "Nothing to rele
 
 Update the `"version"` field to the new version string.
 
-### 5. Commit, tag, push
+### 5. Commit, tag, push, create GitHub Release
 
 ```bash
 git add CHANGELOG.md package.json
@@ -63,9 +63,15 @@ git push origin master
 git push origin v<new-version>
 ```
 
+Then create a GitHub Release using the released CHANGELOG section as the body:
+
+```bash
+gh release create v<new-version> --title "v<new-version>" --notes "<released-changelog-body>"
+```
+
 ### 6. Report back
 
 Tell the user:
 - New version
 - What's included (paste the released CHANGELOG section)
-- Tag pushed: `v<new-version>`
+- GitHub Release URL returned by `gh release create`

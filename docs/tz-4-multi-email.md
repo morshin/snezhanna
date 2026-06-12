@@ -76,8 +76,8 @@ Add to `scripts/migrate-from-yadisk.js` as a final step:
 1. Read `token.json` if it exists.
 2. Insert into `email_accounts`:
    ```
-   label = 'snezhanna@morshin.pro'
-   email = 'snezhanna@morshin.pro'
+   label = '<your-snezhanna-email>'
+   email = '<your-snezhanna-email>'
    type  = 'gmail'
    account_type = 'personal'
    enabled = 1

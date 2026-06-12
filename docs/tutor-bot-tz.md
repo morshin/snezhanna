@@ -25,7 +25,7 @@
 
 | Component | Details |
 |-----------|---------|
-| VM | Та же VM Снежанны (192.168.78.10) — отдельный systemd-сервис |
+| VM | Та же VM Снежанны — отдельный systemd-сервис |
 | Project path | `/opt/snezhanna/tutor` |
 | System user | `snezhanna` (тот же, уже имеет доступ к Яндекс.Диску) |
 | Telegram bot | Отдельный бот (создать через @BotFather) |

@@ -2,7 +2,7 @@
 
 ## Overview
 
-A new skill for the Snezhanna personal assistant that monitors Vladimir's overall life balance across four domains (work, family, health, personal), synthesizes data from multiple sources, and produces a weekly **wellbeing score** (0–10) with per-domain breakdown, trend tracking, and actionable recommendations.
+A new skill for the Snezhanna personal assistant that monitors the user's overall life balance across four domains (work, family, health, personal), synthesizes data from multiple sources, and produces a weekly **wellbeing score** (0–10) with per-domain breakdown, trend tracking, and actionable recommendations.
 
 The feature is intentionally "human" — Snezhanna acts as a caring close friend who happens to have access to all the data, not as a metrics dashboard.
 
@@ -82,16 +82,16 @@ Tasks are stored as JSON files, managed by `lib/tasks.js` (existing integration)
 
 ### Self-reported (collected via weekly check-in message)
 
-On the weekly trigger, before running analysis, Snezhanna sends a short conversational check-in to Vladimir asking 3–4 quick questions:
+On the weekly trigger, before running analysis, Snezhanna sends a short conversational check-in to Vova asking 3–4 quick questions:
 
 1. "Как ощущается эта неделя в целом — потянул или нет?" (1 sentence)
 2. "Было ли время с семьёй / детьми?" (yes/no or brief)
 3. "Как со сном и энергией?" (brief)
 4. "Было ли что-то личное — хобби, отдых, своё время?" (brief)
 
-> Task status (overdue, volume, priorities) is collected automatically from Yandex.Disk — no need to ask Vladimir about it.
+> Task status (overdue, volume, priorities) is collected automatically from Yandex.Disk — no need to ask Vova about it.
 
-Vladimir can answer all in one message or skip questions. Responses are factored into scoring before analysis.
+Vova can answer all in one message or skip questions. Responses are factored into scoring before analysis.
 
 ---
 
@@ -99,13 +99,13 @@ Vladimir can answer all in one message or skip questions. Responses are factored
 
 - **Weekly trigger:** Every Monday at 09:00 Europe/Madrid
 - **Flow:**
-  1. Send check-in questions to Vladimir
+  1. Send check-in questions to Vova
   2. Wait up to 30 minutes for responses (use a timeout handler)
   3. If no response within 30 min: proceed with automated data only, note "ответа на чек-ин не было"
   4. Fetch Google Calendar, Gmail, Strava data
   5. Run scoring analysis via Claude
-  6. Send full weekly report to Vladimir
-- **On-demand:** Vladimir can trigger analysis any time with commands like "как я справляюсь?", "мой скор", "обзор недели"
+  6. Send full weekly report to Vova
+- **On-demand:** Vova can trigger analysis any time with commands like "как я справляюсь?", "мой скор", "обзор недели"
 
 ---
 
@@ -114,7 +114,7 @@ Vladimir can answer all in one message or skip questions. Responses are factored
 The scoring is performed by a dedicated Claude call (not inline in conversation) with a structured system prompt. Claude receives:
 
 - Raw data from all sources (calendar events, gmail summary, strava stats)
-- Vladimir's self-reported check-in responses (if provided)
+- Vova's self-reported check-in responses (if provided)
 - Last week's score history from Yandex.Disk (for trend context)
 - Current date and timezone
 
@@ -217,7 +217,7 @@ These are not templates to fill in — they are the **reference voice**. Claude 
 
 ## On-Demand Commands
 
-Vladimir can trigger analysis or query history via natural language. Snezhanna should recognize intents including (not exhaustive):
+Vova can trigger analysis or query history via natural language. Snezhanna should recognize intents including (not exhaustive):
 
 | Intent | Example phrases |
 |--------|----------------|
@@ -226,7 +226,7 @@ Vladimir can trigger analysis or query history via natural language. Snezhanna s
 | Trend query | "как я в последнее время?", "лучше или хуже стало?" |
 | History | "покажи мой скор за прошлые недели" |
 
-On-demand analysis uses same logic as weekly, minus the check-in step (goes straight to data collection + scoring), unless Vladimir naturally provides context in his message — in which case that context is included.
+On-demand analysis uses same logic as weekly, minus the check-in step (goes straight to data collection + scoring), unless Vova naturally provides context in his message — in which case that context is included.
 
 ---
 
@@ -268,7 +268,7 @@ The last weekly score is read from `workload-history.json` on Yandex.Disk at bri
 After the standard briefing content (schedule, weather, tasks), Snezhanna appends an **Overload Coach block**. She looks at today's and tomorrow's calendar events and identifies candidates for:
 
 - **Postponement** — event that is non-critical, has no external hard deadline, or has been rescheduled before
-- **Delegation** — event that someone else could handle (detected by: Vladimir is organizer but not the only attendee, or it's a routine/recurring sync)
+- **Delegation** — event that someone else could handle (detected by: Vova is organizer but not the only attendee, or it's a routine/recurring sync)
 - **Cancellation** — event with no clear purpose, very short, or a 1:1 with no agenda
 
 She names the specific events by title and time, explains briefly why she thinks each could be moved/delegated/dropped, and asks for a reaction. She does **not** act on Calendar herself.
@@ -297,11 +297,11 @@ Informal, close, slightly playful — matches the canonical voice samples define
 
 ### Follow-up
 
-If Vladimir responds positively (e.g. "да, перенеси ту встречу" / "помоги написать отмену"):
+If Vova responds positively (e.g. "да, перенеси ту встречу" / "помоги написать отмену"):
 - Snezhanna drafts the cancellation/reschedule message text for him to send manually
 - She can suggest a new time slot based on calendar free slots if asked
 
-If Vladimir ignores or dismisses: drop the topic, no follow-up nagging.
+If Vova ignores or dismisses: drop the topic, no follow-up nagging.
 
 ### Implementation Notes
 
