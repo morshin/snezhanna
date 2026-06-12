@@ -9,6 +9,13 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), [Semantic Vers
 <!-- Format: - <One-sentence description> (#<issue or branch ref>) -->
 <!-- Categories: Added | Changed | Fixed | Security | Removed -->
 
+## [1.3.2] — 2026-06-12
+
+### Added
+
+- **Deploy:** `deploy.sh` — поддержка домена, автоустановка nginx и выпуск TLS-сертификата через Let's Encrypt в интерактивном setup
+- **Docs:** `docs/deploy-new-server.md` — инструкция по настройке Mini App (nginx + BotFather) в рамках деплоя
+
 ## [1.3.1] — 2026-06-11
 
 ### Added
