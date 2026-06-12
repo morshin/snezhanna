@@ -9,6 +9,13 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), [Semantic Vers
 <!-- Format: - <One-sentence description> (#<issue or branch ref>) -->
 <!-- Categories: Added | Changed | Fixed | Security | Removed -->
 
+## [1.3.5] — 2026-06-12
+
+### Fixed
+
+- **Deploy:** используется GitHub API вместо `git ls-remote` для получения последнего тега — устраняет зависание на новых серверах
+- **Deploy:** при повторном запуске на уже существующую директорию скрипт предлагает удалить её и начать заново
+
 ## [1.3.4] — 2026-06-12
 
 ### Fixed
