@@ -94,12 +94,13 @@ if [ "$IN_REPO" = false ]; then
   INSTANCE_DIR="/opt/$DIR_NAME"
 
   if [ -d "$INSTANCE_DIR" ]; then
-    die "Directory $INSTANCE_DIR already exists. Remove it first or run deploy.sh from inside it."
+    die "Directory $INSTANCE_DIR already exists. Remove it first:\n  sudo rm -rf $INSTANCE_DIR"
   fi
 
   echo "  Fetching latest release tag..."
-  LATEST_TAG=$(git ls-remote --tags --refs --sort=-v:refname "$REPO_URL" \
-    | head -1 | cut -d/ -f3)
+  REPO_SLUG=$(echo "$REPO_URL" | sed 's|https://github.com/||')
+  LATEST_TAG=$(curl -fsSL "https://api.github.com/repos/$REPO_SLUG/releases/latest" \
+    | grep '"tag_name"' | head -1 | cut -d'"' -f4)
   [ -z "$LATEST_TAG" ] && die "Could not determine latest release tag from $REPO_URL"
   echo "  Latest release: $LATEST_TAG"
 
