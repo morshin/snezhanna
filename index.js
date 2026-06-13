@@ -368,8 +368,15 @@ async function runEmailPoll() {
 
       console.log(`[Schedule] email_poll: ${messages.length} new message(s) from ${account.email}`);
 
+      // Only actionable categories — info/update filtered silently per Layer 2 instructions
+      const actionable = messages.filter(m => ['reply_needed', 'task', 'event'].includes(m.category));
+      if (actionable.length === 0) {
+        console.log(`[Schedule] email_poll: all ${messages.length} message(s) filtered as non-actionable`);
+        continue;
+      }
+
       // Hard-alert emails requiring reply — bypass silence/vacation
-      for (const m of messages) {
+      for (const m of actionable) {
         if (briefing.looksLikeReplyRequest(m)) {
           await sendToVova(`📬 Похоже нужен ответ: *${m.subject || '(без темы)'}* — от ${m.from || '?'} (${account.label})`, { parse_mode: 'Markdown' }, { urgent: true });
         }
@@ -381,7 +388,10 @@ async function runEmailPoll() {
         continue;
       }
 
-      const digestText = mailManager.buildEmailDigest(account, messages);
+      const regular = actionable.filter(m => !briefing.looksLikeReplyRequest(m));
+      if (regular.length === 0) continue;
+
+      const digestText = mailManager.buildEmailDigest(account, regular);
       if (!digestText) continue;
 
       const prompt = `Пришли новые письма. Вот дайджест:\n\n${digestText}\n\nПроанализируй и скажи ${userName} что важного пришло и что нужно сделать. Кратко.`;
