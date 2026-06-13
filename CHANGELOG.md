@@ -9,6 +9,13 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), [Semantic Vers
 <!-- Format: - <One-sentence description> (#<issue or branch ref>) -->
 <!-- Categories: Added | Changed | Fixed | Security | Removed -->
 
+## [1.3.8] — 2026-06-13
+
+### Fixed
+
+- **Email:** письма категорий `info`/`update` (рассылки, уведомления) фильтруются молча — Claude и хард-алерты получают только `reply_needed`, `task`, `event` (claude/layer-2-email-filtering-73cqkb)
+- **Email:** `looksLikeReplyRequest` проверяет no-reply паттерны отправителя ДО проверки `?` в теме — рассылки с вопросительным знаком больше не вызывают хард-алерт
+
 ## [1.3.7] — 2026-06-12
 
 ### Fixed
