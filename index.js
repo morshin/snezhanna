@@ -1519,14 +1519,6 @@ ${chatSection}`;
 async function main() {
   console.log('[Snezhanna] Starting...');
 
-  // Migration: existing users skip onboarding
-  if (appState.chatId && !appState.onboarding_completed) {
-    appState.onboarding_completed = true;
-    appState.onboarding_step = null;
-    state.save(appState);
-    console.log('[Onboarding] Existing user — marked onboarding as completed');
-  }
-
   apiStart();
   setApiContext(appState, state.save, rescheduleBriefing, rescheduleEmailPoll);
   setupSchedules();
