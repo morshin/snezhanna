@@ -9,6 +9,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), [Semantic Vers
 <!-- Format: - <One-sentence description> (#<issue or branch ref>) -->
 <!-- Categories: Added | Changed | Fixed | Security | Removed -->
 
+## [1.3.12] — 2026-06-14
+
+### Fixed
+
+- **Onboarding:** wizard now starts correctly for instances with an existing `chatId` but no completed onboarding — previously the bot silently dropped all messages in this state
+
 ## [1.3.11] — 2026-06-14
 
 ### Added
