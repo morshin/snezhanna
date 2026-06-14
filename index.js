@@ -511,7 +511,11 @@ bot.on('message', async (msg) => {
 
   // Onboarding in progress — intercept before normal processing
   if (!appState.onboarding_completed) {
-    await onboarding.handleMessage(bot, msg, appState);
+    if (!appState.onboarding_step) {
+      await onboarding.start(bot, msg.chat.id, msg, appState, config);
+    } else {
+      await onboarding.handleMessage(bot, msg, appState);
+    }
     return;
   }
 
