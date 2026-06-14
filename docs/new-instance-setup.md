@@ -1,58 +1,58 @@
-# Добавление нового инстанса бота на тот же VPS
+# Adding a New Bot Instance on the Same VPS
 
-Каждый пользователь получает изолированную копию бота: свой каталог `/opt/<имя>`, своего системного пользователя, свой systemd-сервис и свой порт для Mini App.
+Each user gets an isolated copy of the bot: their own directory `/opt/<name>`, their own system user, their own systemd service, and their own Mini App port.
 
-> **Быстрый путь** — скрипт `scripts/deploy-instance.sh` делает шаги 1–8 автоматически.  
-> Клонируй репо, положи `credentials.json`, запусти скрипт и заполни `.env`.  
-> Ручной разбор шагов ниже — для понимания или если что-то пошло не так.
+> **Quick path** — the script `scripts/deploy-instance.sh` performs steps 1–8 automatically.  
+> Clone the repo, place `credentials.json`, run the script and fill in `.env`.  
+> The manual step-by-step breakdown below is for understanding or troubleshooting.
 
-В примерах ниже имя инстанса — `ira`. Везде подставляй нужное: `eugenio`, `lena` и т.д.
+In the examples below the instance name is `ira`. Substitute your actual name everywhere: `eugenio`, `lena`, etc.
 
 ---
 
-## Быстрый деплой (скрипт)
+## Quick Deployment (script)
 
 ```bash
-# 1. Клонировать репо
+# 1. Clone the repo
 sudo git clone https://github.com/morshin/snezhanna /opt/ira
 
-# 2. Положить credentials.json
+# 2. Place credentials.json
 scp credentials.json user@server:/opt/ira/credentials.json
 
-# 3. Запустить скрипт
+# 3. Run the script
 sudo bash /opt/ira/scripts/deploy-instance.sh
-# → спросит: имя бота, имя пользователя, таймзону, порт, папку Drive
-# → создаст пользователя, сервис, sudoers, .env и nanobot.json
+# → will ask: bot name, user name, timezone, port, Drive folder
+# → creates user, service, sudoers, .env and nanobot.json
 
-# 4. Заполнить API-ключи
+# 4. Fill in API keys
 sudo nano /opt/ira/.env
 
-# 5. Запустить
+# 5. Start
 sudo systemctl start ira
 
-# 6. Авторизовать Google — написать /status боту
+# 6. Authorize Google — send /status to the bot
 ```
 
 ---
 
-## Пошаговый деплой (вручную)
+## Step-by-Step Deployment (manual)
 
-## Что нужно подготовить заранее (на локальной машине)
+## What to Prepare in Advance (on your local machine)
 
-- **Telegram-бот**: создать через @BotFather → получить `TELEGRAM_BOT_TOKEN`
-- **Telegram ID пользователя**: узнать через @userinfobot → числовой ID
-- **Google OAuth credentials**: Google Cloud Console → Desktop-type OAuth 2.0 Client → скачать `credentials.json`
-  - Можно использовать тот же Google Cloud Project, что и у основного инстанса
+- **Telegram bot**: create via @BotFather → get `TELEGRAM_BOT_TOKEN`
+- **Telegram user ID**: look up via @userinfobot → numeric ID
+- **Google OAuth credentials**: Google Cloud Console → Desktop-type OAuth 2.0 Client → download `credentials.json`
+  - You can reuse the same Google Cloud Project as the main instance
 - **Anthropic API key**: platform.anthropic.com
-- **OpenAI API key** _(опционально — только для голосовых сообщений)_
+- **OpenAI API key** _(optional — only needed for voice messages)_
 
 ---
 
-## Карта инстансов на сервере
+## Instance Map on the Server
 
-Веди этот список вручную — поможет не запутаться с портами:
+Keep this list manually — it helps avoid port collisions:
 
-| Каталог           | Сервис  | Пользователь | Порт |
+| Directory         | Service | User         | Port |
 |-------------------|---------|--------------|------|
 | `/opt/snezhanna`  | `snezhanna` | `snezhanna` | 3001 |
 | `/opt/ira`        | `ira`   | `ira`        | 3002 |
@@ -60,7 +60,7 @@ sudo systemctl start ira
 
 ---
 
-## Шаг 1. Создать системного пользователя
+## Step 1. Create a system user
 
 ```bash
 sudo useradd -r -m -s /bin/bash ira
@@ -68,7 +68,7 @@ sudo useradd -r -m -s /bin/bash ira
 
 ---
 
-## Шаг 2. Клонировать репозиторий
+## Step 2. Clone the repository
 
 ```bash
 cd /opt
@@ -79,43 +79,43 @@ sudo -u ira bash -c "cd /opt/ira && npm install"
 
 ---
 
-## Шаг 3. Скопировать Google credentials
+## Step 3. Copy Google credentials
 
 ```bash
-# С локальной машины на сервер
+# From local machine to server
 scp credentials.json user@server:/opt/ira/credentials.json
 sudo chown ira:ira /opt/ira/credentials.json
 ```
 
 ---
 
-## Шаг 4. Настроить .env
+## Step 4. Configure .env
 
 ```bash
 sudo -u ira cp /opt/ira/.env.example /opt/ira/.env
 sudo nano /opt/ira/.env
 ```
 
-Обязательные:
+Required:
 ```
 ANTHROPIC_API_KEY=sk-ant-...
-TELEGRAM_BOT_TOKEN=...           # токен нового бота
-TELEGRAM_ALLOWED_USER_ID=...     # числовой Telegram ID пользователя
+TELEGRAM_BOT_TOKEN=...           # new bot token
+TELEGRAM_ALLOWED_USER_ID=...     # numeric Telegram user ID
 GOOGLE_CLIENT_ID=...
 GOOGLE_CLIENT_SECRET=...
 ```
 
-Опциональные:
+Optional:
 ```
-OPENAI_API_KEY=...               # для голосовых сообщений
+OPENAI_API_KEY=...               # for voice messages
 ```
 
-> `GOOGLE_TOKEN_FILE`, `STATE_FILE`, `GOOGLE_CREDENTIALS_FILE` не нужны —
-> у каждого инстанса свой каталог, пути по умолчанию не конфликтуют.
+> `GOOGLE_TOKEN_FILE`, `STATE_FILE`, `GOOGLE_CREDENTIALS_FILE` are not needed —
+> each instance has its own directory, so default paths do not conflict.
 
 ---
 
-## Шаг 5. Настроить config/nanobot.json
+## Step 5. Configure config/nanobot.json
 
 ```bash
 sudo -u ira nano /opt/ira/config/nanobot.json
@@ -124,12 +124,12 @@ sudo -u ira nano /opt/ira/config/nanobot.json
 ```json
 {
   "user": {
-    "name": "Ира",
-    "assistant_name": "Света"
+    "name": "Ira",
+    "assistant_name": "Sveta"
   },
   "timezone": "Europe/Moscow",
   "gdrive": {
-    "root_folder": "Света"
+    "root_folder": "Sveta"
   },
   "mini_app": {
     "port": 3002
@@ -144,23 +144,23 @@ sudo -u ira nano /opt/ira/config/nanobot.json
 }
 ```
 
-`mini_app.port` — уникальный для каждого инстанса (см. карту выше).  
-`gdrive.root_folder` — уникальное имя папки в Google Drive.
+`mini_app.port` — unique for each instance (see map above).  
+`gdrive.root_folder` — unique folder name in Google Drive.
 
 ---
 
-## Шаг 6. Настроить личность бота
+## Step 6. Configure bot personality
 
 ```bash
 sudo -u ira cp /opt/ira/identity/IDENTITY.template.md /opt/ira/identity/IDENTITY.md
 sudo nano /opt/ira/identity/IDENTITY.md
 ```
 
-`{{USER_NAME}}` и `{{ASSISTANT_NAME}}` подставляются из `config.user` при старте.
+`{{USER_NAME}}` and `{{ASSISTANT_NAME}}` are substituted from `config.user` on startup.
 
 ---
 
-## Шаг 7. Создать systemd-сервис
+## Step 7. Create the systemd service
 
 ```bash
 sed 's|INSTANCE_NAME|ira|g; s|INSTANCE_USER|ira|g; s|INSTANCE_DIR|/opt/ira|g' \
@@ -172,23 +172,23 @@ sudo systemctl enable ira
 sudo systemctl start ira
 ```
 
-Проверить логи:
+Check logs:
 ```bash
 journalctl -u ira -f
 ```
 
-Ожидаемые строки при успешном старте:
+Expected lines on successful startup:
 ```
 [DB] initialized
 [API] Server listening on port 3002
 [Bot] started
 ```
 
-(`[GDrive] dirs ok` появится после Google OAuth)
+(`[GDrive] dirs ok` appears after Google OAuth)
 
 ---
 
-## Шаг 8. Настроить sudoers для restart из Mini App
+## Step 8. Configure sudoers for restart from Mini App
 
 ```bash
 echo "ira ALL=(ALL) NOPASSWD: /bin/systemctl restart ira" \
@@ -198,33 +198,33 @@ sudo chmod 440 /etc/sudoers.d/ira-restart
 
 ---
 
-## Шаг 9. Авторизовать Google
+## Step 9. Authorize Google
 
-Бот пришлёт ссылку авторизации при первом старте (или написать `/status`):
+The bot will send an authorization link on first startup (or send `/status`):
 
-1. Открыть ссылку из бота
-2. Авторизоваться Google-аккаунтом **пользователя** (не Вовиным!)
-3. Разрешить: Calendar + Gmail + Drive
-4. Скопировать код из адресной строки (`code=...`)
-5. Отправить боту: `/auth <код>`
+1. Open the link from the bot
+2. Sign in with the **user's** Google account (not Vova's!)
+3. Grant access: Calendar + Gmail + Drive
+4. Copy the code from the address bar (`code=...`)
+5. Send to the bot: `/auth <code>`
 
-Бот создаст структуру папок в Google Drive и будет готов к работе.
-
----
-
-## Шаг 10. Онбординг
-
-При первом сообщении бот автоматически запустит визард: проверит интеграции, спросит имя, стиль общения, расписание брифинга. Занимает ~2 минуты.
+The bot will create the Google Drive folder structure and be ready to use.
 
 ---
 
-## Обновление
+## Step 10. Onboarding
 
-Каждый инстанс обновляется независимо:
+On the first message, the bot will automatically launch the setup wizard: check integrations, ask for name, communication style, briefing schedule. Takes about 2 minutes.
+
+---
+
+## Updating
+
+Each instance is updated independently:
 
 ```bash
 cd /opt/ira
 sudo -u ira git pull
-sudo -u ira npm install   # если изменились зависимости
+sudo -u ira npm install   # if dependencies changed
 sudo systemctl restart ira
 ```

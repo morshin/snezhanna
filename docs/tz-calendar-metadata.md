@@ -1,53 +1,53 @@
-# ТЗ: Метаданные событий календаря
+# TZ: Calendar Event Metadata
 
-## Цель
+## Goal
 
-Добавить структурированные метаданные к событиям Google Calendar:
-категорию, привязку к проекту, теги, ссылку на фоллоу-ап.
-Метаданные хранятся в `extendedProperties.private` — невидимы в интерфейсе Google Calendar,
-не мешают описанию события, доступны через API.
+Add structured metadata to Google Calendar events:
+category, project link, tags, and a follow-up reference.
+Metadata is stored in `extendedProperties.private` — invisible in the Google Calendar interface,
+does not interfere with the event description, and is accessible via the API.
 
 ---
 
-## Схема метаданных
+## Metadata Schema
 
 ```json
 {
   "category": "work",
-  "project": "Миграция-ERP-Альфа",
-  "tags": "релиз,команда",
-  "followup_ref": "meetings/2026-03-03-eрp-release.md"
+  "project": "Migration-ERP-Alpha",
+  "tags": "release,team",
+  "followup_ref": "meetings/2026-03-03-erp-release.md"
 }
 ```
 
-### Поля
+### Fields
 
-| Поле | Тип | Обязательное | Описание |
-|------|-----|--------------|----------|
-| `category` | string | нет | Категория события (см. справочник) |
-| `project` | string | нет | Имя папки проекта на Яндекс.Диске (из `list_projects`) |
-| `tags` | string | нет | Теги через запятую, без пробелов |
-| `followup_ref` | string | нет | Путь к файлу фоллоу-апа в папке агента |
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `category` | string | no | Event category (see reference below) |
+| `project` | string | no | Project folder name on Yandex.Disk (from `list_projects`) |
+| `tags` | string | no | Comma-separated tags, no spaces |
+| `followup_ref` | string | no | Path to the follow-up file in the agent folder |
 
-### Справочник категорий
+### Category Reference
 
-| Значение | Описание |
-|----------|----------|
-| `work` | Рабочие задачи, клиенты, консалтинг |
-| `petproject` | Собственные проекты (Снежанна и др.) |
-| `sport` | Тренировки, спорт, физическая активность |
-| `learning` | Курсы, чтение, личное развитие |
-| `family` | Семья, дети, личные дела |
-| `health` | Врачи, анализы, процедуры |
-| `admin` | Бюрократия, документы, налоги |
+| Value | Description |
+|-------|-------------|
+| `work` | Work tasks, clients, consulting |
+| `petproject` | Personal projects (Snezhanna, etc.) |
+| `sport` | Workouts, sports, physical activity |
+| `learning` | Courses, reading, personal development |
+| `family` | Family, children, personal matters |
+| `health` | Doctors, tests, procedures |
+| `admin` | Bureaucracy, documents, taxes |
 
 ---
 
-## Изменения в коде
+## Code Changes
 
 ### 1. `lib/google.js`
 
-#### `createEvent` — добавить `extendedProperties`
+#### `createEvent` — add `extendedProperties`
 
 ```js
 async function createEvent(summary, startTime, endTime, description, location, recurrence, metadata) {
@@ -66,7 +66,7 @@ async function createEvent(summary, startTime, endTime, description, location, r
 }
 ```
 
-#### `updateEvent` — добавить патч `extendedProperties`
+#### `updateEvent` — add `extendedProperties` patch
 
 ```js
 if (updates.metadata) {
@@ -76,9 +76,9 @@ if (updates.metadata) {
 }
 ```
 
-#### `getCalendarEvents` / `getUpcomingEvents` — включить поле в ответ
+#### `getCalendarEvents` / `getUpcomingEvents` — include field in response
 
-Добавить `fields` в запрос, чтобы `extendedProperties` возвращались:
+Add `fields` to the request so that `extendedProperties` are returned:
 
 ```js
 const res = await calendar.events.list({
@@ -87,35 +87,35 @@ const res = await calendar.events.list({
   timeMax: end.toISOString(),
   singleEvents: true,
   orderBy: 'startTime'
-  // extendedProperties возвращаются автоматически — ничего добавлять не нужно
+  // extendedProperties are returned automatically — nothing extra needed
 });
 ```
 
-> Проверить: Google Calendar API возвращает `extendedProperties` в ответе `events.list` без дополнительных параметров.
+> Verify: Google Calendar API returns `extendedProperties` in the `events.list` response without additional parameters.
 
 ### 2. `lib/tools.js`
 
-#### `create_calendar_event` — добавить параметры метаданных
+#### `create_calendar_event` — add metadata parameters
 
 ```json
 "category": {
   "type": "string",
   "enum": ["work", "petproject", "sport", "learning", "family", "health", "admin"],
-  "description": "Категория события"
+  "description": "Event category"
 },
 "project": {
   "type": "string",
-  "description": "Название проекта (имя папки на Яндекс.Диске)"
+  "description": "Project name (folder name on Yandex.Disk)"
 },
 "tags": {
   "type": "string",
-  "description": "Теги через запятую (например: релиз,команда)"
+  "description": "Comma-separated tags (e.g. release,team)"
 }
 ```
 
-#### `update_calendar_event` — те же параметры
+#### `update_calendar_event` — same parameters
 
-#### `executeTool` — собрать metadata-объект и передать в `createEvent`/`updateEvent`
+#### `executeTool` — build metadata object and pass to `createEvent`/`updateEvent`
 
 ```js
 case 'create_calendar_event': {
@@ -131,86 +131,86 @@ case 'create_calendar_event': {
 }
 ```
 
-### 3. Новый инструмент: `save_meeting_followup`
+### 3. New tool: `save_meeting_followup`
 
-Отдельный tool для фиксации итогов встречи. Пишет файл в `/mnt/yadisk-agent/meetings/`.
+A separate tool for recording meeting outcomes. Writes a file to `/mnt/yadisk-agent/meetings/`.
 
 ```json
 {
   "name": "save_meeting_followup",
-  "description": "Сохранить итоги встречи: решения, ответственные, следующие шаги. Пишет в /mnt/yadisk-agent/meetings/.",
+  "description": "Save meeting outcomes: decisions, owners, next steps. Writes to /mnt/yadisk-agent/meetings/.",
   "input_schema": {
     "properties": {
-      "event_id":    { "type": "string", "description": "ID события в Google Calendar" },
-      "event_title": { "type": "string", "description": "Название встречи" },
-      "date":        { "type": "string", "description": "Дата встречи (YYYY-MM-DD)" },
-      "summary":     { "type": "string", "description": "Краткое резюме встречи" },
-      "decisions":   { "type": "string", "description": "Принятые решения (markdown-список)" },
-      "action_items":{ "type": "string", "description": "Задачи и ответственные (markdown-список)" },
-      "next_meeting": { "type": "string", "description": "Дата или описание следующей встречи (опционально)" },
-      "project":     { "type": "string", "description": "Название проекта для дублирования в log.md (опционально)" }
+      "event_id":    { "type": "string", "description": "Google Calendar event ID" },
+      "event_title": { "type": "string", "description": "Meeting title" },
+      "date":        { "type": "string", "description": "Meeting date (YYYY-MM-DD)" },
+      "summary":     { "type": "string", "description": "Brief meeting summary" },
+      "decisions":   { "type": "string", "description": "Decisions made (markdown list)" },
+      "action_items":{ "type": "string", "description": "Tasks and owners (markdown list)" },
+      "next_meeting": { "type": "string", "description": "Date or description of next meeting (optional)" },
+      "project":     { "type": "string", "description": "Project name for appending to log.md (optional)" }
     },
     "required": ["event_title", "date", "summary"]
   }
 }
 ```
 
-**Логика выполнения:**
+**Execution logic:**
 
-1. Формирует имя файла: `YYYY-MM-DD-<slug>.md` (slug = транслит названия, строчные, дефисы)
-2. Пишет Markdown-файл в `/mnt/yadisk-agent/meetings/`
-3. Если передан `project` — дополнительно дописывает краткую запись в `projects/<project>/log.md`
-4. Если передан `event_id` — обновляет событие в Google Calendar: ставит `extendedProperties.private.followup_ref`
+1. Builds the filename: `YYYY-MM-DD-<slug>.md` (slug = transliterated title, lowercase, hyphens)
+2. Writes a Markdown file to `/mnt/yadisk-agent/meetings/`
+3. If `project` is provided — also appends a brief entry to `projects/<project>/log.md`
+4. If `event_id` is provided — updates the Google Calendar event: sets `extendedProperties.private.followup_ref`
 
-**Шаблон файла:**
+**File template:**
 
 ```markdown
 # <event_title>
-**Дата:** <date>
-**Проект:** <project или —>
+**Date:** <date>
+**Project:** <project or —>
 
-## Резюме
+## Summary
 <summary>
 
-## Решения
+## Decisions
 <decisions>
 
-## Задачи
+## Action Items
 <action_items>
 
-## Следующая встреча
-<next_meeting или —>
+## Next Meeting
+<next_meeting or —>
 ```
 
 ---
 
-## Поведение Снежанны
+## Snezhanna's Behavior
 
-### При создании события
+### When creating an event
 
-Если событие похоже на встречу/звонок (ключевые слова: встреч, созвон, звонок, митинг, standup, call, review) — **уточнить**:
+If the event looks like a meeting or call (keywords: встреч, созвон, звонок, митинг, standup, call, review) — **ask for clarification**:
 
-> «К какой категории отнести? Есть привязка к проекту?»
+> "What category should this be? Is there a project to link it to?"
 
-Если в сообщении уже очевиден контекст — проставить автоматически, не спрашивая.
+If the context is already obvious from the message — set it automatically without asking.
 
-### После события (триггер)
+### After the event (trigger)
 
-При утреннем брифинге и вечернем чек-ине — проверять прошедшие за день встречи (у которых нет `followup_ref`). Если есть — предлагать:
+During the morning briefing and evening check-in — check past meetings from the day that have no `followup_ref`. If any are found — suggest:
 
-> «Вова, вчера была встреча "Созвон с Алексом". Записать итоги?»
+> "Vova, yesterday you had a meeting 'Call with Alex'. Want to record the outcomes?"
 
-### При чтении событий
+### When reading events
 
-Если событие имеет `extendedProperties` — показывать категорию и проект в сводке:
+If an event has `extendedProperties` — show the category and project in the summary:
 
 ```
-📅 15:00 — Созвон с Алексом [work / Миграция-ERP-Альфа]
+📅 15:00 — Call with Alex [work / Migration-ERP-Alpha]
 ```
 
 ---
 
-## Новая структура папки агента
+## New Agent Folder Structure
 
 ```
 /mnt/yadisk-agent/
@@ -220,8 +220,8 @@ case 'create_calendar_event': {
     finance.md
     bureaucracy.md
     decisions.md
-  meetings/            ← новая папка
-    2026-03-03-eрp-release.md
+  meetings/            ← new folder
+    2026-03-03-erp-release.md
     2026-03-10-standup.md
   projects/
     ...
@@ -231,13 +231,13 @@ case 'create_calendar_event': {
   digests/
 ```
 
-Папка `meetings/` создаётся при старте бота через `yadiskDirs.ensureDirs()`.
+The `meetings/` folder is created on bot startup via `yadiskDirs.ensureDirs()`.
 
 ---
 
-## Изменения в конфиге
+## Config Changes
 
-В `config/nanobot.json` добавить справочник категорий (для документации, не загружается в runtime):
+Add a category reference to `config/nanobot.json` (for documentation; not loaded at runtime):
 
 ```json
 "calendar": {
@@ -247,30 +247,30 @@ case 'create_calendar_event': {
 
 ---
 
-## Изменения в документации
+## Documentation Changes
 
-| Файл | Что добавить |
+| File | What to add |
 |------|-------------|
-| `skills/google-calendar.md` | Описание категорий, примеры с `project` и `tags`, поведение при встречах |
-| `identity/IDENTITY.md` | Новая capabilities: `meetings/` папка, `save_meeting_followup` |
-| `lib/yadisk-dirs.js` | `meetings/` в список директорий `ensureDirs()` |
-| `docs/snezhanna-tz.md` | Раздел про calendar metadata |
+| `skills/google-calendar.md` | Category descriptions, examples with `project` and `tags`, behavior for meetings |
+| `identity/IDENTITY.md` | New capability: `meetings/` folder, `save_meeting_followup` |
+| `lib/yadisk-dirs.js` | `meetings/` in the `ensureDirs()` directory list |
+| `docs/snezhanna-tz.md` | Section on calendar metadata |
 
 ---
 
-## Что НЕ входит в этот scope
+## What Is NOT in This Scope
 
-- Несколько Google-календарей (отдельная фича, требует ручной настройки calendarId)
-- Поиск событий по `privateExtendedProperty` через API (можно добавить позже как `search_calendar_events`)
-- Автоматические напоминания о незакрытых фоллоу-апах (отдельная крон-задача)
+- Multiple Google calendars (separate feature, requires manual calendarId configuration)
+- Searching events by `privateExtendedProperty` via the API (can be added later as `search_calendar_events`)
+- Automatic reminders for unresolved follow-ups (separate cron task)
 
 ---
 
-## Порядок реализации
+## Implementation Order
 
-1. `lib/google.js` — поддержка `extendedProperties` в create/update/get
-2. `lib/tools.js` — новые параметры в create/update, новый tool `save_meeting_followup`
-3. `lib/yadisk-dirs.js` — добавить `meetings/` в `ensureDirs()`
-4. `identity/IDENTITY.md` + `skills/google-calendar.md` — обновить промпты
-5. `config/nanobot.json` — добавить `calendar.categories`
-6. Рестарт сервиса, проверка через `journalctl -u snezhanna -f`
+1. `lib/google.js` — support `extendedProperties` in create/update/get
+2. `lib/tools.js` — new parameters in create/update, new tool `save_meeting_followup`
+3. `lib/yadisk-dirs.js` — add `meetings/` to `ensureDirs()`
+4. `identity/IDENTITY.md` + `skills/google-calendar.md` — update prompts
+5. `config/nanobot.json` — add `calendar.categories`
+6. Restart service, verify via `journalctl -u snezhanna -f`

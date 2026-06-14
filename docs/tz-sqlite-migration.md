@@ -1,44 +1,44 @@
-# TZ: Миграция Снежанны Personal на SQLite
+# TZ: Migrating Snezhanna Personal to SQLite
 
-> Спецификация для Claude Code. Формат: поведенческий, без имён функций и скелетов кода.
-
----
-
-## Цель
-
-Перевести хранение задач и проектов Снежанны Personal с JSON-файлов на Яндекс.Диске на локальную SQLite базу. Убрать разрозненные `tasks.json`, проектные markdown-файлы и `memory/*.md` — заменить единой БД с быстрым поиском, связями между сущностями и надёжной целостностью.
-
-**Что НЕ входит:** memory/health.md и другие memory-файлы на первом этапе оставить как есть — их миграция опциональна (см. раздел 9).
+> Specification for Claude Code. Format: behavioral, without function names or code skeletons.
 
 ---
 
-## 1. Что мигрирует
+## Goal
 
-| Сейчас (JSON/MD на Яндекс.Диске) | Станет (SQLite) |
+Migrate task and project storage from JSON files on Yandex.Disk to a local SQLite database. Remove the scattered `tasks.json` files, project markdown files, and `memory/*.md` — replace them with a single DB that provides fast search, entity relationships, and reliable integrity.
+
+**What is NOT included:** memory/health.md and other memory files are left as-is in the first phase — their migration is optional (see section 9).
+
+---
+
+## 1. What Gets Migrated
+
+| Currently (JSON/MD on Yandex.Disk) | Becomes (SQLite) |
 |-----------------------------------|-----------------|
-| `/mnt/yadisk-agent/tasks/tasks.json` | таблица `tasks` |
-| `/mnt/yadisk-agent/projects/{name}/tasks.json` | таблица `tasks` с `project_id` |
-| `/mnt/yadisk-agent/projects/{name}/README.md` | таблица `projects` |
-| `/mnt/yadisk-agent/projects/{name}/log.md` | таблица `project_log` |
-| `/mnt/yadisk-agent/projects/{name}/notes.md` | таблица `project_notes` |
-| `/mnt/yadisk-agent/projects/{name}/docs/*` | таблица `project_docs` |
-| GitHub Issues (live fetch) | Без изменений — по-прежнему live fetch, объединение в list_tasks |
+| `/mnt/yadisk-agent/tasks/tasks.json` | `tasks` table |
+| `/mnt/yadisk-agent/projects/{name}/tasks.json` | `tasks` table with `project_id` |
+| `/mnt/yadisk-agent/projects/{name}/README.md` | `projects` table |
+| `/mnt/yadisk-agent/projects/{name}/log.md` | `project_log` table |
+| `/mnt/yadisk-agent/projects/{name}/notes.md` | `project_notes` table |
+| `/mnt/yadisk-agent/projects/{name}/docs/*` | `project_docs` table |
+| GitHub Issues (live fetch) | No change — still live fetch, merged in list_tasks |
 
 ---
 
-## 2. Где лежит БД
+## 2. Database Location
 
 ```
 /opt/snezhanna/data/snezhanna.db
 ```
 
-Директория `data/` создаётся при старте бота если не существует. Путь настраивается через `config/nanobot.json → database.path`.
+The `data/` directory is created on bot startup if it doesn't exist. The path is configurable via `config/nanobot.json → database.path`.
 
-**Backup:** ежедневный автоматический backup в `/mnt/yadisk-agent/backups/snezhanna_YYYYMMDD.db` через cron (03:30, после индексера). Хранить 7 последних.
+**Backup:** daily automatic backup to `/mnt/yadisk-agent/backups/snezhanna_YYYYMMDD.db` via cron (03:30, after the indexer). Keep 7 most recent.
 
 ---
 
-## 3. Схема базы данных
+## 3. Database Schema
 
 ### tasks
 
@@ -68,7 +68,7 @@ CREATE INDEX idx_tasks_due ON tasks(due_date) WHERE status IN ('pending', 'in_pr
 CREATE INDEX idx_tasks_parent ON tasks(parent_id);
 ```
 
-### task_deps (зависимости между задачами)
+### task_deps (task dependencies)
 
 ```sql
 CREATE TABLE task_deps (
@@ -83,11 +83,11 @@ CREATE TABLE task_deps (
 ```sql
 CREATE TABLE projects (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    name        TEXT NOT NULL UNIQUE,           -- имя папки (slug)
-    display_name TEXT,                          -- человекочитаемое название
-    client      TEXT,                           -- клиент/компания
-    type        TEXT,                           -- Внедрение, Миграция, Аудит...
-    platform    TEXT,                           -- 1С:ERP, 1С:УТ...
+    name        TEXT NOT NULL UNIQUE,           -- folder name (slug)
+    display_name TEXT,                          -- human-readable name
+    client      TEXT,                           -- client/company
+    type        TEXT,                           -- Implementation, Migration, Audit...
+    platform    TEXT,                           -- 1C:ERP, 1C:UT...
     status      TEXT NOT NULL DEFAULT 'active'
                 CHECK (status IN ('active', 'paused', 'completed', 'archived')),
     contacts    TEXT DEFAULT '{}',              -- JSON
@@ -97,7 +97,7 @@ CREATE TABLE projects (
 );
 ```
 
-### project_log (журнал работ)
+### project_log (work log)
 
 ```sql
 CREATE TABLE project_log (
@@ -110,7 +110,7 @@ CREATE TABLE project_log (
 CREATE INDEX idx_project_log ON project_log(project_id, created_at DESC);
 ```
 
-### project_notes (заметки)
+### project_notes (notes)
 
 ```sql
 CREATE TABLE project_notes (
@@ -121,7 +121,7 @@ CREATE TABLE project_notes (
 );
 ```
 
-### project_docs (документация проектов)
+### project_docs (project documentation)
 
 ```sql
 CREATE TABLE project_docs (
@@ -136,58 +136,58 @@ CREATE TABLE project_docs (
 
 ---
 
-## 4. Пользовательское поведение — что меняется
+## 4. User-Facing Behavior — What Changes
 
-### Задачи
+### Tasks
 
-**Ничего не меняется для пользователя.** Все команды и tools работают как раньше:
-- «Добавь задачу: позвонить Алексею» → `add_task`
-- «Покажи задачи» → `list_tasks`
-- «Завершить задачу 5» → `complete_task`
-- Утренний брифинг → задачи из SQLite вместо JSON
-- Вечерний чеклист → то же самое
-- Mini App → те же API-эндпоинты, те же данные
+**Nothing changes for the user.** All commands and tools work as before:
+- "Add task: call Alexei" → `add_task`
+- "Show tasks" → `list_tasks`
+- "Complete task 5" → `complete_task`
+- Morning briefing → tasks from SQLite instead of JSON
+- Evening checklist → same
+- Mini App → same API endpoints, same data
 
-**Новое поведение:**
-- `parent_id` — подзадачи. «Разбей задачу 5 на подзадачи» → Claude создаёт задачи с `parent_id = 5`. В list_tasks подзадачи отображаются вложенными.
-- `task_deps` — зависимости. «Задача 7 блокирует задачу 8» → запись в task_deps. В брифинге заблокированные задачи помечаются.
-- `source` + `source_ref` — откуда пришла задача. Захват голосом → `source: 'voice'`. Из чата → `source: 'chat'`. Из почты → `source: 'email'`.
+**New behavior:**
+- `parent_id` — subtasks. "Break task 5 into subtasks" → Claude creates tasks with `parent_id = 5`. In list_tasks, subtasks are displayed nested.
+- `task_deps` — dependencies. "Task 7 blocks task 8" → entry in task_deps. Blocked tasks are flagged in the briefing.
+- `source` + `source_ref` — where the task came from. Captured by voice → `source: 'voice'`. From chat → `source: 'chat'`. From email → `source: 'email'`.
 
-### Проекты
+### Projects
 
-**Ничего не меняется для пользователя:**
-- «Создай проект Миграция-ERP» → `create_project`
-- «Покажи проекты» → `list_projects`
-- «Запиши в журнал проекта» → `write_project_file`
-- «Покажи документацию проекта» → `list_project_docs`, `read_project_doc`
+**Nothing changes for the user:**
+- "Create project Migration-ERP" → `create_project`
+- "Show projects" → `list_projects`
+- "Write to project log" → `write_project_file`
+- "Show project documentation" → `list_project_docs`, `read_project_doc`
 
-**Внутри:** вместо файлов на Яндекс.Диске — записи в SQLite. Шаблоны файлов (README, tasks.md, log.md, notes.md) больше не создаются — данные хранятся в таблицах.
-
----
-
-## 5. Что происходит с Mini App API
-
-Эндпоинты не меняются. `lib/api.js` по-прежнему вызывает `lib/tasks.js` — просто внутри tasks.js теперь SQLite вместо JSON.
-
-```
-GET  /api/tasks              — без изменений
-POST /api/tasks/:id/complete — без изменений
-PATCH /api/tasks/:id         — без изменений
-DELETE /api/tasks/:id        — без изменений
-GET  /api/calendar/day       — без изменений
-GET  /api/calendar/week      — без изменений
-```
-
-**Новый эндпоинт (опционально):**
-```
-GET /api/tasks/:id/subtasks  — подзадачи задачи
-```
+**Internally:** instead of files on Yandex.Disk — records in SQLite. File templates (README, tasks.md, log.md, notes.md) are no longer created — data is stored in tables.
 
 ---
 
-## 6. Где и когда: расписание
+## 5. What Happens with the Mini App API
 
-Бэкап БД — ежедневно в 03:30 (после индексера в 03:00). Cron в `schedules/heartbeats.json`:
+Endpoints are unchanged. `lib/api.js` still calls `lib/tasks.js` — only now tasks.js uses SQLite instead of JSON internally.
+
+```
+GET  /api/tasks              — no change
+POST /api/tasks/:id/complete — no change
+PATCH /api/tasks/:id         — no change
+DELETE /api/tasks/:id        — no change
+GET  /api/calendar/day       — no change
+GET  /api/calendar/week      — no change
+```
+
+**New endpoint (optional):**
+```
+GET /api/tasks/:id/subtasks  — subtasks of a task
+```
+
+---
+
+## 6. When: Schedule
+
+DB backup — daily at 03:30 (after the indexer at 03:00). Cron in `schedules/heartbeats.json`:
 
 ```json
 {
@@ -199,41 +199,41 @@ GET /api/tasks/:id/subtasks  — подзадачи задачи
 
 ---
 
-## 7. Бизнес-правила
+## 7. Business Rules
 
-1. **ID задач.** Текущие задачи имеют `id = Date.now()` (13-значные числа). После миграции новые задачи получают `AUTOINCREMENT` (1, 2, 3...). **Мигрированные задачи сохраняют свои старые ID** — AUTOINCREMENT начинается с max(id) + 1. Это нужно чтобы не сломать активные ссылки в памяти Claude и в истории чата.
+1. **Task IDs.** Current tasks have `id = Date.now()` (13-digit numbers). After migration, new tasks get `AUTOINCREMENT` (1, 2, 3...). **Migrated tasks keep their original IDs** — AUTOINCREMENT starts at max(id) + 1. This prevents breaking active references in Claude's memory and chat history.
 
-2. **Проектные задачи.** Сейчас проектные задачи хранятся отдельно (`projects/{name}/tasks.json`), различаясь от глобальных по полю `project`. После миграции — единая таблица `tasks` с `project_id`. Проектные задачи фильтруются по FK.
+2. **Project tasks.** Currently project tasks are stored separately (`projects/{name}/tasks.json`), distinguished from global tasks by the `project` field. After migration — a single `tasks` table with `project_id`. Project tasks are filtered by FK.
 
-3. **GitHub Issues.** Без изменений — по-прежнему fetched live через `lib/github.js`. В `list_tasks` объединяются с локальными задачами. Не хранятся в SQLite.
+3. **GitHub Issues.** Unchanged — still fetched live via `lib/github.js`. Merged with local tasks in `list_tasks`. Not stored in SQLite.
 
-4. **Eisenhower sort.** Порядок Q1 → Q3 → Q2 → Q4 сохраняется. Реализуется в SQL: `ORDER BY (urgent AND important) DESC, urgent DESC, important DESC`.
+4. **Eisenhower sort.** The Q1 → Q3 → Q2 → Q4 order is preserved. Implemented in SQL: `ORDER BY (urgent AND important) DESC, urgent DESC, important DESC`.
 
-5. **Disk log.** При записи в SQLite `disk-log.js` НЕ вызывается — это не операция с Яндекс.Диском. Но бэкап на Диск — логируется.
+5. **Disk log.** When writing to SQLite, `disk-log.js` is NOT called — this is not a Yandex.Disk operation. But the backup to Disk is logged.
 
-6. **Обратная совместимость tools.** Все существующие tool schemas в `lib/tools.js` остаются без изменений. Добавляются новые опциональные параметры:
-   - `add_task` → добавить `parent_id` (опционально)
-   - `list_tasks` → добавить `include_subtasks` (опционально, default true)
-   - Новый tool: `add_task_dependency(task_id, depends_on_id)`
-   - Новый tool: `get_task_with_subtasks(task_id)`
-
----
-
-## 8. Ограничения
-
-- **better-sqlite3** — синхронный драйвер, без промисов. Все вызовы блокирующие, но для однопользовательского бота это ОК и даже предпочтительнее (нет race conditions).
-- **WAL mode** — включить при инициализации (`PRAGMA journal_mode=WAL`) для лучшей производительности чтения при одновременном backup.
-- **Foreign keys** — включить при инициализации (`PRAGMA foreign_keys=ON`).
-- **Миграция данных** — одноразовый скрипт `scripts/migrate-to-sqlite.js`. Читает все JSON-файлы + проектные MD-файлы, записывает в SQLite. После успешной миграции старые файлы НЕ удаляются (на случай отката).
-- **`.gitignore`** — добавить `data/` в `.gitignore`.
+6. **Tool backward compatibility.** All existing tool schemas in `lib/tools.js` remain unchanged. New optional parameters are added:
+   - `add_task` → add `parent_id` (optional)
+   - `list_tasks` → add `include_subtasks` (optional, default true)
+   - New tool: `add_task_dependency(task_id, depends_on_id)`
+   - New tool: `get_task_with_subtasks(task_id)`
 
 ---
 
-## 9. Опционально: миграция memory
+## 8. Constraints
 
-Файлы `memory/*.md` (health.md, kids.md, finance.md, bureaucracy.md, decisions.md) — сейчас это простые markdown-файлы, которые Снежанна читает/пишет через `lib/memory.js`.
+- **better-sqlite3** — synchronous driver, no promises. All calls are blocking, but for a single-user bot this is fine and even preferable (no race conditions).
+- **WAL mode** — enable on initialization (`PRAGMA journal_mode=WAL`) for better read performance during concurrent backup.
+- **Foreign keys** — enable on initialization (`PRAGMA foreign_keys=ON`).
+- **Data migration** — one-time script `scripts/migrate-to-sqlite.js`. Reads all JSON files + project MD files, writes to SQLite. After a successful migration, old files are NOT deleted (kept for rollback).
+- **`.gitignore`** — add `data/` to `.gitignore`.
 
-**Можно мигрировать позже** в таблицу:
+---
+
+## 9. Optional: Memory Migration
+
+Files `memory/*.md` (health.md, kids.md, finance.md, bureaucracy.md, decisions.md) — currently simple markdown files that Snezhanna reads/writes via `lib/memory.js`.
+
+**Can be migrated later** into a table:
 
 ```sql
 CREATE TABLE memory (
@@ -244,37 +244,37 @@ CREATE TABLE memory (
 );
 ```
 
-Это не блокирует основную миграцию — memory-файлы продолжают работать на Яндекс.Диске.
+This does not block the main migration — memory files continue to work on Yandex.Disk.
 
 ---
 
-## 10. Порядок реализации
+## 10. Implementation Order
 
-1. **lib/db.js** — инициализация better-sqlite3, создание таблиц (IF NOT EXISTS), PRAGMA, экспорт инстанса.
-2. **scripts/migrate-to-sqlite.js** — одноразовый скрипт миграции данных из JSON/MD в SQLite. Запускать вручную.
-3. **lib/tasks.js** — переписать: убрать `_readTasks`/`_writeTasks` (файловые), заменить на SQL-запросы через `lib/db.js`. Публичный API (`addTask`, `listTasks`, `updateTask`, `completeTask`, `deleteTask`, `getTodayTasks`) остаётся прежним.
-4. **lib/yadisk-dirs.js** — убрать проектный CRUD (create_project, list_projects, read/write_project_file, read/write_project_doc). Заменить на SQL-обёртки. `ensureDirs()` — убрать `projects/` и `tasks/` из REQUIRED_DIRS (остальные папки оставить).
-5. **lib/tools.js** — обновить case-ветки проектных tools на новые функции. Добавить новые tools (parent_id, dependencies).
-6. **Cron backup** — добавить в index.js cron для ежедневного бэкапа SQLite → Яндекс.Диск.
-7. **config/nanobot.json** — добавить `"database": { "path": "data/snezhanna.db" }`.
-8. **Документация** — обновить CLAUDE.md, snezhanna-tz.md, tz-task-tracking.md, skills/yadisk.md.
+1. **lib/db.js** — initialize better-sqlite3, create tables (IF NOT EXISTS), PRAGMA, export instance.
+2. **scripts/migrate-to-sqlite.js** — one-time data migration script from JSON/MD to SQLite. Run manually.
+3. **lib/tasks.js** — rewrite: remove file-based `_readTasks`/`_writeTasks`, replace with SQL queries via `lib/db.js`. Public API (`addTask`, `listTasks`, `updateTask`, `completeTask`, `deleteTask`, `getTodayTasks`) stays the same.
+4. **lib/yadisk-dirs.js** — remove project CRUD (create_project, list_projects, read/write_project_file, read/write_project_doc). Replace with SQL wrappers. `ensureDirs()` — remove `projects/` and `tasks/` from REQUIRED_DIRS (keep the rest).
+5. **lib/tools.js** — update case branches for project tools to new functions. Add new tools (parent_id, dependencies).
+6. **Cron backup** — add to index.js cron for daily SQLite → Yandex.Disk backup.
+7. **config/nanobot.json** — add `"database": { "path": "data/snezhanna.db" }`.
+8. **Documentation** — update CLAUDE.md, snezhanna-tz.md, tz-task-tracking.md, skills/yadisk.md.
 
 ---
 
-## 11. Claude Code промпт
+## 11. Claude Code Prompt
 
 ```
-Прочитай /opt/snezhanna/docs/tz-sqlite-migration.md — это ТЗ на миграцию хранения данных с JSON-файлов на SQLite.
+Read /opt/snezhanna/docs/tz-sqlite-migration.md — this is the spec for migrating data storage from JSON files to SQLite.
 
-Правила:
-- Исследуй кодовую базу перед началом: lib/tasks.js, lib/yadisk-dirs.js, lib/tools.js, lib/api.js, config/nanobot.json
-- Публичный API задач (addTask, listTasks, updateTask, completeTask, deleteTask, getTodayTasks) не должен ломать вызывающий код в index.js, lib/api.js, lib/workload.js
-- Tool schemas в lib/tools.js — не ломать существующие, можно добавлять новые опциональные параметры
-- Mini App API эндпоинты — не менять
-- better-sqlite3, синхронный — не заворачивать в промисы
+Rules:
+- Explore the codebase before starting: lib/tasks.js, lib/yadisk-dirs.js, lib/tools.js, lib/api.js, config/nanobot.json
+- The public task API (addTask, listTasks, updateTask, completeTask, deleteTask, getTodayTasks) must not break calling code in index.js, lib/api.js, lib/workload.js
+- Tool schemas in lib/tools.js — do not break existing ones, you can add new optional parameters
+- Mini App API endpoints — do not change
+- better-sqlite3, synchronous — do not wrap in promises
 - WAL mode + foreign_keys ON
-- Миграционный скрипт scripts/migrate-to-sqlite.js — читает текущие JSON + MD, пишет в SQLite
-- После реализации — обновить документацию: CLAUDE.md, docs/snezhanna-tz.md, docs/tz-task-tracking.md
-- Добавить data/ в .gitignore
-- Добавить cron бэкапа в index.js (03:30)
+- Migration script scripts/migrate-to-sqlite.js — reads current JSON + MD, writes to SQLite
+- After implementation — update documentation: CLAUDE.md, docs/snezhanna-tz.md, docs/tz-task-tracking.md
+- Add data/ to .gitignore
+- Add backup cron to index.js (03:30)
 ```

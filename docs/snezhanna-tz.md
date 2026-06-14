@@ -1,7 +1,7 @@
 # Technical Specification: Personal AI Assistant «Snezhanna»
 
-> **Версия:** 2.0 (актуализирована 2026-03-16)
-> Документ отражает **реальное текущее состояние** проекта.
+> **Version:** 2.0 (updated 2026-03-16)
+> This document reflects the **actual current state** of the project.
 
 ---
 
@@ -70,7 +70,7 @@ Examples:
 
 | Component | Technology |
 |-----------|-----------|
-| Agent | Custom Node.js (`index.js`) — **не nanobot** |
+| Agent | Custom Node.js (`index.js`) — **not nanobot** |
 | Channel | Telegram Bot API (`node-telegram-bot-api`) |
 | Brain | Anthropic Claude (`claude-sonnet-4-6`) via `@anthropic-ai/sdk` |
 | Voice transcription | OpenAI Whisper API (`whisper-1`) |
@@ -369,7 +369,7 @@ Requires Google OAuth with `drive` scope (in addition to `calendar` and `gmail.m
 
 - Snezhanna passively monitors specified Telegram chats (family + work)
 - Monitored chats stored in SQLite `monitored_chats` table (migrated from `config/nanobot.json → chat_monitor.chats`)
-- Add/remove chats via Mini App Settings → Чаты, or via Claude conversation
+- Add/remove chats via Mini App Settings → Chats, or via Claude conversation
 - In-memory message store (cleared after evening check-in)
 - Messages available to Claude as context when Vova asks about them
 - Evening check-in includes summary of disk write operations (via `lib/disk-log.js`)
@@ -398,7 +398,7 @@ When a user replies to a specific message in Telegram (or quotes a part of it), 
 
 **Format for single reply:**
 ```
-[Ответ на сообщение]
+[Reply to message]
 > Snezhanna: Here are three options...
 
 User's new message text
@@ -406,7 +406,7 @@ User's new message text
 
 **Format for chain (2+ levels):**
 ```
-[Цепочка сообщений]
+[Message chain]
 > (1) Snezhanna: Original question...
 > (2) User: First reply...
 > (3) Snezhanna: Follow-up...
@@ -459,25 +459,25 @@ All times are in **Europe/Madrid** timezone.
 ### Daily 08:00 — Morning briefing
 
 ```
-Доброе утро, Вовик! ☀️
+Good morning, Vovik! ☀️
 
-📅 Сегодня, {date}:
+📅 Today, {date}:
 • [Calendar events]
 
-📋 Открытые задачи:
+📋 Open tasks:
 • [top tasks by Eisenhower quadrant]
 
-📬 Почта:
+📬 Email:
 • [unread count, important senders]
 
-Хорошего дня! 🚀
+Have a great day! 🚀
 ```
 
 ### Daily 19:00 — Evening check-in
 
 ```
-Вова, как прошёл день?
-Завтра у тебя:
+Vova, how was your day?
+Tomorrow you have:
 • [tomorrow's Calendar events]
 
 [Telegram checklist with today's open tasks]
@@ -664,22 +664,22 @@ Zhora listens via long polling. Only responds to `TELEGRAM_ALLOWED_USER_ID`.
 ### `/status` response example
 
 ```
-🤖 Жора рапортует:
+🤖 Zhora reporting:
 
-Снежанна: ✅ active (uptime 3d 14h)
-Макс: ✅ active (uptime 3d 14h)
+Snezhanna: ✅ active (uptime 3d 14h)
+Max: ✅ active (uptime 3d 14h)
 Telegram API: ✅
-Диск readonly: ✅
-Диск агент: ✅
-Место на сервере: 42%
-Ошибки в логах: нет
+Disk readonly: ✅
+Disk agent: ✅
+Server space: 42%
+Log errors: none
 ```
 
 ### Morning report at 07:55
 
 ```
-🤖 Жора рапортует: все системы в норме.
-Снежанна готова к работе ✅
+🤖 Zhora reporting: all systems nominal.
+Snezhanna ready ✅
 ```
 
 ---

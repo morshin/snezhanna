@@ -78,16 +78,16 @@ Tasks are stored as JSON files, managed by `lib/tasks.js` (existing integration)
 - Open Q4 tasks (`urgent:false, important:false`) — signal of inability to cut non-essential work
 - Open GitHub Issues assigned to Vova (from `lib/github-issues.js`) — counted alongside local tasks
 
-**For the morning briefing overload block:** when score ≤ 5, Snezhanna picks 1–3 specific tasks by title — preferring Q3 (delegate candidates) and Q4 (cut candidates), plus oldest overdue Q1 if any — and names them with project context: *"Вот эта задача — она Q3, может кто-то другой возьмёт?"*
+**For the morning briefing overload block:** when score ≤ 5, Snezhanna picks 1–3 specific tasks by title — preferring Q3 (delegate candidates) and Q4 (cut candidates), plus oldest overdue Q1 if any — and names them with project context: *"This task is Q3 — maybe someone else could take it?"*
 
 ### Self-reported (collected via weekly check-in message)
 
 On the weekly trigger, before running analysis, Snezhanna sends a short conversational check-in to Vova asking 3–4 quick questions:
 
-1. "Как ощущается эта неделя в целом — потянул или нет?" (1 sentence)
-2. "Было ли время с семьёй / детьми?" (yes/no or brief)
-3. "Как со сном и энергией?" (brief)
-4. "Было ли что-то личное — хобби, отдых, своё время?" (brief)
+1. "How did this week feel overall — did you manage or not?" (1 sentence)
+2. "Was there time with family / kids?" (yes/no or brief)
+3. "How's sleep and energy?" (brief)
+4. "Was there anything personal — hobbies, rest, your own time?" (brief)
 
 > Task status (overdue, volume, priorities) is collected automatically from Yandex.Disk — no need to ask Vova about it.
 
@@ -101,7 +101,7 @@ Vova can answer all in one message or skip questions. Responses are factored int
 - **Flow:**
   1. Send check-in questions to Vova
   2. Wait up to 30 minutes for responses (use a timeout handler)
-  3. If no response within 30 min: proceed with automated data only, note "ответа на чек-ин не было"
+  3. If no response within 30 min: proceed with automated data only, note "no check-in response"
   4. Fetch Google Calendar, Gmail, Strava data
   5. Run scoring analysis via Claude
   6. Send full weekly report to Vova
@@ -124,16 +124,16 @@ Claude must return a **structured JSON object**:
 {
   "overall_score": 6,
   "domains": {
-    "work": { "score": 5, "summary": "Много встреч, задачи накапливаются" },
-    "family": { "score": 7, "summary": "Было время с детьми в выходные" },
-    "health": { "score": 8, "summary": "3 тренировки, хорошая активность" },
-    "personal": { "score": 4, "summary": "Почти не было своего времени" }
+    "work": { "score": 5, "summary": "Lots of meetings, tasks piling up" },
+    "family": { "score": 7, "summary": "Had time with the kids on the weekend" },
+    "health": { "score": 8, "summary": "3 workouts, good activity level" },
+    "personal": { "score": 4, "summary": "Almost no personal time" }
   },
   "trend": "down",
-  "key_risks": ["задачи накапливаются без делегирования", "нет личного времени"],
+  "key_risks": ["tasks accumulating without delegation", "no personal time"],
   "suggestions": [
-    "Перенести или делегировать встречу в среду — она необязательная",
-    "Заблокировать хотя бы 2 часа в четверг только для себя"
+    "Move or delegate Wednesday's meeting — it's non-essential",
+    "Block at least 2 hours on Thursday just for yourself"
   ],
   "tone": "concerned"
 }
@@ -150,14 +150,14 @@ The report is a single Telegram message. Snezhanna writes it in her natural voic
 **Structure:**
 
 ```
-[Emoji + color indicator] Твой недельный обзор, Вова
+[Emoji + color indicator] Your weekly review, Vova
 
-Общий скор: [SCORE]/10 [COLOR_EMOJI]
+Overall score: [SCORE]/10 [COLOR_EMOJI]
 
-🔵 Работа:       [score]/10 — [one-line summary]
-👨‍👩‍👦 Семья:        [score]/10 — [one-line summary]
-💪 Здоровье:     [score]/10 — [one-line summary]
-🎯 Личное:       [score]/10 — [one-line summary]
+🔵 Work:         [score]/10 — [one-line summary]
+👨‍👩‍👦 Family:       [score]/10 — [one-line summary]
+💪 Health:       [score]/10 — [one-line summary]
+🎯 Personal:     [score]/10 — [one-line summary]
 
 [2–3 sentences of warm personal commentary from Snezhanna, 
  reflecting the data + check-in answers. Tone matches the score.]
@@ -171,9 +171,9 @@ The report is a single Telegram message. Snezhanna writes it in her natural voic
 
 **Tone examples by score range (canonical voice — use as prompt examples verbatim):**
 
-- Score 4–6 (расфокус/накопилось): *"Вов, судя по последним дням мне кажется ты что-то в расфокусе. Накопилось много всего. Давай подумаем что можно было бы перенести — как думаешь, что если..."*
-- Score 0–3 (выгорание/стоп): *"Слушай, ну вижу что не закрываешь совсем что-то задачки свои. Не успеваешь мне сообщить или и правда подвыгораешь? Если да, то давай найдем время для отдыха и себя — что если..."*
-- Score 7–10 (всё хорошо): *"Ты — красавчик! 🖤 Всё получается)) И кажется, что можем вместе ещё за что-то интересное взяться — м?"*
+- Score 4–6 (scattered/overloaded): *"Вов, судя по последним дням мне кажется ты что-то в расфокусе. Накопилось много всего. Давай подумаем что можно было бы перенести — как думаешь, что если..."*
+- Score 0–3 (burnout/stop): *"Слушай, ну вижу что не закрываешь совсем что-то задачки свои. Не успеваешь мне сообщить или и правда подвыгораешь? Если да, то давай найдем время для отдыха и себя — что если..."*
+- Score 7–10 (everything's great): *"Ты — красавчик! 🖤 Всё получается)) И кажется, что можем вместе ещё за что-то интересное взяться — м?"*
 
 These are not templates to fill in — they are the **reference voice**. Claude must write in this register: informal, warm, slightly playful, uses "Вов" not "Вова", short sentences, rhetorical questions, trailing "м?" or "да?" to invite dialogue. Never sounds like a report.
 
@@ -211,7 +211,7 @@ These are not templates to fill in — they are the **reference voice**. Claude 
 - Keep last **12 weeks** of history (rolling window, oldest entry dropped)
 - On each weekly run: read file → append new entry → write back
 - Yandex.Disk mount may be unavailable: if write fails, log warning but do not block report delivery
-- On read failure: proceed without trend context, note "история недоступна" in scoring prompt
+- On read failure: proceed without trend context, note "history unavailable" in scoring prompt
 
 ---
 
@@ -280,15 +280,15 @@ She names the specific events by title and time, explains briefly why she thinks
 
 ---
 
-💛 Кстати, Вова — по последним данным ты сейчас на [SCORE]/10, и это видно.
-Смотрю на твой день и вижу пару вещей, которые, может, можно снять:
+💛 By the way, Vova — based on recent data you're at [SCORE]/10, and it shows.
+Looking at your day I see a couple of things that might be possible to drop:
 
-• [Event title], [time] — [reason: "выглядит как необязательная встреча", 
-  "ты организатор, но Саша мог бы провести сам", "без agenda, может подождать"]
+• [Event title], [time] — [reason: "looks like a non-essential meeting", 
+  "you're the organizer but Sasha could run it", "no agenda, can wait"]
 • [Event title], [time] — [reason]
 
-Не обязательно всё это делать — просто имей в виду. 
-Если хочешь — скажи, и я помогу сформулировать перенос или отмену.
+You don't have to do any of this — just keep it in mind. 
+If you want — say the word and I'll help you draft a reschedule or cancellation.
 ```
 
 ### Tone

@@ -1,23 +1,23 @@
-# Backlog — идеи и будущие улучшения
+# Backlog — ideas and future improvements
 
-## Инструменты / Tools
+## Tools
 
-### 🔍 Поиск в интернете (`web_search`)
-**Идея:** Добавить Снежанне инструмент поиска в интернете.
+### 🔍 Web search (`web_search`)
+**Idea:** Add a web search tool to Snezhanna.
 
-**Что это даст:**
-- Поиск гостиниц, авиарейсов, ресторанов
-- Поиск информации по проектам (документация, новости, конкуренты)
-- Любые актуальные данные, которых нет в памяти/диске
+**What this enables:**
+- Searching for hotels, flights, restaurants
+- Looking up project information (documentation, news, competitors)
+- Any up-to-date data not available in memory/disk
 
-**Как реализовать:**
-1. Зарегистрироваться на [api.search.brave.com](https://api.search.brave.com) — бесплатный тариф 2000 запросов/месяц
-2. Добавить `BRAVE_SEARCH_API_KEY` в `.env`
-3. Создать `lib/websearch.js` с вызовом Brave Search REST API
-4. Добавить определение инструмента `web_search` в `lib/tools.js` (массив `TOOLS`)
-5. Добавить кейс в `executeTool`
+**How to implement:**
+1. Register at [api.search.brave.com](https://api.search.brave.com) — free tier: 2000 requests/month
+2. Add `BRAVE_SEARCH_API_KEY` to `.env`
+3. Create `lib/websearch.js` with a Brave Search REST API call
+4. Add the `web_search` tool definition to `lib/tools.js` (`TOOLS` array)
+5. Add a case to `executeTool`
 
-**Альтернатива:** Tavily API — 1000 запросов/месяц бесплатно, заточен под AI-агентов, возвращает готовый текст страниц (не только ссылки).
+**Alternative:** Tavily API — 1000 requests/month free, designed for AI agents, returns ready-to-use page text (not just links).
 
-**Статус:** Идея, не начато
-**Добавлено:** 2026-03-05
+**Status:** Idea, not started
+**Added:** 2026-03-05

@@ -1,4 +1,4 @@
-# Skill: Файловое хранилище (Google Drive)
+# Skill: File storage (Google Drive)
 
-> Яндекс.Диск заменён на Google Drive. Все файлы теперь хранятся в Drive.
-> Актуальное описание: `skills/gdrive.md`
+> Yandex.Disk has been replaced by Google Drive. All files are now stored in Drive.
+> Current description: `skills/gdrive.md`

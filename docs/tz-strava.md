@@ -233,10 +233,10 @@ _Fill in after finishing_
 ### Confirmation to Vova (in Russian)
 
 ```
-🏁 Старт добавлен!
+🏁 Race added!
 
 Ironman Barcelona
-📅 15 июня 2025 · Барселона · Триатлон
+📅 June 15, 2025 · Barcelona · Triathlon
 
 fitness/races/2025-06-15_ironman-barcelona/
 ├── README.md ✅
@@ -244,7 +244,7 @@ fitness/races/2025-06-15_ironman-barcelona/
 ├── gear.md ✅
 └── result.md ✅
 
-Скажи когда будешь готов заполнить план подготовки.
+Let me know when you're ready to fill in the training plan.
 ```
 
 ---

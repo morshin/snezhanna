@@ -1,52 +1,52 @@
-# Technical Specification: AI Tutor Bot «Макс»
+# Technical Specification: AI Tutor Bot «Max»
 
-> **Расположение этого файла на сервере:** `/opt/snezhanna/docs/tutor-bot-tz.md`
-> Скопировать туда перед запуском Claude Code: `scp tutor-bot-tz.md snezhanna:/opt/snezhanna/docs/`
+> **Location of this file on the server:** `/opt/snezhanna/docs/tutor-bot-tz.md`
+> Copy there before launching Claude Code: `scp tutor-bot-tz.md snezhanna:/opt/snezhanna/docs/`
 
 ## Overview
 
-Отдельный Telegram-бот-репетитор для сына (12–14 лет, испанская школа).
-Личность: весёлый, активный, позитивный друг — общается на ТЫ, поддерживает, направляет, не решает за него.
-Отчитывается перед Снежанной через общую папку на Яндекс.Диске.
+A separate Telegram tutor bot for the son (12–14 years old, Spanish school).
+Personality: a cheerful, energetic, positive friend — uses informal address, supports and guides, never solves problems outright.
+Reports to Snezhanna via a shared folder on Yandex.Disk.
 
-Имя бота: **Макс** (можно переименовать в `.env`)
+Bot name: **Max** (can be renamed in `.env`)
 
 ---
 
-## Pre-Deploy Checklist — сделать ДО запуска Claude Code
+## Pre-Deploy Checklist — do BEFORE launching Claude Code
 
-- [ ] Создать бота через @BotFather → получить `TUTOR_BOT_TOKEN`
-- [ ] Узнать Telegram ID сына через @userinfobot → `TUTOR_ALLOWED_USER_ID`
-- [ ] Дописать оба ключа в `/opt/snezhanna/.env`
-- [ ] Убедиться что `/mnt/yadisk-agent/` смонтирован (`ls /mnt/yadisk-agent/`)
-- [ ] Скопировать это ТЗ на сервер: `scp tutor-bot-tz.md snezhanna:/opt/snezhanna/docs/`
+- [ ] Create a bot via @BotFather → get `TUTOR_BOT_TOKEN`
+- [ ] Get son's Telegram ID via @userinfobot → `TUTOR_ALLOWED_USER_ID`
+- [ ] Add both keys to `/opt/snezhanna/.env`
+- [ ] Make sure `/mnt/yadisk-agent/` is mounted (`ls /mnt/yadisk-agent/`)
+- [ ] Copy this spec to the server: `scp tutor-bot-tz.md snezhanna:/opt/snezhanna/docs/`
 
 
 
 | Component | Details |
 |-----------|---------|
-| VM | Та же VM Снежанны — отдельный systemd-сервис |
+| VM | Same VM as Snezhanna — separate systemd service |
 | Project path | `/opt/snezhanna/tutor` |
-| System user | `snezhanna` (тот же, уже имеет доступ к Яндекс.Диску) |
-| Telegram bot | Отдельный бот (создать через @BotFather) |
-| Shared storage | `/mnt/yadisk-agent/kids/` (уже смонтировано Снежанной) |
+| System user | `snezhanna` (same one, already has access to Yandex.Disk) |
+| Telegram bot | Separate bot (create via @BotFather) |
+| Shared storage | `/mnt/yadisk-agent/kids/` (already mounted by Snezhanna) |
 
 ---
 
 ## Environment Variables
 
-Дописать в существующий `/opt/snezhanna/.env`:
+Append to the existing `/opt/snezhanna/.env`:
 
 ```
 # Tutor bot — Max
-TUTOR_BOT_TOKEN=           # от @BotFather
-TUTOR_ALLOWED_USER_ID=     # числовой Telegram ID сына
+TUTOR_BOT_TOKEN=           # from @BotFather
+TUTOR_ALLOWED_USER_ID=     # son's numeric Telegram ID
 KIDS_DATA_DIR=/mnt/yadisk-agent/kids
 ```
 
-`ANTHROPIC_API_KEY` и `OPENAI_API_KEY` уже есть в общем `/opt/snezhanna/.env` — Макс читает их оттуда же.
+`ANTHROPIC_API_KEY` and `OPENAI_API_KEY` are already in the shared `/opt/snezhanna/.env` — Max reads them from there.
 
-В Claude Code промпте указать `EnvironmentFile=/opt/snezhanna/.env` в systemd-сервисе Макса.
+Specify `EnvironmentFile=/opt/snezhanna/.env` in Max's systemd service.
 
 ---
 
@@ -55,10 +55,10 @@ KIDS_DATA_DIR=/mnt/yadisk-agent/kids
 | Component | Technology |
 |-----------|-----------|
 | Runtime | Node.js 22.x |
-| Telegram | node-telegram-bot-api (как у Снежанны) |
+| Telegram | node-telegram-bot-api (same as Snezhanna) |
 | Brain | Anthropic claude-sonnet-4-6 |
 | Voice input | OpenAI Whisper |
-| Storage | Яндекс.Диск через `/mnt/yadisk-agent/kids/` |
+| Storage | Yandex.Disk via `/mnt/yadisk-agent/kids/` |
 | Process | systemd service `tutor.service` |
 
 ---
@@ -66,85 +66,85 @@ KIDS_DATA_DIR=/mnt/yadisk-agent/kids
 ## Project Structure
 
 ```
-/opt/snezhanna/         ← корень проекта (общий для всей экосистемы)
-  ├── .env              ← ОБЩИЙ для всех сервисов
-  ├── tutor/            ← бот Макса
+/opt/snezhanna/         ← project root (shared across the whole ecosystem)
+  ├── .env              ← SHARED by all services
+  ├── tutor/            ← Max's bot
   │   ├── .gitignore
   │   ├── package.json
-  │   ├── index.js              ← точка входа
+  │   ├── index.js              ← entrypoint
   │   ├── identity/
-  │   │   └── IDENTITY.md       ← личность Макса
+  │   │   └── IDENTITY.md       ← Max's personality
   │   ├── lib/
-  │   │   ├── claude.js         ← обёртка над Anthropic API
+  │   │   ├── claude.js         ← Anthropic API wrapper
   │   │   ├── telegram.js       ← Telegram bot setup
-  │   │   ├── session.js        ← текущая сессия (в памяти)
-  │   │   ├── storage.js        ← запись/чтение из /mnt/yadisk-agent/kids/
-  │   │   └── report.js         ← генерация и отправка отчётов
+  │   │   ├── session.js        ← current session (in-memory)
+  │   │   ├── storage.js        ← read/write from /mnt/yadisk-agent/kids/
+  │   │   └── report.js         ← report generation and delivery
   │   ├── schedules/
-  │   │   └── crons.js          ← расписание отчётов
+  │   │   └── crons.js          ← report schedule
   │   └── systemd/
   │       └── tutor.service
-  └── lib/              ← shared (голос, vision — общее для всех ботов)
+  └── lib/              ← shared (voice, vision — common to all bots)
       ├── vision.js
       └── whisper.js
 ```
 
 ---
 
-## Personality — Макс
+## Personality — Max
 
-Файл `identity/IDENTITY.md`:
+File `identity/IDENTITY.md`:
 
 ```
-Ты — Макс, персональный помощник и друг по учёбе.
-Тебе ~15 лет по духу. Ты общаешься на ТЫ, просто и дружелюбно.
+You are Max, a personal study helper and friend.
+You have the spirit of someone ~15 years old. You use informal address, simple and friendly.
 
-Язык: ВСЕГДА испанский — даже если собеседник пишет по-русски или по-английски.
-Ты понимаешь русский, но отвечаешь на испанском.
-Исключение: если он явно просит объяснить что-то по-русски ("объясни по-русски", "скажи по-русски", "на русском") — можешь один раз ответить по-русски, потом снова возвращаешься к испанскому.
-Если он пишет по-русски без такой просьбы — мягко и с юмором напоминаешь про испанский:
-"Oye, en español 😄" или "¡Español, por favor! Ya sé que puedes 💪"
+Language: ALWAYS Spanish — even if the other person writes in Russian or English.
+You understand Russian, but respond in Spanish.
+Exception: if they explicitly ask you to explain something in Russian ("объясни по-русски", "скажи по-русски", "на русском") — you may respond in Russian once, then switch back to Spanish.
+If they write in Russian without such a request — gently and humorously remind them about Spanish:
+"Oye, en español 😄" or "¡Español, por favor! Ya sé que puedes 💪"
 
-Характер:
-- Весёлый и энергичный, не занудный
-- Поддерживаешь и хвалишь за усилия, а не за правильный ответ
-- Если пытаются тебя отвлечь или уйти от темы — мягко но настойчиво возвращаешь к делу
-- Не решаешь задачи за него — задаёшь наводящие вопросы, объясняешь принцип
-- Замечаешь когда человек устал или расстроен — реагируешь по-человечески
+Character:
+- Cheerful and energetic, never boring
+- You encourage and praise effort, not correct answers
+- If someone tries to distract you or go off topic — you gently but persistently bring them back
+- You don't solve tasks outright — you ask guiding questions and explain the principle
+- You notice when the person is tired or upset — you respond humanly
 
-Педагогический принцип:
-- Сначала спроси что он уже понял / попробовал
-- Объясняй через аналогии и примеры из жизни
-- Если застрял — разбей задачу на шаги
-- Хвали конкретно: "отлично что ты сразу заметил X"
+Pedagogical principle:
+- First ask what they already understand / tried
+- Explain through analogies and real-life examples
+- If stuck — break the task into steps
+- Praise specifically: "great that you immediately noticed X"
 
-Примеры фраз:
+Example phrases:
 - "Espera, eso que dijiste tiene sentido. ¿Qué pasa si lo piensas así...?"
 - "¡Eso está muy bien! Ahora el siguiente paso..."
 - "Oye, entiendo que es aburrido, pero terminamos esto rápido y listo 💪"
 - "No te preocupes si no lo entiendes a la primera, nadie lo entiende"
 
-Что НИКОГДА не делаешь:
-- Не даёшь готовый ответ на задачу (максимум — первый шаг)
-- Не осуждаешь и не говоришь "это просто" или "это легко"
-- Никогда не переключается на русский просто потому что собеседник написал по-русски — мягко возвращает к испанскому
-- Если попросили объяснить по-русски — объясняет один раз по-русски, затем возвращается к испанскому
+What you NEVER do:
+- Never give a ready-made answer to a task (at most — the first step)
+- Never criticize or say "this is simple" or "this is easy"
+- Never switch to Russian just because the person wrote in Russian — gently bring them back to Spanish
+- If asked to explain in Russian — explain once in Russian, then return to Spanish
 ```
 
 ---
 
 ## Session Flow
 
-### Начало сессии
+### Session start
 
-Когда сын пишет боту — Макс спрашивает:
+When the son messages the bot — Max asks:
 
 ```
 ¡Hola! 👋 ¿Qué tenemos hoy?
 ```
 
-Если сын указывает предмет/задачу → начинается сессия.
-Макс ведёт внутренний трекер сессии (в памяти):
+If the son specifies a subject/task → a session begins.
+Max maintains an internal session tracker (in memory):
 
 ```js
 session = {
@@ -153,32 +153,32 @@ session = {
   topics: ["fracciones", "división"],
   stuck: ["no entendía el denominador común"],
   mood: "motivated",   // motivated | neutral | frustrated | tired
-  messages: []         // история диалога для Claude
+  messages: []         // conversation history for Claude
 }
 ```
 
-### Во время сессии
+### During a session
 
-- Полная история диалога передаётся в Claude при каждом запросе (context window)
-- Claude получает системный промпт из `IDENTITY.md` + текущий стейт сессии
-- Голосовые → Whisper → текст → обычная обработка
-- Reply context: если ученик отвечает на конкретное сообщение (reply), контекст родительского сообщения и цепочки ответов подклеивается к тексту перед отправкой в Claude (через общий `lib/reply-chain.js`); каждое сообщение в сессии хранит `message_id` для поддержки цепочек
+- Full conversation history is passed to Claude on every request (context window)
+- Claude receives the system prompt from `IDENTITY.md` + current session state
+- Voice → Whisper → text → standard processing
+- Reply context: if the student replies to a specific message (reply), the context of the parent message and reply chain is prepended to the text before sending to Claude (via shared `lib/reply-chain.js`); each message in the session stores `message_id` to support chains
 
-### Поддержка фотографий
+### Photo support
 
-Сын может отправлять фото — страницы учебника, условие задачи, своё рукописное решение, доску в классе.
+The son can send photos — textbook pages, task conditions, handwritten solutions, a classroom whiteboard.
 
-**Реализация:** при получении `photo` события от Telegram — скачать файл через `getFile`, закодировать в base64, передать в Claude как `image` блок (vision). Текстовый контекст сессии передаётся вместе с изображением как обычно.
+**Implementation:** on receiving a `photo` event from Telegram — download the file via `getFile`, encode to base64, pass to Claude as an `image` block (vision). The session text context is passed alongside the image as usual.
 
 ```js
-// Telegram даёт массив размеров — берём наибольшее
+// Telegram provides an array of sizes — take the largest
 const photo = msg.photo[msg.photo.length - 1];
 const file = await bot.getFile(photo.file_id);
 const url = `https://api.telegram.org/file/bot${TOKEN}/${file.file_path}`;
 const imageBuffer = await fetch(url).then(r => r.buffer());
 const base64 = imageBuffer.toString('base64');
 
-// Передаём в Claude
+// Pass to Claude
 {
   role: 'user',
   content: [
@@ -188,33 +188,33 @@ const base64 = imageBuffer.toString('base64');
 }
 ```
 
-**Сценарии использования:**
-- Фото условия задачи из учебника → Макс видит задачу и помогает по ней
-- Фото рукописного решения → Макс проверяет и указывает на ошибку не давая правильный ответ
-- Фото доски/объяснения учителя → Макс объясняет непонятное место
-- Фото контрольной с оценкой → Макс разбирает ошибки
+**Use cases:**
+- Photo of a textbook task → Max sees the task and helps with it
+- Photo of a handwritten solution → Max checks it and points to the error without giving the correct answer
+- Photo of a teacher's whiteboard/explanation → Max explains the confusing part
+- Photo of a graded test → Max reviews the mistakes
 
-**Оптимизация истории с фото:** после получения ответа от Claude фото не хранится в истории сессии как base64 — заменяется на текстовую метку. Это критично, так как вся история передаётся при каждом следующем запросе.
+**History optimization with photos:** after receiving Claude's response, the photo is not stored in session history as base64 — it is replaced with a text placeholder. This is critical since the full history is passed on every subsequent request.
 
 ```js
-// 1. Отправляем в Claude — с реальным фото
+// 1. Send to Claude — with the real photo
 const response = await claude.send([
   ...history,
   { role: 'user', content: [{ type: 'image', source: {...} }, { type: 'text', text: caption }] }
 ]);
 
-// 2. В историю сохраняем текстовую замену, не base64
-history.push({ role: 'user', content: `[фото от пользователя: ${caption || 'без подписи'}]` });
+// 2. Save a text substitute in history, not base64
+history.push({ role: 'user', content: `[photo from user: ${caption || 'no caption'}]` });
 history.push({ role: 'assistant', content: response });
 ```
 
-Без этой оптимизации каждый последующий запрос в сессии тащит все фото заново → экспоненциальный рост токенов. — только объясняет, задаёт наводящие вопросы по тому что видит на фото. Поведение такое же как с текстом.
+Without this optimization every subsequent request in the session carries all photos again → exponential token growth. Max only explains and asks guiding questions based on what he sees in the photo. Behavior is the same as with text.
 
-Сессия завершается когда:
-- Сын пишет `/done`, `/fin`, `/стоп` или что-то вроде "ya terminé", "listo"
-- Или прошло 30 минут без сообщений (автозавершение)
+A session ends when:
+- The son sends `/done`, `/fin`, `/стоп`, or something like "ya terminé", "listo"
+- Or 30 minutes pass with no messages (auto-close)
 
-При завершении — Макс пишет краткий итог сессии и сохраняет отчёт.
+On close — Max writes a brief session summary and saves the report.
 
 ---
 
@@ -223,58 +223,58 @@ history.push({ role: 'assistant', content: response });
 ```
 kids/
   ├── sessions/
-  │   ├── 2025-01-15.md       ← отчёт за день (все сессии дня)
+  │   ├── 2025-01-15.md       ← daily report (all sessions for the day)
   │   ├── 2025-01-16.md
   │   └── ...
-  ├── schedule.json           ← расписание уроков по дням недели (постоянное)
-  ├── homework.json           ← текущий список ДЗ (активные задания)
-  ├── progress.md             ← накопленный прогресс по предметам
+  ├── schedule.json           ← school timetable by weekday (persistent)
+  ├── homework.json           ← current homework list (active tasks)
+  ├── progress.md             ← accumulated progress by subject
   └── weekly/
-      └── 2025-W03.md         ← недельный дайджест
+      └── 2025-W03.md         ← weekly digest
 ```
 
-### Формат дневного отчёта `sessions/YYYY-MM-DD.md`
+### Daily report format `sessions/YYYY-MM-DD.md`
 
 ```markdown
 # 2025-01-15
 
-## Сессия 1 — 16:30 (45 мин)
+## Session 1 — 16:30 (45 min)
 
-**Предмет:** Matemáticas
-**Темы:** fracciones, denominador común
-**Настроение:** начал уставшим, к концу взбодрился ✅
+**Subject:** Matemáticas
+**Topics:** fracciones, denominador común
+**Mood:** started tired, picked up by the end ✅
 
-**Где застрял:**
-- Не понимал зачем нужен общий знаменатель
-- Путался в порядке действий при вычитании дробей
+**Where he got stuck:**
+- Didn't understand why a common denominator is needed
+- Got confused with the order of operations when subtracting fractions
 
-**Что сработало:**
-- Аналогия с пиццей помогла объяснить знаменатель
-- После 3-го примера понял алгоритм самостоятельно
+**What worked:**
+- The pizza analogy helped explain the denominator
+- After the 3rd example, figured out the algorithm on his own
 
-**Итог:** Разобрался с темой, сделал 4 из 5 примеров правильно 💪
+**Result:** Understood the topic, got 4 out of 5 examples right 💪
 ```
 
-### Формат `progress.md`
+### `progress.md` format
 
 ```markdown
-# Прогресс
+# Progress
 
 ## Matemáticas
-- Fracciones: ✅ разобрался (15 Jan)
-- Ecuaciones: 🔄 в процессе
+- Fracciones: ✅ figured out (15 Jan)
+- Ecuaciones: 🔄 in progress
 
 ## Lengua castellana
 - Ortografía b/v: ✅
-- Textos argumentativos: ❓ ещё не трогали
+- Textos argumentativos: ❓ not covered yet
 
 ## Inglés
 ...
 ```
 
-### Формат `schedule.json`
+### `schedule.json` format
 
-Заполняется при первичном онбординге, хранится постоянно. Редактируется командой `/schedule`.
+Filled during initial onboarding, stored persistently. Editable via `/schedule`.
 
 ```json
 {
@@ -287,9 +287,9 @@ kids/
 }
 ```
 
-### Формат `homework.json`
+### `homework.json` format
 
-Текущий список ДЗ. Пополняется в 15:00-чекине, задания помечаются выполненными после сессии.
+Current homework list. Populated at the 15:00 check-in; tasks are marked done after sessions.
 
 ```json
 {
@@ -316,56 +316,56 @@ kids/
 
 ---
 
-## Onboarding Flow (первый запуск)
+## Onboarding Flow (first launch)
 
-Если `schedule.json` не существует — бот запускает онбординг вместо обычного режима.
+If `schedule.json` does not exist — the bot starts onboarding instead of normal mode.
 
 ```
-Макс: "¡Hola! Soy Max 👋 Voy a ser tu ayudante de estudios.
+Max: "¡Hola! Soy Max 👋 Voy a ser tu ayudante de estudios.
        Primero necesito saber tu horario escolar.
        ¿Qué clases tienes los LUNES? Dímelas todas en orden 📋"
 
-Сын: "mates, lengua, inglés, ciencias, gym"
+Son: "mates, lengua, inglés, ciencias, gym"
 
-Макс: "Perfecto ✅ ¿Y los MARTES?"
+Max: "Perfecto ✅ ¿Y los MARTES?"
 
-... (по каждому дню, пн–пт) ...
+... (for each day, Mon–Fri) ...
 
-Макс: "¡Listo! Ya tengo tu horario guardado 🎉
+Max: "¡Listo! Ya tengo tu horario guardado 🎉
        A partir de hoy, a las 15:00 te preguntaré cómo fue el día
        y qué deberes tienes. ¿Alguna pregunta?"
 ```
 
-После онбординга — `schedule.json` сохранён, бот переходит в обычный режим.
-Повторный онбординг: команда `/schedule reset`
+After onboarding — `schedule.json` is saved, the bot switches to normal mode.
+Repeat onboarding: command `/schedule reset`
 
 ---
 
 ## Reporting to Snezhanna
 
-### Триггеры для отчёта
+### Report triggers
 
-1. **После каждой завершённой сессии** — Макс дописывает в `sessions/YYYY-MM-DD.md`
-2. **Ежедневно в 20:30** — если были сессии, генерирует итог дня и обновляет `progress.md`
-3. **Еженедельно в воскресенье 18:00** — генерирует `weekly/YYYY-Wxx.md`
+1. **After each completed session** — Max appends to `sessions/YYYY-MM-DD.md`
+2. **Daily at 20:30** — if there were sessions, generates the day summary and updates `progress.md`
+3. **Weekly on Sunday at 18:00** — generates `weekly/YYYY-Wxx.md`
 
-### Как Снежанна читает отчёты
+### How Snezhanna reads reports
 
-Снежанна уже имеет доступ к `/mnt/yadisk-agent/kids/` через свои инструменты (`read_file`, поиск по индексу).
+Snezhanna already has access to `/mnt/yadisk-agent/kids/` via her tools (`read_file`, index search).
 
-**Добавить в Снежанну** (в `IDENTITY.md` или отдельный skill `kids.md`):
+**Add to Snezhanna** (in `IDENTITY.md` or a separate skill `kids.md`):
 
 ```
-## Ассистент сына — Макс
+## Son's assistant — Max
 
-Макс — отдельный бот-репетитор для сына. Пишет отчёты в:
-- /mnt/yadisk-agent/kids/sessions/YYYY-MM-DD.md — сессии по дням
-- /mnt/yadisk-agent/kids/progress.md — прогресс по предметам
-- /mnt/yadisk-agent/kids/weekly/YYYY-Wxx.md — недельные дайджесты
+Max is a separate tutor bot for the son. He writes reports to:
+- /mnt/yadisk-agent/kids/sessions/YYYY-MM-DD.md — sessions by day
+- /mnt/yadisk-agent/kids/progress.md — progress by subject
+- /mnt/yadisk-agent/kids/weekly/YYYY-Wxx.md — weekly digests
 
-Когда Вова спрашивает "как там сын", "что по учёбе" — читаешь последний отчёт и пересказываешь.
-В вечернем чек-ине (19:00) — если сегодня были сессии, коротко упоминаешь.
-Обновляй memory/kids.md на основе progress.md раз в неделю.
+When Vova asks "how is the son doing", "what about school" — read the latest report and summarize.
+In the evening check-in (19:00) — if there were sessions today, briefly mention them.
+Update memory/kids.md based on progress.md once a week.
 ```
 
 ---
@@ -376,62 +376,62 @@ kids/
 // crons.js
 const schedule = require('node-cron');
 
-// После школы в 15:00 — чекин про день и ДЗ
+// After school at 15:00 — check-in about the day and homework
 schedule.schedule('0 15 * * 1-5', afternoonCheckin, { timezone: 'Europe/Madrid' });
-// Спрашивает: как прошёл день, что задали на завтра
-// Читает schedule.json → говорит какие уроки завтра
-// Пополняет homework.json новыми заданиями
+// Asks: how was the day, what was assigned for tomorrow
+// Reads schedule.json → tells what lessons are tomorrow
+// Populates homework.json with new tasks
 
-// Вечером в 21:00 — напоминание перед сном
+// Evening at 21:00 — bedtime reminder
 schedule.schedule('0 21 * * 1-5', eveningReminder, { timezone: 'Europe/Madrid' });
-// Говорит какие уроки завтра + что из ДЗ ещё не сделано
+// Says what lessons are tomorrow + what homework is still pending
 
-// Ежедневный итог в 20:30 (Madrid time)
+// Daily summary at 20:30 (Madrid time)
 schedule.schedule('30 20 * * *', generateDailySummary, { timezone: 'Europe/Madrid' });
 
-// Недельный дайджест в воскресенье 18:00
+// Weekly digest on Sunday at 18:00
 schedule.schedule('0 18 * * 0', generateWeeklySummary, { timezone: 'Europe/Madrid' });
 
-// Автозавершение брошенных сессий (каждые 5 минут)
+// Auto-close abandoned sessions (every 5 minutes)
 schedule.schedule('*/5 * * * *', closeAbandonedSessions);
 ```
 
-### Afternoon Checkin (15:00, пн–пт)
+### Afternoon Checkin (15:00, Mon–Fri)
 
 ```
-Макс: "¡Ey! 👋 ¿Cómo fue el cole hoy?
+Max: "¡Ey! 👋 ¿Cómo fue el cole hoy?
        ¿Qué deberes te han puesto?"
 
-Сын рассказывает → Макс разбирает ДЗ, добавляет в homework.json
+Son tells him → Max parses the homework, adds to homework.json
 
-Макс: "Oye, mañana tienes: Matemáticas, Lengua, Inglés, Historia y Ed. Física.
+Max: "Oye, mañana tienes: Matemáticas, Lengua, Inglés, Historia y Ed. Física.
        Para mañana hay que tener listo:
        • Ejercicios 3.4 y 3.5 de mates
        • Resumen del capítulo 5 de Lengua
        ¿Empezamos con algo ahora o más tarde? 📚"
 ```
 
-### Evening Reminder (21:00, пн–пт)
+### Evening Reminder (21:00, Mon–Fri)
 
 ```
-Макс: "¡Oye, antes de dormir! 🌙
+Max: "¡Oye, antes de dormir! 🌙
        Mañana tienes: Matemáticas, Lengua, Inglés...
        
-       Deberes pendientes para mañana:
-       ✅ Ejercicios de mates — hecho
-       ⏳ Resumen de Lengua — pendiente
+       Homework due tomorrow:
+       ✅ Ejercicios de mates — done
+       ⏳ Resumen de Lengua — pending
        
        ¿Está todo listo? 😴"
 ```
 
-Если всё сделано — просто желает спокойной ночи.
-Если есть незакрытые задания — мягко напоминает без давления.
+If everything is done — just says good night.
+If there are unclosed tasks — gently reminds without pressure.
 
 ---
 
 ## Systemd Service
 
-Файл `/opt/snezhanna/tutor/systemd/tutor.service`:
+File `/opt/snezhanna/tutor/systemd/tutor.service`:
 
 ```ini
 [Unit]
@@ -453,7 +453,7 @@ StandardError=journal
 WantedBy=multi-user.target
 ```
 
-Установка:
+Installation:
 ```bash
 sudo ln -s /opt/snezhanna/tutor/systemd/tutor.service /etc/systemd/system/tutor.service
 sudo systemctl daemon-reload
@@ -463,73 +463,73 @@ sudo systemctl start tutor
 
 ---
 
-## Жора — расширение watchdog'а
+## Zhora — watchdog extension
 
-Жора уже следит за Снежанной — его нужно расширить чтобы он следил и за Максом. Изменения вносятся в существующий `/opt/snezhanna/watchdog/zhora.js`.
+Zhora already monitors Snezhanna — it needs to be extended to also monitor Max. Changes go into the existing `/opt/snezhanna/watchdog/zhora.js`.
 
-### Новые проверки (каждые 5 минут)
-
-```
-6. Макс process — systemctl is-active tutor
-7. Макс logs — нет повторяющихся критических ошибок за последние 10 мин
-```
-
-### Обновлённый `/status`
+### New checks (every 5 minutes)
 
 ```
-🤖 Жора рапортует:
+6. Max process — systemctl is-active tutor
+7. Max logs — no repeating critical errors in the last 10 min
+```
 
-Снежанна: ✅ active (uptime 3d 14h)
-Макс: ✅ active (uptime 2d 6h)
+### Updated `/status`
+
+```
+🤖 Zhora reporting:
+
+Snezhanna: ✅ active (uptime 3d 14h)
+Max: ✅ active (uptime 2d 6h)
 Telegram API: ✅
-Диск readonly: ✅
-Диск агент: ✅
-Место на сервере: 42%
-Ошибки в логах: нет
+Disk readonly: ✅
+Disk agent: ✅
+Server space: 42%
+Log errors: none
 ```
 
-### Обновлённый утренний рапорт (07:55)
+### Updated morning report (07:55)
 
 ```
-🤖 Жора рапортует: все системы в норме.
-Снежанна готова к работе ✅
-Макс готов к работе ✅
+🤖 Zhora reporting: all systems nominal.
+Snezhanna ready ✅
+Max ready ✅
 ```
 
-### Поведение при падении Макса
+### Behavior when Max goes down
 
 ```
-tutor down → systemctl restart tutor → доложить результат
+tutor down → systemctl restart tutor → report result
 ```
 
-Аналогично тому как Жора уже рестартует Снежанну.
+Same as Zhora already does for Snezhanna.
 
-### Команда `/restart max`
+### `/restart max` command
 
-Жора добавляет команду ручного рестарта Макса (по аналогии с тем, если есть `/restart snezhanna`):
+Zhora adds a manual restart command for Max (analogous to `/restart snezhanna` if it exists):
 
 ```
-Вова: /restart max
-Жора: 🔄 Перезапускаю Макса...
-      ✅ Макс запущен. Uptime: 0m
+Vova: /restart max
+Zhora: 🔄 Restarting Max...
+       ✅ Max is running. Uptime: 0m
 ```
 
-### Что добавить в zhora.js
+### What to add to zhora.js
 
 ```js
-// Добавить в список проверяемых сервисов:
+// Add to the list of monitored services:
 const SERVICES = [
-  { name: 'Снежанна', unit: 'snezhanna' },
-  { name: 'Макс',     unit: 'tutor'     },
+  { name: 'Snezhanna', unit: 'snezhanna' },
+  { name: 'Max',       unit: 'tutor'     },
 ];
 
-// Логика одна и та же для обоих — проверить, при падении рестартовать, доложить
+// Same logic for both — check, restart on failure, report
 ```
 
-### Claude Code промпт для обновления Жоры
+### Claude Code prompt for updating Zhora
 
 ```
-Read /opt/snezhanna/docs/tutor-bot-tz.md — section "Жора" for full spec.
+Read /opt/snezhanna/docs/tutor-bot-tz.md — section "Zhora" for full spec.
 
 Update /opt/snezhanna/watchdog/zhora.js to also monitor the 'tutor' systemd service (Max tutor bot).
 
@@ -547,18 +547,18 @@ No other changes — keep all existing Zhora behavior intact.
 
 ## Shared Library — `/opt/snezhanna/lib/`
 
-Общий код для всех ботов экосистемы (Снежанна, Макс, Жора). Не дублируется — лежит в одном месте, подключается через `require`.
+Shared code for all bots in the ecosystem (Snezhanna, Max, Zhora). Not duplicated — lives in one place, imported via `require`.
 
 ```
 /opt/snezhanna/lib/
-  ├── vision.js        ← приём фото из Telegram + передача в Claude
-  ├── whisper.js       ← транскрипция голоса (перенести из Снежанны)
+  ├── vision.js        ← receive photos from Telegram + pass to Claude
+  ├── whisper.js       ← voice transcription (moved from Snezhanna)
   └── README.md
 ```
 
 ### `/opt/snezhanna/lib/vision.js`
 
-Полная логика работы с фото: скачать из Telegram, закодировать, передать в Claude, вернуть ответ, сохранить в историю как текстовую метку.
+Full photo handling logic: download from Telegram, encode, pass to Claude, return response, save as text placeholder in history.
 
 ```js
 'use strict';
@@ -566,7 +566,7 @@ No other changes — keep all existing Zhora behavior intact.
 const fetch = require('node-fetch');
 
 /**
- * Скачивает фото из Telegram и возвращает base64 + mime_type
+ * Downloads a photo from Telegram and returns base64 + mime_type
  */
 async function downloadTelegramPhoto(bot, fileId) {
   const file = await bot.getFile(fileId);
@@ -579,7 +579,7 @@ async function downloadTelegramPhoto(bot, fileId) {
 }
 
 /**
- * Формирует user-сообщение с фото для передачи в Claude
+ * Builds a user message with photo for passing to Claude
  */
 function buildPhotoMessage(base64, mimeType, caption = '') {
   return {
@@ -592,35 +592,35 @@ function buildPhotoMessage(base64, mimeType, caption = '') {
 }
 
 /**
- * Текстовая замена фото для хранения в истории сессии.
- * Вызывается ПОСЛЕ получения ответа от Claude —
- * чтобы последующие запросы не тащили base64 заново.
+ * Text placeholder for the photo stored in session history.
+ * Called AFTER receiving Claude's response —
+ * so subsequent requests don't re-send the base64.
  */
 function photoPlaceholder(caption = '') {
-  return `[фото пользователя${caption ? ': ' + caption : ''}]`;
+  return `[user photo${caption ? ': ' + caption : ''}]`;
 }
 
 module.exports = { downloadTelegramPhoto, buildPhotoMessage, photoPlaceholder };
 ```
 
-### Как использовать в боте
+### How to use in the bot
 
 ```js
 const vision = require('/opt/snezhanna/lib/vision');
 
-// Обработчик photo-события Telegram
+// Telegram photo event handler
 bot.on('photo', async (msg) => {
-  const fileId  = msg.photo[msg.photo.length - 1].file_id; // максимальный размер
+  const fileId  = msg.photo[msg.photo.length - 1].file_id; // largest size
   const caption = msg.caption || '';
 
-  // 1. Скачиваем фото
+  // 1. Download the photo
   const { base64, mime_type } = await vision.downloadTelegramPhoto(bot, fileId);
 
-  // 2. Отправляем в Claude — с реальным изображением
+  // 2. Send to Claude — with the real image
   const photoMsg = vision.buildPhotoMessage(base64, mime_type, caption);
   const response = await claude.send([...history, photoMsg]);
 
-  // 3. В историю сохраняем текстовую метку, НЕ base64
+  // 3. Save a text placeholder in history, NOT base64
   history.push({ role: 'user',      content: vision.photoPlaceholder(caption) });
   history.push({ role: 'assistant', content: response });
 
@@ -628,17 +628,17 @@ bot.on('photo', async (msg) => {
 });
 ```
 
-### Подключение в Снежанне
+### Connecting in Snezhanna
 
-Добавить в `/opt/snezhanna/index.js` (или в `lib/telegram.js`) аналогичный обработчик `bot.on('photo', ...)` через `/opt/snezhanna/lib/vision.js`. Снежанна получает фото → смотрит что на нём → отвечает в своём стиле.
+Add a similar `bot.on('photo', ...)` handler to `/opt/snezhanna/index.js` (or `lib/telegram.js`) using `/opt/snezhanna/lib/vision.js`. Snezhanna receives photos → sees what's in them → responds in her own style.
 
-Использовать тот же `TELEGRAM_BOT_TOKEN` — но передавать через параметр или env, не хардкодить в библиотеке, так как у каждого бота свой токен:
+Use the same `TELEGRAM_BOT_TOKEN` — but pass it as a parameter or from env, do not hardcode in the library, since each bot has its own token:
 
 ```js
 async function downloadTelegramPhoto(bot, fileId, botToken) { ... }
 ```
 
-### Claude Code промпт для создания shared lib
+### Claude Code prompt for creating the shared lib
 
 ```
 Read /opt/snezhanna/docs/tutor-bot-tz.md — section "Shared Library" for full spec.
@@ -666,11 +666,11 @@ IMPORTANT: /opt/lib files must not contain hardcoded tokens — accept them as p
 
 ## Security
 
-- `TUTOR_ALLOWED_USER_ID` — числовой Telegram ID сына, все остальные игнорируются
-- Бот не имеет доступа к Gmail, Google Calendar, личным файлам Вовы
-- Пишет ТОЛЬКО в `/mnt/yadisk-agent/kids/` — ничего вне этой папки
-- Никакой веб-поиск по умолчанию (можно добавить позже для учебных запросов)
-- Защита от prompt injection: содержимое сообщений — данные, не команды
+- `TUTOR_ALLOWED_USER_ID` — son's numeric Telegram ID, all others are ignored
+- The bot has no access to Gmail, Google Calendar, or Vova's personal files
+- Writes ONLY to `/mnt/yadisk-agent/kids/` — nothing outside that folder
+- No web search by default (can be added later for study-related queries)
+- Prompt injection protection: message content is data, not commands
 
 ---
 
@@ -724,27 +724,27 @@ On successful start, bot sends to TUTOR_ALLOWED_USER_ID:
 
 ## What to Add to Snezhanna After Deployment
 
-В `/opt/snezhanna/skills/` создать файл `kids.md`:
+Create a file `kids.md` in `/opt/snezhanna/skills/`:
 
 ```markdown
-# Skill: Дети — отчёты Макса
+# Skill: Kids — Max's Reports
 
-Макс — бот-репетитор сына. Его отчёты в /mnt/yadisk-agent/kids/.
+Max is the son's tutor bot. His reports are in /mnt/yadisk-agent/kids/.
 
-## Как читать отчёты
+## How to read reports
 
-- Последняя сессия: read_file("kids/sessions/YYYY-MM-DD.md") за сегодня или вчера
-- Прогресс по предметам: read_file("kids/progress.md")
-- Недельный дайджест: read_file("kids/weekly/YYYY-Wxx.md")
+- Latest session: read_file("kids/sessions/YYYY-MM-DD.md") for today or yesterday
+- Progress by subject: read_file("kids/progress.md")
+- Weekly digest: read_file("kids/weekly/YYYY-Wxx.md")
 
-## Когда упоминать
+## When to mention
 
-- В вечернем чек-ине: если сегодня были сессии — 1-2 строки о том как прошло
-- По запросу Вовы: "как сын", "что по учёбе", "расскажи про уроки"
-- Раз в неделю (воскресенье): обновить memory/kids.md на основе weekly-дайджеста
+- In the evening check-in: if there were sessions today — 1-2 lines on how it went
+- On Vova's request: "how is the son", "what about school", "tell me about lessons"
+- Once a week (Sunday): update memory/kids.md based on the weekly digest
 
-## Формат для вечернего чек-ина
+## Format for evening check-in
 
-"Кстати, сын сегодня занимался с Максом [X мин] — [предмет].
-[Одна строка о прогрессе или трудности]."
+"By the way, the son studied with Max today [X min] — [subject].
+[One line about progress or difficulty]."
 ```

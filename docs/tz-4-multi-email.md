@@ -17,7 +17,7 @@ Add to `lib/db.js` `initSchema()`:
 ```sql
 CREATE TABLE IF NOT EXISTS email_accounts (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
-  label         TEXT NOT NULL,          -- display name e.g. "Рабочая", "Личная", "AMC"
+  label         TEXT NOT NULL,          -- display name e.g. "Work", "Personal", "AMC"
   email         TEXT NOT NULL UNIQUE,
   type          TEXT NOT NULL,          -- 'gmail' | 'imap'
   account_type  TEXT NOT NULL DEFAULT 'personal',  -- 'personal' | 'corporate'
@@ -257,7 +257,7 @@ async function runEmailPoll() {
       const replyNeeded = messages.filter(m => m.category === 'reply_needed');
       for (const m of replyNeeded) {
         await sendToVova(
-          `📬 Вов, нужен ответ: *${m.subject}* — от ${m.from} [${account.label}]`,
+          `📬 Vova, reply needed: *${m.subject}* — from ${m.from} [${account.label}]`,
           { parse_mode: 'Markdown' }
         );
       }
@@ -299,19 +299,19 @@ function buildEmailDigest(account, messages) {
   }
 
   const labels = {
-    task:   '📋 Задачи',
-    event:  '📅 События',
-    update: '📊 Апдейты',
-    info:   'ℹ️ Инфо'
+    task:   '📋 Tasks',
+    event:  '📅 Events',
+    update: '📊 Updates',
+    info:   'ℹ️ Info'
   };
 
-  let text = `📬 *${account.label}* — ${messages.length} новых:\n`;
+  let text = `📬 *${account.label}* — ${messages.length} new:\n`;
   for (const [cat, msgs] of Object.entries(byCategory)) {
     text += `\n${labels[cat] || cat}:\n`;
     for (const m of msgs.slice(0, 5)) {
       text += `• ${m.subject} — _${m.from}_\n`;
     }
-    if (msgs.length > 5) text += `  ...и ещё ${msgs.length - 5}\n`;
+    if (msgs.length > 5) text += `  ...and ${msgs.length - 5} more\n`;
   }
   return text;
 }
@@ -370,7 +370,7 @@ case 'send_email': {
   if (!input.confirmed) {
     // Create draft instead
     const draft = await mailManager.createDraft(input.account_id, input.to, input.subject, input.body, input.in_reply_to);
-    return { draft_created: true, message: 'Создал черновик. Скажи "отправляй" чтобы отправить.' };
+    return { draft_created: true, message: 'Draft created. Say "send it" to send.' };
   }
   const result = await mailManager.sendMessage(input.account_id, input.to, input.subject, input.body, input.in_reply_to);
   return { sent: true, ...result };
@@ -383,41 +383,41 @@ Update `update_my_preferences` tool handler to call `rescheduleEmailPoll()` when
 
 ---
 
-## 11. Mini App — ПОЧТА Section
+## 11. Mini App — EMAIL Section
 
-Add to the settings modal in `mini-app/index.html` a new section **ПОЧТА** between ИНТЕГРАЦИИ and ЧАТЫ:
+Add to the settings modal in `mini-app/index.html` a new section **EMAIL** between INTEGRATIONS and CHATS:
 
 ```
 ─────────────────
-ПОЧТА
+EMAIL
   [list of email accounts]
   Each account row:
     • Label + email address
     • Badge: Gmail / IMAP
-    • Toggle: вкл/выкл
-    • [Переавторизовать] button (Gmail only, shown if token may be stale)
-    • [Удалить] button
+    • Toggle: on/off
+    • [Re-authorize] button (Gmail only, shown if token may be stale)
+    • [Delete] button
 
-  [+ Добавить ящик] → expands inline form:
-    Тип: [Gmail | IMAP]
+  [+ Add mailbox] → expands inline form:
+    Type: [Gmail | IMAP]
 
     If Gmail:
       Email: [text input]
-      [Авторизовать через Google] button
+      [Authorize via Google] button
         → opens OAuth URL in browser (window.open)
         → user copies code
-        → text input appears: "Вставь код авторизации"
-        → [Подтвердить] → POST /api/email-accounts/oauth-callback
+        → text input appears: "Paste authorization code"
+        → [Confirm] → POST /api/email-accounts/oauth-callback
 
     If IMAP:
-      Название: [text input]  ← label
+      Name: [text input]  ← label
       Email: [text input]
-      Тип ящика: [Личный | Корпоративный]
-      IMAP хост: [text input]  placeholder: outlook.office365.com
-      IMAP порт: [number input] placeholder: 993
-      Логин: [text input]
-      Пароль: [password input]
-      [Сохранить и проверить] → POST /api/email-accounts → server tests connection
+      Mailbox type: [Personal | Corporate]
+      IMAP host: [text input]  placeholder: outlook.office365.com
+      IMAP port: [number input] placeholder: 993
+      Login: [text input]
+      Password: [password input]
+      [Save and test] → POST /api/email-accounts → server tests connection
 ```
 
 ### New API endpoints for email accounts
@@ -471,7 +471,7 @@ async function saveTokenForAccount(code)
 | `lib/api.js` | Add email account endpoints |
 | `lib/settings.js` | `rescheduleEmailPoll` integration |
 | `index.js` | Replace email cron with `scheduleEmailPoll()`; import `mailManager` |
-| `mini-app/index.html` | Add ПОЧТА section to settings modal |
+| `mini-app/index.html` | Add EMAIL section to settings modal |
 | `identity/IDENTITY.md` | Add `send_email` confirmation rule |
 | `scripts/migrate-from-yadisk.js` | Add email accounts migration step |
 | `package.json` | Add `nodemailer` if not present; add `imap`+`mailparser` if not present |

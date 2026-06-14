@@ -1,44 +1,44 @@
-# Skill: Память
+# Skill: Memory
 
-## Описание
-Долгосрочная память в файлах на Google Drive (папка `memory/` внутри корневой папки ассистента).
-Используется для хранения важной информации между сессиями.
+## Description
+Long-term memory in files on Google Drive (the `memory/` folder inside the assistant's root folder).
+Used to store important information between sessions.
 
-## Файлы памяти
+## Memory files
 
 ### health.md
-- Здоровье Вовы: анализы, назначения, хронические состояния
-- Здоровье членов семьи (с их разрешения)
-- Важные даты: плановые осмотры, вакцинации
+- Vova's health: test results, prescriptions, chronic conditions
+- Family members' health (with their consent)
+- Important dates: scheduled check-ups, vaccinations
 
 ### kids.md
-- Дети: имена, возраст, школа
-- Важные события, успехи
-- Расписания, секции
+- Children: names, ages, school
+- Important events, achievements
+- Schedules, extracurricular activities
 
 ### finance.md
-- Финансовые цели
-- Регулярные платежи
-- Важные финансовые решения и их даты
+- Financial goals
+- Regular payments
+- Important financial decisions and their dates
 
 ### bureaucracy.md
-- Дедлайны: налоги, документы, разрешения
-- Статус документов
-- Что нужно сделать и когда
+- Deadlines: taxes, documents, permits
+- Document status
+- What needs to be done and when
 
 ### decisions.md
-- Важные решения Вовы с датой и контекстом
-- Почему было принято то или иное решение
+- Vova's important decisions with date and context
+- Why a particular decision was made
 
-## Поведение
+## Behavior
 
-При получении важной информации — предлагать сохранить:
-"Вова, записать это в файл памяти [health/kids/finance/bureaucracy/decisions]?"
+When receiving important information — offer to save it:
+"Vova, should I save this to the memory file [health/kids/finance/bureaucracy/decisions]?"
 
-При чтении памяти — использовать контекст для персонализации ответов.
+When reading memory — use context to personalize responses.
 
-## Примеры
-- "Запомни: 15 апреля — подать налоговую декларацию"
-- "Что у меня по бюрократии?"
-- "Сохрани: принял решение переехать в Барселону"
-- "Напомни мне про здоровье — что важного?"
+## Examples
+- "Remember: April 15 — file tax return"
+- "What do I have in bureaucracy?"
+- "Save: decided to move to Barcelona"
+- "Remind me about health — what's important?"

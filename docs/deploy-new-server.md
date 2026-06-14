@@ -1,99 +1,99 @@
-# Деплой Snezhanna на новый сервер
+# Deploying Snezhanna on a New Server
 
-Гайд для развёртывания нового инстанса бота (только основной бот, без Max и Жоры) на чистом сервере. Управление сервисом — через Mini App (Settings → раздел «Система»).
+Guide for deploying a new bot instance (main bot only, without Max and Zhora) on a clean server. Service management is done via the Mini App (Settings → "System" section).
 
 ---
 
-## Что нужно подготовить заранее (на локальной машине)
+## What to Prepare in Advance (on your local machine)
 
-- **Telegram-бот**: создать через @BotFather → получить `TELEGRAM_BOT_TOKEN`
-- **Telegram ID пользователя**: узнать через @userinfobot → числовой ID
-- **Google OAuth credentials**: Google Cloud Console → APIs & Services → Credentials → OAuth 2.0 Client ID → тип **Desktop app** → скопировать `Client ID` и `Client Secret`
-  - Можно использовать тот же Google Cloud Project, что и у основного инстанса
+- **Telegram bot**: create via @BotFather → get `TELEGRAM_BOT_TOKEN`
+- **Telegram user ID**: look up via @userinfobot → numeric ID
+- **Google OAuth credentials**: Google Cloud Console → APIs & Services → Credentials → OAuth 2.0 Client ID → type **Desktop app** → copy `Client ID` and `Client Secret`
+  - You can reuse the same Google Cloud Project as the main instance
 - **Anthropic API key**: platform.anthropic.com
-- **OpenAI API key** _(опционально — только для голосовых сообщений)_
-- **Домен** _(опционально — нужен для Mini App)_: DNS A-запись должна указывать на IP сервера. Скрипт выпустит TLS-сертификат через Let's Encrypt автоматически.
+- **OpenAI API key** _(optional — only needed for voice messages)_
+- **Domain** _(optional — needed for Mini App)_: DNS A record must point to the server's IP. The script will obtain a TLS certificate via Let's Encrypt automatically.
 
 ---
 
-## Деплой
+## Deployment
 
-На сервере должны быть установлены **Node.js 18+** и **git**:
+The server must have **Node.js 18+** and **git** installed:
 
 ```bash
-# Debian/Ubuntu — если ещё не установлен Node.js 18+:
+# Debian/Ubuntu — if Node.js 18+ is not yet installed:
 curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
 sudo apt-get install -y nodejs git
 ```
 
-Затем — одна команда:
+Then run a single command:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/morshin/snezhanna/master/deploy.sh \
   -o /tmp/deploy.sh && sudo bash /tmp/deploy.sh
 ```
 
-Скрипт запросит:
-- Имя каталога, имя бота и пользователя, часовой пояс
-- API-ключи: Anthropic, Telegram бот-токен, Telegram ID, Google Client ID + Secret, OpenAI (опционально)
+The script will ask for:
+- Directory name, bot name and user, timezone
+- API keys: Anthropic, Telegram bot token, Telegram ID, Google Client ID + Secret, OpenAI (optional)
 
-Далее скрипт сам: клонирует последний релиз в `/opt/<имя>/`, генерирует `credentials.json`, настраивает сервис, создаёт systemd-юнит и запускает бота.
+The script then: clones the latest release into `/opt/<name>/`, generates `credentials.json`, configures the service, creates a systemd unit, and starts the bot.
 
-**После запуска:** бот пришлёт ссылку для авторизации Google. Перейди по ней, разреши доступ к Calendar + Gmail + Drive, скопируй `code=...` из адресной строки и отправь боту: `/auth <код>`. Онбординг запустится автоматически при первом сообщении.
+**After startup:** the bot will send a Google authorization link. Visit it, grant access to Calendar + Gmail + Drive, copy the `code=...` from the address bar, and send it to the bot: `/auth <code>`. The onboarding wizard will start automatically on the first message.
 
 ---
 
 ## Mini App
 
-Mini App работает как HTTP-сервер на порту из `nanobot.json`. Telegram требует HTTPS.
+The Mini App runs as an HTTP server on the port configured in `nanobot.json`. Telegram requires HTTPS.
 
-**Если указать домен при запуске `deploy.sh`** — скрипт сам установит nginx, выпустит TLS-сертификат через Let's Encrypt и настроит автопродление (`certbot.timer`). DNS A-запись домена должна указывать на IP сервера до запуска скрипта.
+**If you provide a domain when running `deploy.sh`** — the script will install nginx, obtain a TLS certificate via Let's Encrypt, and configure auto-renewal (`certbot.timer`). The domain's DNS A record must point to the server's IP before running the script.
 
-**Альтернатива без домена — Cloudflare Tunnel:**
+**Alternative without a domain — Cloudflare Tunnel:**
 
 ```bash
-# см. developers.cloudflare.com/cloudflare-one/connections/connect-networks/
-cloudflared tunnel create <имя>
-cloudflared tunnel route dns <имя> alice.example.com
-# cloudflared service install  — запустить как сервис
+# see developers.cloudflare.com/cloudflare-one/connections/connect-networks/
+cloudflared tunnel create <name>
+cloudflared tunnel route dns <name> alice.example.com
+# cloudflared service install  — run as a service
 ```
 
-### Настройка кнопки в BotFather
+### Setting up the button in BotFather
 
-После того как Mini App доступен по HTTPS-адресу:
+Once the Mini App is accessible via an HTTPS URL:
 
-1. Открыть @BotFather → `/mybots` → выбрать бота
+1. Open @BotFather → `/mybots` → select the bot
 2. **Bot Settings → Menu Button → Configure Menu Button**
-3. Ввести URL: `https://alice.example.com`
-4. Ввести текст кнопки: `Открыть` (или любой другой)
+3. Enter URL: `https://alice.example.com`
+4. Enter button text: `Open` (or any other)
 
-После этого кнопка Mini App появится рядом с полем ввода в Telegram.
+The Mini App button will then appear next to the input field in Telegram.
 
 ---
 
-## Обновление
+## Updating
 
 ```bash
-sudo bash /opt/<имя>/scripts/update.sh
+sudo bash /opt/<name>/scripts/update.sh
 ```
 
 ---
 
 <details>
-<summary>Ручной деплой (пошагово)</summary>
+<summary>Manual deployment (step by step)</summary>
 
-### Шаг 1. Подготовка сервера
+### Step 1. Prepare the server
 
 ```bash
 # Node.js 18+
 curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
 sudo apt-get install -y nodejs git
 
-# Системный пользователь для сервиса
+# System user for the service
 sudo useradd -r -m -s /bin/bash snezhanna
 ```
 
-### Шаг 2. Клонировать репозиторий и установить зависимости
+### Step 2. Clone the repository and install dependencies
 
 ```bash
 cd /opt
@@ -102,53 +102,53 @@ sudo chown -R snezhanna:snezhanna /opt/snezhanna
 sudo -u snezhanna bash -c "cd /opt/snezhanna && npm install"
 ```
 
-### Шаг 3. Скопировать Google credentials
+### Step 3. Copy Google credentials
 
 ```bash
-# С локальной машины на новый сервер
+# From local machine to the new server
 scp credentials.json user@new-server:/opt/snezhanna/credentials.json
 sudo chown snezhanna:snezhanna /opt/snezhanna/credentials.json
 ```
 
-### Шаг 4. Настроить .env
+### Step 4. Configure .env
 
 ```bash
 sudo -u snezhanna cp /opt/snezhanna/.env.example /opt/snezhanna/.env
 sudo nano /opt/snezhanna/.env
 ```
 
-Заполнить (обязательные):
+Fill in (required):
 ```
 ANTHROPIC_API_KEY=sk-ant-...
-TELEGRAM_BOT_TOKEN=...           # токен нового бота
-TELEGRAM_ALLOWED_USER_ID=...     # числовой Telegram ID пользователя
+TELEGRAM_BOT_TOKEN=...           # new bot token
+TELEGRAM_ALLOWED_USER_ID=...     # numeric Telegram user ID
 GOOGLE_CLIENT_ID=...
 GOOGLE_CLIENT_SECRET=...
 ```
 
-Опциональные:
+Optional:
 ```
-OPENAI_API_KEY=...               # для голосовых сообщений
+OPENAI_API_KEY=...               # for voice messages
 ```
 
-**Не нужны** на отдельном сервере: `WATCHDOG_BOT_TOKEN`, `GOOGLE_TOKEN_FILE`, `STATE_FILE`, `GOOGLE_CREDENTIALS_FILE`, `TUTOR_BOT_TOKEN`.
+**Not needed** on a standalone server: `WATCHDOG_BOT_TOKEN`, `GOOGLE_TOKEN_FILE`, `STATE_FILE`, `GOOGLE_CREDENTIALS_FILE`, `TUTOR_BOT_TOKEN`.
 
-### Шаг 5. Настроить config/nanobot.json
+### Step 5. Configure config/nanobot.json
 
 ```bash
 sudo nano /opt/snezhanna/config/nanobot.json
 ```
 
-Ключевые поля:
+Key fields:
 ```json
 {
   "user": {
-    "name": "Алекс",
-    "assistant_name": "Алиса"
+    "name": "Alex",
+    "assistant_name": "Alice"
   },
   "timezone": "Europe/Moscow",
   "gdrive": {
-    "root_folder": "Алиса"
+    "root_folder": "Alice"
   },
   "mini_app": {
     "port": 3001
@@ -163,9 +163,9 @@ sudo nano /opt/snezhanna/config/nanobot.json
 }
 ```
 
-`gdrive.root_folder` — уникальное имя папки в Google Drive для этого инстанса.
+`gdrive.root_folder` — unique folder name in Google Drive for this instance.
 
-### Шаг 6. Настроить личность бота
+### Step 6. Configure bot personality
 
 ```bash
 sudo -u snezhanna cp /opt/snezhanna/identity/IDENTITY.template.md \
@@ -173,9 +173,9 @@ sudo -u snezhanna cp /opt/snezhanna/identity/IDENTITY.template.md \
 sudo nano /opt/snezhanna/identity/IDENTITY.md
 ```
 
-`{{USER_NAME}}` и `{{ASSISTANT_NAME}}` подставляются автоматически из `config.user` при старте.
+`{{USER_NAME}}` and `{{ASSISTANT_NAME}}` are substituted automatically from `config.user` on startup.
 
-### Шаг 7. Создать systemd-сервис
+### Step 7. Create the systemd service
 
 ```bash
 sed 's|INSTANCE_NAME|snezhanna|g; s|INSTANCE_USER|snezhanna|g; s|INSTANCE_DIR|/opt/snezhanna|g' \
@@ -187,20 +187,20 @@ sudo systemctl enable snezhanna
 sudo systemctl start snezhanna
 ```
 
-Проверить логи:
+Check logs:
 ```bash
 journalctl -u snezhanna -f
 ```
 
-Ожидаемые строки при успешном старте:
+Expected lines on successful startup:
 ```
 [DB] initialized
-[GDrive] dirs ok   ← появится после Google OAuth
+[GDrive] dirs ok   ← appears after Google OAuth
 [API] Server listening on port 3001
 [Bot] started
 ```
 
-### Шаг 8. Настроить sudoers для управления сервисом из Mini App
+### Step 8. Configure sudoers for service management from Mini App
 
 ```bash
 printf 'snezhanna ALL=(ALL) NOPASSWD: /bin/systemctl restart snezhanna\nsnezhanna ALL=(ALL) NOPASSWD: /bin/systemctl start snezhanna\n' \
@@ -208,30 +208,30 @@ printf 'snezhanna ALL=(ALL) NOPASSWD: /bin/systemctl restart snezhanna\nsnezhann
 sudo chmod 440 /etc/sudoers.d/snezhanna-restart
 ```
 
-### Шаг 9. Авторизовать Google
+### Step 9. Authorize Google
 
-Бот пришлёт ссылку авторизации при первом старте (или написать `/status`):
+The bot will send an authorization link on first startup (or send `/status`):
 
-1. Открыть ссылку из бота
-2. Авторизоваться Google-аккаунтом **пользователя** (не основного инстанса!)
-3. Разрешить: Calendar + Gmail + Drive
-4. Скопировать код из адресной строки (параметр `code=...`)
-5. Отправить боту: `/auth <код>`
+1. Open the link from the bot
+2. Sign in with the **user's** Google account (not the main instance's!)
+3. Grant access: Calendar + Gmail + Drive
+4. Copy the code from the address bar (the `code=...` parameter)
+5. Send to the bot: `/auth <code>`
 
-Бот создаст структуру папок в Google Drive и будет готов к работе.
+The bot will create the Google Drive folder structure and be ready to use.
 
-### Шаг 10. Онбординг
+### Step 10. Onboarding
 
-При первом сообщении бот автоматически запустит визард настройки: проверит интеграции, спросит имя, стиль общения, настройки брифинга и чекина. Занимает ~2 минуты.
+On the first message, the bot will automatically launch the setup wizard: check integrations, ask for name, communication style, briefing and check-in schedule. Takes about 2 minutes.
 
-После онбординга дополнительные настройки доступны в Mini App (кнопка в меню бота).
+After onboarding, additional settings are available in the Mini App (button in the bot's menu).
 
-### Шаг 11. Проверка
+### Step 11. Verification
 
 ```bash
 journalctl -u snezhanna -n 100
 ```
 
-В Mini App → Настройки → раздел **Система**: сервис Active ✅
+In Mini App → Settings → **System** section: service Active ✅
 
 </details>

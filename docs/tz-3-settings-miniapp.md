@@ -156,52 +156,52 @@ Full-screen overlay with a close button (✕) at top-right.
 Single scrollable content area with sections separated by section headers.
 
 ```
-[✕]  Настройки
+[✕]  Settings
 ─────────────────
-ПРОФИЛЬ
-  Обращение: [text input]
-  Тон: [toggle: Ты / Вы]
-  Стиль ответов: [toggle: Кратко / Подробно]
+PROFILE
+  Name: [text input]
+  Tone: [toggle: Informal / Formal]
+  Response style: [toggle: Concise / Detailed]
 
 ─────────────────
-РАСПИСАНИЕ
-  Брифинг: [time input HH:MM]
-  Тихий режим: [date picker or text "до DD.MM"] [Сбросить]
+SCHEDULE
+  Briefing: [time input HH:MM]
+  Quiet mode: [date picker or text "until DD.MM"] [Reset]
 
 ─────────────────
-ИНТЕГРАЦИИ
+INTEGRATIONS
   GitHub Issues  [toggle]
   Strava         [toggle]
-  Почта: проверять каждые [15 / 30 / 60] мин
+  Email: check every [15 / 30 / 60] min
 
 ─────────────────
-ЧАТЫ
+CHATS
   [list of monitored chats]
-  [+ Добавить чат]  → inline form: chat_id, name, type, category
+  [+ Add chat]  → inline form: chat_id, name, type, category
 
 ─────────────────
-ПРОЕКТЫ
+PROJECTS
   [list of active projects]
   tap → expand inline:
     storage_path [text input]
     github_repo  [text input]
-    status       [toggle: Активен / Архив]
-    ── Параметры ──
-    Задачи в брифинге    [toggle]
-    Календарь            [toggle]
+    status       [toggle: Active / Archived]
+    ── Parameters ──
+    Tasks in briefing    [toggle]
+    Calendar             [toggle]
     GitHub Issues        [toggle]
-    Включать в брифинг   [toggle]
-    Уведомления          [toggle]
-  [+ Новый проект]
+    Include in briefing  [toggle]
+    Notifications        [toggle]
+  [+ New project]
 
 ─────────────────
-КОНТАКТЫ
+CONTACTS
   [search input]
   [list of contacts: name + role]
   tap → expand inline:
     name, role, company, telegram, email, phone, notes
-    Проекты: [chips with linked projects] [+ линковать]
-  [+ Добавить контакт]
+    Projects: [chips with linked projects] [+ link]
+  [+ Add contact]
 ```
 
 ### Auto-save behavior
@@ -217,8 +217,8 @@ On error: show ✗ in red.
 - Cron rescheduling: in `index.js`, expose a `rescheduleBriefing(newTime)` function that stops and restarts the morning briefing cron with the new time.
 
 `quiet_until` (vacation mode): the settings panel shows the current value from `appState.quietUntil`.
-- If set: show "Тихий режим до DD.MM" with a "Сбросить" button → `POST /api/settings { key: 'quiet_until', value: null }` → server clears `appState.quietUntil`.
-- If not set: show a date picker (HTML `<input type="date">`) + "Включить" button.
+- If set: show "Quiet mode until DD.MM" with a "Reset" button → `POST /api/settings { key: 'quiet_until', value: null }` → server clears `appState.quietUntil`.
+- If not set: show a date picker (HTML `<input type="date">`) + "Enable" button.
 
 Add API endpoint:
 ```

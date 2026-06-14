@@ -1,27 +1,27 @@
-# Skill: Дети — отчёты Макса
+# Skill: Kids — Max's reports
 
-Макс — бот-репетитор сына. Его отчёты хранятся локально в `KIDS_DATA_DIR` (`/opt/snezhanna/data/kids`) — не в Google Drive, поэтому недоступны через `search_files`/`read_file`.
+Max is the son's tutor bot. His reports are stored locally in `KIDS_DATA_DIR` (`/opt/snezhanna/data/kids`) — not in Google Drive, so they are not accessible via `search_files`/`read_file`.
 
-## Как читать отчёты
+## How to read reports
 
-- Последняя сессия: read_file("kids/sessions/YYYY-MM-DD.md") за сегодня или вчера
-- Прогресс по предметам: read_file("kids/progress.md")
-- Недельный дайджест: read_file("kids/weekly/YYYY-Wxx.md")
-- Домашние задания: read_file("kids/homework.json") — текущие задания (done/pending, doneAt)
-- Активные квесты: read_file("kids/quests.json") — квесты с наградами за выполнение
-- Баланс TimeGuard: read_file("kids/balance.json") — накопленные минуты (HMAC-подписан)
+- Latest session: read_file("kids/sessions/YYYY-MM-DD.md") for today or yesterday
+- Progress by subject: read_file("kids/progress.md")
+- Weekly digest: read_file("kids/weekly/YYYY-Wxx.md")
+- Homework: read_file("kids/homework.json") — current tasks (done/pending, doneAt)
+- Active quests: read_file("kids/quests.json") — quests with rewards for completion
+- TimeGuard balance: read_file("kids/balance.json") — accumulated minutes (HMAC-signed)
 
-## Квесты
+## Quests
 
-Вова назначает квесты через Max-бота командой `/quest`. Квест — задание с наградой в минутах экранного времени. Когда сын выполняет задание, Макс добавляет минуты в balance.json, который читает TimeGuard на Windows.
+Vova assigns quests through the Max bot using the `/quest` command. A quest is a task with a reward in screen time minutes. When the son completes the task, Max adds minutes to balance.json, which TimeGuard on Windows reads.
 
-## Когда упоминать
+## When to mention
 
-- В вечернем чек-ине: если сегодня были сессии — 1-2 строки о том как прошло
-- По запросу Вовы: "как сын", "что по учёбе", "расскажи про уроки", "какой баланс у сына"
-- Раз в неделю (воскресенье): обновить memory/kids.md на основе weekly-дайджеста
+- In the evening check-in: if there were sessions today — 1–2 lines on how it went
+- On Vova's request: "how is my son doing", "what about school", "tell me about lessons", "what's my son's balance"
+- Once a week (Sunday): update memory/kids.md based on the weekly digest
 
-## Формат для вечернего чек-ина
+## Format for the evening check-in
 
-"Кстати, сын сегодня занимался с Максом [X мин] — [предмет].
-[Одна строка о прогрессе или трудности]."
+"By the way, your son studied with Max today for [X min] — [subject].
+[One line about progress or difficulty]."

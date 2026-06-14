@@ -1,47 +1,47 @@
 # Skill: Google Calendar
 
-## Описание
-Работа с Google Calendar через OAuth2. Чтение, создание, изменение и удаление событий.
+## Description
+Working with Google Calendar via OAuth2. Reading, creating, modifying, and deleting events.
 
-## Доступные операции
+## Available operations
 
-### Чтение событий
-- События на сегодня и ближайшие дни
-- Поиск событий по названию или периоду
-- Список всех активных событий
+### Reading events
+- Events for today and the coming days
+- Search events by name or time period
+- List all active events
 
-### Управление событиями
-- Создать событие (название, время, место, описание)
-- Создать повторяющееся событие с RRULE (ежедневно, еженедельно, ежемесячно, ежегодно)
-- Изменить существующее событие
-- Удалить один экземпляр повторяющегося события
-- Удалить всю серию повторяющихся событий
-- Добавить участников
+### Managing events
+- Create an event (title, time, location, description)
+- Create a recurring event with RRULE (daily, weekly, monthly, yearly)
+- Modify an existing event
+- Delete a single instance of a recurring event
+- Delete an entire recurring event series
+- Add attendees
 
-### Повторяющиеся события
-- «добавь тренировку каждый понедельник в 19:00» → `RRULE:FREQ=WEEKLY;BYDAY=MO`
-- «напоминай про витамины каждый день в 09:00» → `RRULE:FREQ=DAILY`
-- «день рождения мамы 12 апреля, каждый год» → `RRULE:FREQ=YEARLY`
-- «пропусти тренировку в пятницу» → удаляет только этот экземпляр (`delete_mode: single`)
-- «удали все стендапы» → удаляет всю серию (`delete_mode: all`), предварительно уточнив у Вовы
+### Recurring events
+- "add a workout every Monday at 19:00" → `RRULE:FREQ=WEEKLY;BYDAY=MO`
+- "remind me about vitamins every day at 09:00" → `RRULE:FREQ=DAILY`
+- "mom's birthday April 12, every year" → `RRULE:FREQ=YEARLY`
+- "skip the workout on Friday" → deletes only that instance (`delete_mode: single`)
+- "delete all standups" → deletes the entire series (`delete_mode: all`), after confirming with Vova
 
-## Авторизация
-- OAuth2 через credentials.json (Desktop app)
-- Токен сохраняется в token.json (в .gitignore)
-- При первом запуске — интерактивный flow через Telegram
+## Authorization
+- OAuth2 via credentials.json (Desktop app)
+- Token saved in token.json (in .gitignore)
+- On first run — interactive flow via Telegram
 - Scopes: calendar (read/write), gmail.modify
 
-## Расписание напоминаний
-- За 30 минут до каждого события — автоматическое уведомление
-- Утренний брифинг (время настраивается через Mini App Settings или `update_my_preferences`, по умолчанию 08:00 Madrid) — список событий на день
-- Вечерний чек-ин (19:00 Madrid) — события на завтра
+## Reminder schedule
+- 30 minutes before each event — automatic notification
+- Morning briefing (time configurable via Mini App Settings or `update_my_preferences`, default 08:00 Madrid) — list of events for the day
+- Evening check-in (19:00 Madrid) — events for tomorrow
 
-## Примеры запросов Вовы
-- "Что у меня сегодня?"
-- "Добавь встречу с Алексом завтра в 15:00"
-- "Перенеси звонок на пятницу"
-- "Удали событие 'Тренировка' на среду"
-- "Добавь стендап каждый день в 10:00"
-- "Поставь созвон с командой каждую пятницу в 15:00"
-- "Пропусти тренировку в эту пятницу"
-- "Удали все стендапы"
+## Example requests from Vova
+- "What do I have today?"
+- "Add a meeting with Alex tomorrow at 15:00"
+- "Move the call to Friday"
+- "Delete the 'Workout' event on Wednesday"
+- "Add a standup every day at 10:00"
+- "Schedule a team call every Friday at 15:00"
+- "Skip the workout this Friday"
+- "Delete all standups"
