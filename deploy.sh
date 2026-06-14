@@ -372,7 +372,7 @@ fs.writeFileSync(out, JSON.stringify({
   installed: {
     client_id: id,
     client_secret: secret,
-    redirect_uris: ["urn:ietf:wg:oauth:2.0:oob", "http://localhost"]
+    redirect_uris: ["http://localhost"]
   }
 }, null, 2) + '\n');
 EOF
