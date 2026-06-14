@@ -28,6 +28,32 @@ skip() { printf '  \033[0;33m[skip]\033[0m %s\n' "$*"; }
 step() { printf '\n\033[1m── %s\033[0m\n' "$*"; }
 die()  { red "Error: $*"; exit 1; }
 
+rollback() {
+  local reason="${1:-unknown}"
+  echo
+  red "╔══════════════════════════════════════════════════╗"
+  red "║  Deployment failed — rolling back                ║"
+  red "╚══════════════════════════════════════════════════╝"
+  red "  Reason: $reason"
+  echo
+  systemctl stop    "$INSTANCE_NAME" 2>/dev/null || true
+  systemctl disable "$INSTANCE_NAME" 2>/dev/null || true
+  rm -f "/etc/systemd/system/$INSTANCE_NAME.service"
+  rm -f "/etc/sudoers.d/$INSTANCE_NAME-restart"
+  if [ -L "/etc/nginx/sites-enabled/$INSTANCE_NAME" ]; then
+    rm -f "/etc/nginx/sites-enabled/$INSTANCE_NAME"
+    rm -f "/etc/nginx/sites-available/$INSTANCE_NAME"
+    nginx -t -q 2>/dev/null && systemctl reload nginx 2>/dev/null || true
+  fi
+  systemctl daemon-reload
+  echo
+  yellow "  Instance directory preserved for debugging: $INSTANCE_DIR"
+  yellow "  Review logs: journalctl -u $INSTANCE_NAME -n 50 --no-pager"
+  echo
+  red "  Fix the issue, then re-run deploy."
+  exit 1
+}
+
 require_root() {
   [ "$EUID" -eq 0 ] || die "Run with sudo: sudo bash $0"
 }
@@ -392,7 +418,7 @@ ok "Service enabled"
 step "Starting $INSTANCE_NAME"
 systemctl start "$INSTANCE_NAME"
 
-# Wait for systemd to settle (up to 20 s)
+# ① Wait for systemd active/failed (up to 20 s)
 TIMEOUT=20
 ELAPSED=0
 STATUS=""
@@ -401,19 +427,22 @@ while [ $ELAPSED -lt $TIMEOUT ]; do
   ELAPSED=$((ELAPSED + 1))
   STATUS=$(systemctl is-active "$INSTANCE_NAME" 2>/dev/null || true)
   if [ "$STATUS" = "failed" ]; then
-    red "Service failed to start. Last logs:"
-    journalctl -u "$INSTANCE_NAME" -n 30 --no-pager 2>/dev/null || true
-    die "Fix the issue and run: sudo systemctl start $INSTANCE_NAME"
+    red "Service entered 'failed' state. Last logs:"
+    journalctl -u "$INSTANCE_NAME" -n 30 --no-pager 2>/dev/null | sed 's/^/    /' || true
+    rollback "service entered 'failed' state on startup"
   fi
   [ "$STATUS" = "active" ] && break
 done
 
 if [ "$STATUS" != "active" ]; then
-  yellow "Service did not reach 'active' in ${TIMEOUT}s — check logs:"
-  yellow "  journalctl -u $INSTANCE_NAME -f"
+  red "Service did not reach 'active' after ${TIMEOUT}s (status: ${STATUS:-unknown}). Last logs:"
+  journalctl -u "$INSTANCE_NAME" -n 30 --no-pager 2>/dev/null | sed 's/^/    /' || true
+  rollback "service stuck in '${STATUS:-unknown}' after ${TIMEOUT}s (restart loop?)"
 fi
 
-# Check bot reached "Ready and listening" in logs (up to 15 more seconds)
+ok "Service is active"
+
+# ② Wait for bot to log "Ready and listening" (up to 15 more s)
 BOT_READY=false
 for i in $(seq 1 15); do
   if journalctl -u "$INSTANCE_NAME" -n 50 --no-pager 2>/dev/null \
@@ -424,18 +453,22 @@ for i in $(seq 1 15); do
   sleep 1
 done
 
+NRESTARTS=$(systemctl show "$INSTANCE_NAME" --property=NRestarts --value 2>/dev/null || echo 0)
+
 if [ "$BOT_READY" = true ]; then
   ok "Bot is ready and listening"
+  [ "${NRESTARTS:-0}" -gt 0 ] && yellow "⚠  Service restarted ${NRESTARTS} time(s) before stabilising"
 else
-  yellow "Bot did not log 'Ready and listening' — may still be starting or crashed"
-  journalctl -u "$INSTANCE_NAME" -n 20 --no-pager 2>/dev/null | sed 's/^/    /' || true
+  red "Bot did not log 'Ready and listening' after 35s (NRestarts=${NRESTARTS:-0}). Last logs:"
+  journalctl -u "$INSTANCE_NAME" -n 30 --no-pager 2>/dev/null | sed 's/^/    /' || true
+  rollback "bot never reached ready state after 35s (NRestarts=${NRESTARTS:-0})"
 fi
 
-# Check for fatal errors in logs
+# ③ Warn on fatal config errors (API key / auth issues)
 FATAL=$(journalctl -u "$INSTANCE_NAME" -n 50 --no-pager 2>/dev/null \
-  | grep -iE 'error.*api.?key|invalid.*token|ECONNREFUSED|UnhandledPromise' | head -3 || true)
+  | grep -iE 'error.*api.?key|invalid.*token|authentication.*failed|401 unauthorized' | head -3 || true)
 if [ -n "$FATAL" ]; then
-  yellow "⚠  Possible errors detected in logs:"
+  yellow "⚠  Possible auth errors in logs (check API keys):"
   echo "$FATAL" | sed 's/^/    /'
 fi
 
