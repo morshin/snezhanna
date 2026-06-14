@@ -1742,10 +1742,10 @@
       if (footer) footer.textContent = `v${data.current}`;
       if (data.updateAvailable && data.latest) {
         if (updateBtn) updateBtn.disabled = false;
-        if (versionBadge) versionBadge.textContent = `→ v${data.latest}`;
+        if (versionBadge) versionBadge.innerHTML = `<a href="https://github.com/morshin/snezhanna/releases/tag/v${data.latest}" target="_blank" title="Открыть описание нового релиза на GitHub" style="color:var(--tg-theme-link-color,#2481cc);text-decoration:none">→ v${data.latest}</a>`;
       } else {
         if (updateBtn) updateBtn.disabled = true;
-        if (versionBadge) versionBadge.textContent = data.latest ? 'актуальная' : '';
+        if (versionBadge) versionBadge.innerHTML = data.latest ? `<a href="#" onclick="loadVersionInfo();return false" title="Проверить наличие обновлений" style="color:var(--tg-theme-hint-color,#999);text-decoration:none">актуальная</a>` : '';
       }
     } catch {
       if (footer) footer.textContent = '';
