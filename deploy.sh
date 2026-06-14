@@ -340,6 +340,9 @@ if [ ! -f "$INSTANCE_DIR/.env" ]; then
 fi
 
 ENV_FILE="$INSTANCE_DIR/.env"
+# Strip inline comments from variable lines (KEY=value # comment → KEY=value)
+# so dotenv doesn't read comment text as the variable value.
+sed -i '/^[^#]*=/ s/[[:space:]]*#.*$//' "$ENV_FILE"
 set_env() {
   local key="$1" val="$2"
   # Escape special characters for sed replacement
