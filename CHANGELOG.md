@@ -9,6 +9,16 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), [Semantic Vers
 <!-- Format: - <One-sentence description> (#<issue or branch ref>) -->
 <!-- Categories: Added | Changed | Fixed | Security | Removed -->
 
+## [1.3.11] — 2026-06-14
+
+### Added
+
+- **Mini App:** version badge next to «Обновить» button is now a clickable link — opens GitHub release notes when an update is available, or re-checks for updates when already up to date; hover tooltip on both states
+
+### Fixed
+
+- **Onboarding:** removed one-time migration that auto-completed the wizard for instances with existing state — new deployments with prior test state now correctly go through onboarding
+
 ## [1.3.10] — 2026-06-14
 
 ### Added
