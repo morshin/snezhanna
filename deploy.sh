@@ -9,6 +9,9 @@
 #   sudo bash /opt/alice/deploy.sh
 #
 # For adding a second instance on the SAME VPS see scripts/deploy-instance.sh
+#
+# Flags:
+#   --dev   Clone latest commit from master instead of the latest release tag
 
 set -euo pipefail
 trap 'echo ""; red "Deploy failed at line $LINENO (exit code: $?)"; exit 1' ERR
@@ -52,6 +55,13 @@ check_node() {
   fi
 }
 
+# ── Flags ─────────────────────────────────────────────────────────────────────
+
+DEV_MODE=false
+for arg in "$@"; do
+  [[ "$arg" == "--dev" ]] && DEV_MODE=true
+done
+
 # ── Root check ────────────────────────────────────────────────────────────────
 
 require_root
@@ -92,7 +102,12 @@ ok "node v$(node_major)"
 # ── Clone (bootstrap mode only) ───────────────────────────────────────────────
 
 if [ "$IN_REPO" = false ]; then
-  step "Clone latest release"
+  if [ "$DEV_MODE" = true ]; then
+    step "Clone master branch (dev mode)"
+    yellow "  ⚠  --dev flag: cloning latest commit from master, not a release tag"
+  else
+    step "Clone latest release"
+  fi
 
   DEFAULT_REPO="https://github.com/morshin/snezhanna"
   read -rp "  Repository URL [$DEFAULT_REPO]: " REPO_URL
@@ -113,16 +128,22 @@ if [ "$IN_REPO" = false ]; then
     ok "Removed $INSTANCE_DIR"
   fi
 
-  echo "  Fetching latest release tag..."
-  REPO_SLUG=$(echo "$REPO_URL" | sed 's|https://github.com/||')
-  LATEST_TAG=$(curl -fsSL "https://api.github.com/repos/$REPO_SLUG/releases/latest" 2>/dev/null \
-    | grep '"tag_name"' | head -1 | cut -d'"' -f4 || true)
-  [ -z "$LATEST_TAG" ] && die "Could not determine latest release tag from $REPO_URL"
-  echo "  Latest release: $LATEST_TAG"
-
-  git clone --depth 1 --branch "$LATEST_TAG" "$REPO_URL" "$INSTANCE_DIR" -q 2>/dev/null \
-    || die "Failed to clone $LATEST_TAG from $REPO_URL"
-  ok "Cloned $LATEST_TAG → $INSTANCE_DIR"
+  if [ "$DEV_MODE" = true ]; then
+    LATEST_TAG="master"
+    git clone --depth 1 "$REPO_URL" "$INSTANCE_DIR" -q 2>/dev/null \
+      || die "Failed to clone master from $REPO_URL"
+    ok "Cloned master → $INSTANCE_DIR"
+  else
+    echo "  Fetching latest release tag..."
+    REPO_SLUG=$(echo "$REPO_URL" | sed 's|https://github.com/||')
+    LATEST_TAG=$(curl -fsSL "https://api.github.com/repos/$REPO_SLUG/releases/latest" 2>/dev/null \
+      | grep '"tag_name"' | head -1 | cut -d'"' -f4 || true)
+    [ -z "$LATEST_TAG" ] && die "Could not determine latest release tag from $REPO_URL"
+    echo "  Latest release: $LATEST_TAG"
+    git clone --depth 1 --branch "$LATEST_TAG" "$REPO_URL" "$INSTANCE_DIR" -q 2>/dev/null \
+      || die "Failed to clone $LATEST_TAG from $REPO_URL"
+    ok "Cloned $LATEST_TAG → $INSTANCE_DIR"
+  fi
 
   cd "$INSTANCE_DIR"
   SCRIPT_DIR="$INSTANCE_DIR"
