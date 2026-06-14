@@ -9,11 +9,14 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), [Semantic Vers
 <!-- Format: - <One-sentence description> (#<issue or branch ref>) -->
 <!-- Categories: Added | Changed | Fixed | Security | Removed -->
 
+## [1.3.9] — 2026-06-14
+
 ### Added
 
 - **Skill Context:** новый модуль `lib/skill-context.js` — хранение поведенческих инструкций по доменам (email_poll, morning_briefing, evening_checkin, calendar_reminder, global) в SQLite `user_settings`.
 - **Tools:** `get_skill_context` — показывает текущие инструкции по скиллам; `update_skill_context` — сохраняет инструкцию для домена через разговор с ботом.
 - **Layer 3 (skills block):** `buildSkillsBlock` теперь принимает `skillContexts` и отображает `⚙️`-инструкции под каждым скиллом + мета-инструкция самопроверки («проверь инструмент и ⚙️-ограничения перед нестандартным запросом»).
+- **Auto-decomposition:** `update_my_preferences` при изменении `character_notes` автоматически декомпозирует текст через Haiku и раскладывает правила в `skill_context:*`.
 
 ## [1.3.8] — 2026-06-13
 
