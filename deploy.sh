@@ -420,6 +420,8 @@ ok "Service enabled"
 # ── Start + wait for ready ────────────────────────────────────────────────────
 
 step "Starting $INSTANCE_NAME"
+# Record timestamp before start so journalctl --since filters to this run only
+START_TS=$(date -u +"%Y-%m-%d %H:%M:%S")
 systemctl start "$INSTANCE_NAME"
 
 # ① Wait for systemd active/failed (up to 20 s)
@@ -432,7 +434,7 @@ while [ $ELAPSED -lt $TIMEOUT ]; do
   STATUS=$(systemctl is-active "$INSTANCE_NAME" 2>/dev/null || true)
   if [ "$STATUS" = "failed" ]; then
     red "Service entered 'failed' state. Last logs:"
-    journalctl -u "$INSTANCE_NAME" -n 30 --no-pager 2>/dev/null | sed 's/^/    /' || true
+    journalctl -u "$INSTANCE_NAME" --since "$START_TS" --no-pager 2>/dev/null | sed 's/^/    /' || true
     rollback "service entered 'failed' state on startup"
   fi
   [ "$STATUS" = "active" ] && break
@@ -440,16 +442,17 @@ done
 
 if [ "$STATUS" != "active" ]; then
   red "Service did not reach 'active' after ${TIMEOUT}s (status: ${STATUS:-unknown}). Last logs:"
-  journalctl -u "$INSTANCE_NAME" -n 30 --no-pager 2>/dev/null | sed 's/^/    /' || true
+  journalctl -u "$INSTANCE_NAME" --since "$START_TS" --no-pager 2>/dev/null | sed 's/^/    /' || true
   rollback "service stuck in '${STATUS:-unknown}' after ${TIMEOUT}s (restart loop?)"
 fi
 
 ok "Service is active"
 
 # ② Wait for bot to log "Ready and listening" (up to 15 more s)
+# Use --since to only look at logs from this deployment, not previous runs.
 BOT_READY=false
 for i in $(seq 1 15); do
-  if journalctl -u "$INSTANCE_NAME" -n 50 --no-pager 2>/dev/null \
+  if journalctl -u "$INSTANCE_NAME" --since "$START_TS" --no-pager 2>/dev/null \
        | grep -q 'Ready and listening'; then
     BOT_READY=true
     break
@@ -464,12 +467,12 @@ if [ "$BOT_READY" = true ]; then
   [ "${NRESTARTS:-0}" -gt 0 ] && yellow "⚠  Service restarted ${NRESTARTS} time(s) before stabilising"
 else
   red "Bot did not log 'Ready and listening' after 35s (NRestarts=${NRESTARTS:-0}). Last logs:"
-  journalctl -u "$INSTANCE_NAME" -n 30 --no-pager 2>/dev/null | sed 's/^/    /' || true
+  journalctl -u "$INSTANCE_NAME" --since "$START_TS" --no-pager 2>/dev/null | sed 's/^/    /' || true
   rollback "bot never reached ready state after 35s (NRestarts=${NRESTARTS:-0})"
 fi
 
 # ③ Warn on fatal config errors (API key / auth issues)
-FATAL=$(journalctl -u "$INSTANCE_NAME" -n 50 --no-pager 2>/dev/null \
+FATAL=$(journalctl -u "$INSTANCE_NAME" --since "$START_TS" --no-pager 2>/dev/null \
   | grep -iE 'error.*api.?key|invalid.*token|authentication.*failed|401 unauthorized' | head -3 || true)
 if [ -n "$FATAL" ]; then
   yellow "⚠  Possible auth errors in logs (check API keys):"
