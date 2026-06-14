@@ -392,25 +392,58 @@ ok "Service enabled"
 step "Starting $INSTANCE_NAME"
 systemctl start "$INSTANCE_NAME"
 
-TIMEOUT=15
+# Wait for systemd to settle (up to 20 s)
+TIMEOUT=20
 ELAPSED=0
+STATUS=""
 while [ $ELAPSED -lt $TIMEOUT ]; do
   sleep 1
   ELAPSED=$((ELAPSED + 1))
   STATUS=$(systemctl is-active "$INSTANCE_NAME" 2>/dev/null || true)
-  if [ "$STATUS" = "active" ]; then
-    ok "Service is running"
-    break
-  elif [ "$STATUS" = "failed" ]; then
+  if [ "$STATUS" = "failed" ]; then
     red "Service failed to start. Last logs:"
-    journalctl -u "$INSTANCE_NAME" -n 20 --no-pager 2>/dev/null || true
+    journalctl -u "$INSTANCE_NAME" -n 30 --no-pager 2>/dev/null || true
     die "Fix the issue and run: sudo systemctl start $INSTANCE_NAME"
   fi
+  [ "$STATUS" = "active" ] && break
 done
 
 if [ "$STATUS" != "active" ]; then
-  yellow "Service is still starting up. Check logs:"
+  yellow "Service did not reach 'active' in ${TIMEOUT}s — check logs:"
   yellow "  journalctl -u $INSTANCE_NAME -f"
+fi
+
+# Check bot reached "Ready and listening" in logs (up to 15 more seconds)
+BOT_READY=false
+for i in $(seq 1 15); do
+  if journalctl -u "$INSTANCE_NAME" -n 50 --no-pager 2>/dev/null \
+       | grep -q 'Ready and listening'; then
+    BOT_READY=true
+    break
+  fi
+  sleep 1
+done
+
+if [ "$BOT_READY" = true ]; then
+  ok "Bot is ready and listening"
+else
+  yellow "Bot did not log 'Ready and listening' — may still be starting or crashed"
+  journalctl -u "$INSTANCE_NAME" -n 20 --no-pager 2>/dev/null | sed 's/^/    /' || true
+fi
+
+# Check for fatal errors in logs
+FATAL=$(journalctl -u "$INSTANCE_NAME" -n 50 --no-pager 2>/dev/null \
+  | grep -iE 'error.*api.?key|invalid.*token|ECONNREFUSED|UnhandledPromise' | head -3 || true)
+if [ -n "$FATAL" ]; then
+  yellow "⚠  Possible errors detected in logs:"
+  echo "$FATAL" | sed 's/^/    /'
+fi
+
+# Check Mini App port is reachable
+if curl -sf --max-time 5 "http://localhost:$PORT/" -o /dev/null 2>/dev/null; then
+  ok "Mini App responding on localhost:$PORT"
+else
+  yellow "Mini App not yet reachable on localhost:$PORT (may need a moment)"
 fi
 
 echo
@@ -461,6 +494,13 @@ EOF
        --non-interactive --agree-tos -m "$LE_EMAIL" -q 2>/dev/null; then
     ok "TLS certificate issued — auto-renewal via certbot.timer"
     MINI_APP_URL="https://$DOMAIN"
+    # Verify the full HTTPS chain is reachable
+    if curl -sf --max-time 10 "https://$DOMAIN/" -o /dev/null 2>/dev/null; then
+      ok "Mini App reachable at https://$DOMAIN/"
+    else
+      yellow "https://$DOMAIN/ not reachable yet (DNS propagation or nginx issue?)"
+      yellow "Check:  curl -v https://$DOMAIN/"
+    fi
   else
     yellow "certbot failed — DNS may not point here yet, or port 80 is blocked."
     yellow "Run manually later:  certbot --nginx -d $DOMAIN -m $LE_EMAIL --agree-tos"
