@@ -404,11 +404,12 @@ sed "s|INSTANCE_NAME|$INSTANCE_NAME|g; \
   > "/etc/systemd/system/$INSTANCE_NAME.service"
 ok "/etc/systemd/system/$INSTANCE_NAME.service created"
 
-# sudoers: restart + start for Mini App
-printf '%s ALL=(ALL) NOPASSWD: /bin/systemctl restart %s\n' "$INSTANCE_NAME" "$INSTANCE_NAME" \
-  > "/etc/sudoers.d/$INSTANCE_NAME-restart"
-printf '%s ALL=(ALL) NOPASSWD: /bin/systemctl start %s\n'   "$INSTANCE_NAME" "$INSTANCE_NAME" \
-  >> "/etc/sudoers.d/$INSTANCE_NAME-restart"
+# sudoers: restart + start for Mini App and update.sh
+SYSTEMCTL_PATH="$(command -v systemctl)"
+{
+  printf '%s ALL=(ALL) NOPASSWD: %s restart %s\n' "$INSTANCE_NAME" "$SYSTEMCTL_PATH" "$INSTANCE_NAME"
+  printf '%s ALL=(ALL) NOPASSWD: %s start %s\n'   "$INSTANCE_NAME" "$SYSTEMCTL_PATH" "$INSTANCE_NAME"
+} > "/etc/sudoers.d/$INSTANCE_NAME-restart"
 chmod 440 "/etc/sudoers.d/$INSTANCE_NAME-restart"
 ok "sudoers rule created"
 
