@@ -9,6 +9,26 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), [Semantic Vers
 <!-- Format: - <One-sentence description> (#<issue or branch ref>) -->
 <!-- Categories: Added | Changed | Fixed | Security | Removed -->
 
+## [1.3.10] — 2026-06-14
+
+### Added
+
+- **deploy.sh:** `--dev` flag to deploy from master instead of latest release tag
+
+### Fixed
+
+- **deploy.sh:** rollback on failed bot startup — directory preserved for debugging, reason logged
+- **deploy.sh:** verification uses `--since` timestamp so old journal entries don't interfere with "Ready and listening" check
+- **deploy.sh:** strip inline comments from `.env` after copying from `.env.example` — dotenv v16 was reading comment text as variable values (e.g. `GOOGLE_CREDENTIALS_FILE=# path to...`)
+- **deploy.sh:** replace deprecated `urn:ietf:wg:oauth:2.0:oob` redirect URI with `http://localhost` — OOB flow blocked by Google for published OAuth apps
+- **api.js, update.sh:** derive instance name from `__dirname` instead of hardcoding `snezhanna` — systemctl, journalctl, and update script path now work correctly for any instance name
+- **update.sh:** detect whether running as root or as instance user (Mini App trigger) and skip `sudo -u` accordingly; use `sudo systemctl restart` in both cases
+
+### Changed
+
+- **docs/, skills/:** translated to English for token efficiency; identity and runtime prompts remain in Russian
+- **Identity, prompts:** replaced all hardcoded user name references with `{{USER_NAME}}` / `{{ASSISTANT_NAME}}` placeholders; `workload.js` now resolves placeholders in scoring and overload prompts
+
 ## [1.3.9] — 2026-06-14
 
 ### Added
