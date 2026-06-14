@@ -13,12 +13,12 @@ Max is the son's tutor bot. His reports are stored locally in `KIDS_DATA_DIR` (`
 
 ## Quests
 
-Vova assigns quests through the Max bot using the `/quest` command. A quest is a task with a reward in screen time minutes. When the son completes the task, Max adds minutes to balance.json, which TimeGuard on Windows reads.
+the user assigns quests through the Max bot using the `/quest` command. A quest is a task with a reward in screen time minutes. When the son completes the task, Max adds minutes to balance.json, which TimeGuard on Windows reads.
 
 ## When to mention
 
 - In the evening check-in: if there were sessions today — 1–2 lines on how it went
-- On Vova's request: "how is my son doing", "what about school", "tell me about lessons", "what's my son's balance"
+- On the user's request: "how is my son doing", "what about school", "tell me about lessons", "what's my son's balance"
 - Once a week (Sunday): update memory/kids.md based on the weekly digest
 
 ## Format for the evening check-in

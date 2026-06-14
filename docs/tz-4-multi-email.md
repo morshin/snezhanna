@@ -256,8 +256,8 @@ async function runEmailPoll() {
       // Hard alerts (bypass silence) — reply_needed messages
       const replyNeeded = messages.filter(m => m.category === 'reply_needed');
       for (const m of replyNeeded) {
-        await sendToVova(
-          `📬 Vova, reply needed: *${m.subject}* — from ${m.from} [${account.label}]`,
+        await sendToUser(
+          `📬 the user, reply needed: *${m.subject}* — from ${m.from} [${account.label}]`,
           { parse_mode: 'Markdown' }
         );
       }
@@ -270,7 +270,7 @@ async function runEmailPoll() {
 
       // Build digest per account
       const digest = buildEmailDigest(account, regular);
-      if (digest) await sendToVova(digest);
+      if (digest) await sendToUser(digest);
     }
   } catch (e) {
     console.error('[Schedule] email_poll error:', e.message);

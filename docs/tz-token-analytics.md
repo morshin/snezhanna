@@ -114,7 +114,7 @@ Add to `lib/tools.js` (Snezhanna only, not Max).
 {
   name: 'get_token_stats',
   description: 'Returns Anthropic API token usage statistics. ' +
-    'Use when Vova asks about API costs, token consumption, usage patterns, or optimization hints. ' +
+    'Use when the user asks about API costs, token consumption, usage patterns, or optimization hints. ' +
     'period: "current_month" | "last_month" | "last_7_days". Default: "current_month".',
   input_schema: {
     type: 'object',
@@ -189,7 +189,7 @@ what insights to provide:
 
 Tool: get_token_stats(period?)
 
-Use when Vova asks about API costs, usage, or token consumption.
+Use when the user asks about API costs, usage, or token consumption.
 After fetching stats, always mention:
 - cache hit rate (target >60%)
 - most expensive request types

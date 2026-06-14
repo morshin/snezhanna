@@ -79,7 +79,7 @@ If `appState.briefingPending === true` from yesterday:
 Call `hasSomethingToSay()`. If it returns `false`: skip, no message sent.
 
 ### Step 5 — Send the prompt question
-Send to Vova:
+Send to the user:
 ```
 Доброе утро! Как дела? Готов к брифингу? 🌅
 ```
@@ -230,14 +230,14 @@ Hard alerts (calendar reminders, deadline alerts, email reply alerts) are **not*
 
 In `IDENTITY.md` (or the system prompt), add to the tools/behavior section:
 
-When Vova says something like "уйди на неделю", "не беспокой меня 3 дня", "тихий режим", "каникулы" — Snezhanna should call a new tool `set_quiet_mode` with `{ days: N }`.
+When the user says something like "уйди на неделю", "не беспокой меня 3 дня", "тихий режим", "каникулы" — Snezhanna should call a new tool `set_quiet_mode` with `{ days: N }`.
 
 Add to `lib/tools.js`:
 
 ```js
 {
   name: 'set_quiet_mode',
-  description: 'Set or cancel vacation/quiet mode. Use when Vova asks to be left alone for a period.',
+  description: 'Set or cancel vacation/quiet mode. Use when the user asks to be left alone for a period.',
   input_schema: {
     type: 'object',
     properties: {
@@ -281,7 +281,7 @@ case 'set_quiet_mode': {
 | `lib/briefing.js` | Add `hasSomethingToSay()`, `computeSilenceLevel()` |
 | `lib/tools.js` | Add `set_quiet_mode` tool definition and handler |
 | `index.js` | Morning cron rewrite, message handler additions (lastUserMessageAt, briefing reply, comeback digest, /quiet command), evening cron guard, deadline alert in 10-min cron, email hard-alert in 30-min cron |
-| `IDENTITY.md` | Add note: use `set_quiet_mode` when Vova asks for silence/vacation |
+| `IDENTITY.md` | Add note: use `set_quiet_mode` when the user asks for silence/vacation |
 
 No new files required.
 

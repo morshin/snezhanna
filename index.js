@@ -380,7 +380,7 @@ async function runEmailPoll() {
       // Hard-alert emails requiring reply — bypass silence/vacation
       for (const m of actionable) {
         if (briefing.looksLikeReplyRequest(m)) {
-          await sendToVova(`📬 Похоже нужен ответ: *${m.subject || '(без темы)'}* — от ${m.from || '?'} (${account.label})`, { parse_mode: 'Markdown' }, { urgent: true });
+          await sendToUser(`📬 Похоже нужен ответ: *${m.subject || '(без темы)'}* — от ${m.from || '?'} (${account.label})`, { parse_mode: 'Markdown' }, { urgent: true });
         }
       }
 
@@ -398,7 +398,7 @@ async function runEmailPoll() {
 
       const prompt = `Пришли новые письма. Вот дайджест:\n\n${digestText}\n\nПроанализируй и скажи ${userName} что важного пришло и что нужно сделать. Кратко.`;
       const reply = await askClaudeOneShot(prompt);
-      await sendToVova(reply);
+      await sendToUser(reply);
     }
   } catch (e) {
     console.error('[Schedule] email_poll error:', e.message);
@@ -432,7 +432,7 @@ function isWithinWorkHours() {
 }
 
 // urgent=true: send silently outside work hours instead of skipping
-async function sendToVova(text, options = {}, { urgent = false } = {}) {
+async function sendToUser(text, options = {}, { urgent = false } = {}) {
   if (!appState.chatId) {
     console.log('[Snezhanna] chatId unknown, queuing startup message');
     return false;
@@ -463,9 +463,9 @@ bot.on('message', async (msg) => {
   // Monitored chats — collect only, NEVER respond
   if (chatMonitor.isMonitored(msg.chat.id)) return;
 
-  // Hard block: never respond outside Vova's personal chat
+  // Hard block: never respond outside owner's chat
   if (appState.chatId && String(msg.chat.id) !== String(appState.chatId)) {
-    console.warn(`[SECURITY] Blocked response to chat ${msg.chat.id} — not Vova's chat`);
+    console.warn(`[SECURITY] Blocked response to chat ${msg.chat.id} — not owner's chat`);
     return;
   }
 
@@ -1018,7 +1018,7 @@ function parseDirectSavePath(caption, filename) {
 // ── Helpers ───────────────────────────────────────────────────────────────
 
 async function sendLongMessage(chatId, text) {
-  // Hard block: never write to any chat except Vova's
+  // Hard block: never write to any chat except owner's
   if (appState.chatId && String(chatId) !== String(appState.chatId)) {
     console.error(`[SECURITY] sendLongMessage blocked for chat ${chatId}`);
     return null;
@@ -1271,7 +1271,7 @@ async function runMorningBriefing() {
     }
 
     // Step 5 — send the prompt question
-    await sendToVova('Доброе утро! Как дела? Готов к брифингу? 🌅', {}, { urgent: true });
+    await sendToUser('Доброе утро! Как дела? Готов к брифингу? 🌅', {}, { urgent: true });
     appState.briefingPending = true;
     appState.briefingPendingAt = new Date().toISOString();
     state.save(appState);
@@ -1331,7 +1331,7 @@ ${eventsText}
 ${diskSection}
 ${chatSection}`;
       const reply = await askClaudeOneShot(prompt);
-      await sendToVova(reply);
+      await sendToUser(reply);
       diskLog.clear();
       chatMonitor.clear();
 
@@ -1359,7 +1359,7 @@ ${chatSection}`;
     console.log('[Schedule] workload_checkin fired');
     try {
       const checkinMsg = `${userName}, понедельничный чек-ин 📋\n\nОтветь коротко (можно одним сообщением):\n\n1. Как ощущается эта неделя в целом — потянул или нет?\n2. Было ли время с семьёй / детьми?\n3. Как со сном и энергией?\n4. Было ли что-то личное — хобби, отдых, своё время?`;
-      await sendToVova(checkinMsg);
+      await sendToUser(checkinMsg);
 
       appState.awaitingWorkloadCheckin = { active: true, timestamp: Date.now() };
       state.save(appState);
@@ -1391,7 +1391,7 @@ ${chatSection}`;
           };
           await workload.saveHistory(history, entry);
           const report = workload.buildWeeklyReport(scoring, history);
-          await sendToVova(report);
+          await sendToUser(report);
         } catch (e) {
           console.error('[Workload] Timeout scoring error:', e.message);
         }
@@ -1434,7 +1434,7 @@ ${chatSection}`;
       const prompt = `Составь воскресный еженедельный дайджест для ${userName}.
 Включи: краткий обзор прошедшей недели, что важного на следующей неделе, бюрократические дедлайны.${fitnessBlock}`;
       const reply = await askClaudeOneShot(prompt);
-      await sendToVova(reply);
+      await sendToUser(reply);
       console.log('[Schedule] weekly_digest done');
     } catch (e) {
       console.error('[Schedule] weekly_digest error:', e.message);
@@ -1460,7 +1460,7 @@ ${chatSection}`;
             const timeStr = new Date(event.start.dateTime).toLocaleTimeString('ru-RU', {
               hour: '2-digit', minute: '2-digit', timeZone: config.timezone
             });
-            await sendToVova(`📅 ${userName}, через 30 минут: *${event.summary}* в ${timeStr}`, { parse_mode: 'Markdown' }, { urgent: true });
+            await sendToUser(`📅 ${userName}, через 30 минут: *${event.summary}* в ${timeStr}`, { parse_mode: 'Markdown' }, { urgent: true });
           }
         }
       } catch (e) {
@@ -1476,7 +1476,7 @@ ${chatSection}`;
       );
       for (const t of dueTodayTasks) {
         alertedDeadlines.add(t.id);
-        await sendToVova(`📋 ${userName}, сегодня дедлайн: *${t.title}*`, { parse_mode: 'Markdown' }, { urgent: true });
+        await sendToUser(`📋 ${userName}, сегодня дедлайн: *${t.title}*`, { parse_mode: 'Markdown' }, { urgent: true });
       }
     } catch (e) {
       console.error('[Schedule] deadline_alert error:', e.message);
@@ -1538,7 +1538,7 @@ async function main() {
 
   if (appState.chatId) {
     try {
-      await sendToVova(`${userName}, я онлайн! 🦞`, {}, { urgent: true });
+      await sendToUser(`${userName}, я онлайн! 🦞`, {}, { urgent: true });
       console.log('[Snezhanna] Startup message sent to chatId:', appState.chatId);
     } catch (e) {
       console.error('[Snezhanna] Failed to send startup message:', e.message);
@@ -1548,7 +1548,7 @@ async function main() {
       setTimeout(() => offerGoogleAuth(appState.chatId), 2000);
     }
   } else {
-    console.log('[Snezhanna] No chatId saved — will send startup message on first message from Vova');
+    console.log('[Snezhanna] No chatId saved — will send startup message on first message from owner');
     pendingStartup = true;
   }
 

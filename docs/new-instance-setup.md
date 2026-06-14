@@ -203,7 +203,7 @@ sudo chmod 440 /etc/sudoers.d/ira-restart
 The bot will send an authorization link on first startup (or send `/status`):
 
 1. Open the link from the bot
-2. Sign in with the **user's** Google account (not Vova's!)
+2. Sign in with the **user's** Google account (not the user's!)
 3. Grant access: Calendar + Gmail + Drive
 4. Copy the code from the address bar (`code=...`)
 5. Send to the bot: `/auth <code>`

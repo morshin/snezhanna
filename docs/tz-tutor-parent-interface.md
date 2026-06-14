@@ -22,10 +22,10 @@
 Add to `/opt/snezhanna/.env`:
 
 ```
-PARENT_CHAT_ID=          # Vova's numeric Telegram ID (same value as TELEGRAM_ALLOWED_USER_ID in Snezhanna)
+PARENT_CHAT_ID=          # the user's numeric Telegram ID (same value as TELEGRAM_ALLOWED_USER_ID in Snezhanna)
 ```
 
-`PARENT_CHAT_ID` uses the **same** bot token as Max (`TUTOR_BOT_TOKEN`) — Vova gets notified via Max's bot, not Snezhanna.
+`PARENT_CHAT_ID` uses the **same** bot token as Max (`TUTOR_BOT_TOKEN`) — the user gets notified via Max's bot, not Snezhanna.
 
 ---
 
@@ -36,7 +36,7 @@ Two actor types in Max's bot:
 | Actor | Identified by | What they can do |
 |-------|--------------|-----------------|
 | Student (son) | `TUTOR_ALLOWED_USER_ID` | Chat, /done, /schedule, /homework, /reset, /status |
-| Parent (Vova) | `PARENT_CHAT_ID` | /report, /week, /homework, /assign, /quest, /quests |
+| Parent (the user) | `PARENT_CHAT_ID` | /report, /week, /homework, /assign, /quest, /quests |
 
 If `msg.from.id == PARENT_CHAT_ID` → route to parent handler, skip student flow entirely.  
 Parent messages are never forwarded to Claude's tutoring session — they go to a separate handler.
@@ -477,7 +477,7 @@ Restart: sudo systemctl restart tutor
 ## 13. Data flow summary
 
 ```
-Vova (when codes running low)
+the user (when codes running low)
   |
   |-- /gencodes 100
   |     Max scans all codes_*.md → builds known-codes Set
@@ -485,9 +485,9 @@ Vova (when codes running low)
   |     writes codes_28032026.md → /mnt/yadisk-agent/kids/
   |     sends prize_28032026.txt → Telegram (bot.sendDocument)
   |
-  Vova downloads file → imports into Time Boss Cloud (manual, 1 min)
+  the user downloads file → imports into Time Boss Cloud (manual, 1 min)
   |
-Vova                    Max (tutor bot)              Son
+the user                    Max (tutor bot)              Son
   |                           |                        |
   |-- /quest Inglés +30 --> quests.json                |
   |                           |                        |

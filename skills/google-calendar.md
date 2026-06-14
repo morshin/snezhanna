@@ -23,7 +23,7 @@ Working with Google Calendar via OAuth2. Reading, creating, modifying, and delet
 - "remind me about vitamins every day at 09:00" → `RRULE:FREQ=DAILY`
 - "mom's birthday April 12, every year" → `RRULE:FREQ=YEARLY`
 - "skip the workout on Friday" → deletes only that instance (`delete_mode: single`)
-- "delete all standups" → deletes the entire series (`delete_mode: all`), after confirming with Vova
+- "delete all standups" → deletes the entire series (`delete_mode: all`), after confirming with the user
 
 ## Authorization
 - OAuth2 via credentials.json (Desktop app)
@@ -36,7 +36,7 @@ Working with Google Calendar via OAuth2. Reading, creating, modifying, and delet
 - Morning briefing (time configurable via Mini App Settings or `update_my_preferences`, default 08:00 Madrid) — list of events for the day
 - Evening check-in (19:00 Madrid) — events for tomorrow
 
-## Example requests from Vova
+## Example requests from the user
 - "What do I have today?"
 - "Add a meeting with Alex tomorrow at 15:00"
 - "Move the call to Friday"

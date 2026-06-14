@@ -15,7 +15,7 @@ The project consists of **three independent processes**:
 | Process | File | Description |
 |---------|------|-------------|
 | **Snezhanna** | `index.js` | Main assistant bot |
-| **Max** | `tutor/index.js` | Tutor bot for Vova's son |
+| **Max** | `tutor/index.js` | Tutor bot for the user's son |
 | **Zhora** | `watchdog/zhora.js` | Watchdog monitoring both bots |
 
 ---
@@ -54,15 +54,15 @@ Host snezhanna
 ## Personality & Communication Style
 
 - **Name:** Snezhanna (she/her)
-- **Owner:** Vova (variations by context/mood: Володя, Вовик, Вов, Вовена, Влади)
-- **Language:** Russian always, unless Vova switches to another
+- **Owner:** the user (variations by context/mood: Володя, Вовик, Вов, Вовена, Влади)
+- **Language:** Russian always, unless the user switches to another
 - **Style:** warm, lively, with humor, informal. Not a robot — a smart assistant with character.
 - **Timezone:** Europe/Madrid
 
 Examples:
-- Morning: "Доброе утро, Вовик! Вот твой план на сегодня..."
-- Task done: "Готово, Вова 🎉"
-- Something wrong: "Вовик, тут небольшая проблема..."
+- Morning: "Доброе утро, {{USER_NAME}}! Вот твой план на сегодня..."
+- Task done: "Готово, {{USER_NAME}} 🎉"
+- Something wrong: "{{USER_NAME}}, тут небольшая проблема..."
 
 ---
 
@@ -275,7 +275,7 @@ STATE_FILE=                # path to state file (default: ./.nanobot/state.json)
 - Accept photos → download → base64 encode → send to Claude as vision message
 - Accept document/file attachments → parse (PDF, XLSX, DOCX) → forward content to Claude
 - Optionally respond with voice via TTS
-- Telegram checklist support — Vova can check off tasks directly in the app
+- Telegram checklist support — the user can check off tasks directly in the app
 - **Only one user allowed** (`TELEGRAM_ALLOWED_USER_ID`) — all others ignored
 
 ### 2. Google Calendar
@@ -292,7 +292,7 @@ STATE_FILE=                # path to state file (default: ./.nanobot/state.json)
 ### 3. Gmail
 
 - Dedicated email for Snezhanna (configured per instance)
-- Vova's work mail is auto-forwarded here
+- the user's work mail is auto-forwarded here
 - Read inbox (last N unread emails, metadata)
 - Read full email content by ID
 - Read attachments (PDF, XLSX, DOCX — up to 10 MB)
@@ -343,7 +343,7 @@ Requires Google OAuth with `drive` scope (in addition to `calendar` and `gmail.m
 - Eisenhower Matrix prioritization (urgent × important → Q1/Q2/Q3/Q4)
 - Per-project tasks (stored in `projects/{name}/tasks.json`) and global tasks (`tasks/tasks.json`)
 - Morning briefing includes top tasks sorted by quadrant
-- Evening check-in sends native Telegram checklist (Vova can check off tasks in-app)
+- Evening check-in sends native Telegram checklist (the user can check off tasks in-app)
 - See `docs/tz-task-tracking.md` for full spec
 
 ### 7. Mini App (Tasks + Calendar)
@@ -371,7 +371,7 @@ Requires Google OAuth with `drive` scope (in addition to `calendar` and `gmail.m
 - Monitored chats stored in SQLite `monitored_chats` table (migrated from `config/nanobot.json → chat_monitor.chats`)
 - Add/remove chats via Mini App Settings → Chats, or via Claude conversation
 - In-memory message store (cleared after evening check-in)
-- Messages available to Claude as context when Vova asks about them
+- Messages available to Claude as context when the user asks about them
 - Evening check-in includes summary of disk write operations (via `lib/disk-log.js`)
 
 ### 9. Web Search
@@ -476,7 +476,7 @@ Have a great day! 🚀
 ### Daily 19:00 — Evening check-in
 
 ```
-Vova, how was your day?
+the user, how was your day?
 Tomorrow you have:
 • [tomorrow's Calendar events]
 
@@ -646,7 +646,7 @@ Separate sysadmin service. Independent from Snezhanna. Uses its own Telegram bot
 
 - Snezhanna down → restart → report result
 - Tutor (Max) down → restart → report result
-- Disk > 85% → warn Vova
+- Disk > 85% → warn the user
 - Telegram API down → report when restored
 - All good → silent
 
@@ -686,7 +686,7 @@ Snezhanna ready ✅
 
 ## Max Tutor Bot
 
-Separate Telegram bot for Vova's son. See `docs/tutor-bot-tz.md` for full spec.
+Separate Telegram bot for the user's son. See `docs/tutor-bot-tz.md` for full spec.
 
 **Summary:**
 - Always responds in Spanish; understands Russian but redirects to Spanish
@@ -703,8 +703,8 @@ Separate Telegram bot for Vova's son. See `docs/tutor-bot-tz.md` for full spec.
 
 ## Google OAuth flow
 
-1. On startup (or on `/status`), if `token.json` is missing, Snezhanna sends Vova a Google auth URL
-2. Vova visits the URL, copies the code, sends `/auth <code>` to the bot
+1. On startup (or on `/status`), if `token.json` is missing, Snezhanna sends the user a Google auth URL
+2. the user visits the URL, copies the code, sends `/auth <code>` to the bot
 3. `lib/google.js::saveToken()` exchanges the code and writes `token.json`
 4. Scopes: `calendar` (read/write) and `gmail.modify`
 
@@ -743,7 +743,7 @@ Dynamic preferences edited via Mini App or Claude conversation (`update_my_prefe
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `preferred_name` | `Вовик` | How Snezhanna addresses Vova |
+| `preferred_name` | `Вовик` | How Snezhanna addresses the user |
 | `formality` | `informal` | `formal` or `informal` |
 | `response_style` | `concise` | `concise` or `detailed` |
 | `briefing_time` | `08:00` | Morning briefing HH:MM; changes reschedule the cron job live |

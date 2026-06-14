@@ -4,7 +4,7 @@ Weekly life-balance assessment across four domains: work, family, health, person
 
 ## How it works
 
-- **Monday 09:00** — Snezhanna sends a 4-question check-in. If Vova replies within 30 min, his answers are factored into scoring. Otherwise, scoring runs on automated data only.
+- **Monday 09:00** — Snezhanna sends a 4-question check-in. If the user replies within 30 min, his answers are factored into scoring. Otherwise, scoring runs on automated data only.
 - **On-demand** — phrases like "мой скор", "как я справляюсь", "обзор недели" trigger an immediate scoring run.
 - **Morning briefing** — when last score ≤ 5, an overload coach block is appended with 1–3 specific calendar events or tasks to postpone/delegate/cancel.
 

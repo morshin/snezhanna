@@ -7,7 +7,7 @@ Personal AI assistant running as a Telegram bot on a Linux VPS. Uses Claude as i
 Three independent processes:
 
 - **Snezhanna** (`index.js`) — main Telegram bot with Claude tool use for Calendar, Gmail, Google Drive (search, memory, file storage, backups)
-- **Max** (`tutor/index.js`) — study tutor bot for Vova's son (Spanish school, quest system, parent interface)
+- **Max** (`tutor/index.js`) — study tutor bot for kids (incl. quest system, parent interface)
 - **Zhora** (`watchdog/zhora.js`) — watchdog that monitors both bots and auto-restarts if needed
 
 ## Setup
@@ -42,7 +42,7 @@ On first run (or `/status`), Snezhanna sends a Google auth URL via Telegram. Vis
 Key settings for a new instance:
 ```json
 {
-  "user": { "name": "Вова", "assistant_name": "Снежанна" },
+  "user": { "name": "хозяин", "assistant_name": "Снежанна" },
   "gdrive": { "root_folder": "Снежанна" },
   "mini_app": { "port": 3001 }
 }

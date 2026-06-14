@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-Snezhanna is a personal AI assistant for Vova that runs as a systemd service on a Linux VPS. It operates through Telegram and uses Claude (claude-sonnet-4-6) as its brain. The project has three processes: **Snezhanna** (main bot), **Max** (tutor bot for Vova's son), and **Zhora** (watchdog monitoring both).
+Snezhanna is a personal AI assistant for the owner that runs as a systemd service on a Linux VPS. It operates through Telegram and uses Claude (claude-sonnet-4-6) as its brain. The project has three processes: **Snezhanna** (main bot), **Max** (tutor bot for the owner's son), and **Zhora** (watchdog monitoring both).
 
 ## Running the bot
 
@@ -64,7 +64,7 @@ sudo systemctl daemon-reload
 - **Google auth UX**: `offerGoogleAuth()` sends an inline-keyboard URL button `🔗 Открыть Google →` with step-by-step instructions (MarkdownV2) instead of a raw link
 
 **`tutor/index.js`** — Max tutor bot (separate systemd service):
-- Telegram bot for Vova's son (13 y/o, Spanish school), access-controlled by `TUTOR_ALLOWED_USER_ID`
+- Telegram bot for the owner's son (13 y/o, Spanish school), access-controlled by `TUTOR_ALLOWED_USER_ID`
 - **Two-actor model**: student (`TUTOR_ALLOWED_USER_ID`) and parent (`PARENT_CHAT_ID`). Parent messages are routed to a separate handler before the student flow — never forwarded to Claude's tutoring session
 - Always responds in Spanish to student; understands Russian but redirects back to Spanish; responds in Russian to parent
 - Pedagogical approach: never gives answers directly, asks guiding questions
@@ -88,7 +88,7 @@ sudo systemctl daemon-reload
 
 **`watchdog/zhora.js`** — Zhora watchdog (separate systemd service):
 - Checks every 5 minutes: snezhanna + tutor systemd status, Telegram API reachability, disk space (>85% threshold), recent error logs
-- Auto-restarts Snezhanna or Max if down; reports to Vova via its own Telegram bot (`WATCHDOG_BOT_TOKEN`)
+- Auto-restarts Snezhanna or Max if down; reports to the owner via its own Telegram bot (`WATCHDOG_BOT_TOKEN`)
 - Morning report at 07:55 Madrid time shows status of both bots
 - Commands: `/status` (all services), `/logs [snezhanna|max] [N]`, `/restart [snezhanna|max]` with confirmation, `/lang [ru|es]` (set Max's weekly language)
 - Uses zero npm dependencies — pure Node.js `https` module for Telegram calls
@@ -131,7 +131,7 @@ sudo systemctl daemon-reload
 | `lib/disk-log.js` | In-memory log of Google Drive write operations; flushed after evening check-in |
 | `identity/CORE.md` | Layer 1 system prompt (locked): base rules, email safety, prompt injection defense; cannot be overridden by user settings; uses `{{USER_NAME}}` / `{{ASSISTANT_NAME}}` placeholders |
 | `identity/IDENTITY.md` | Layer 2 system prompt default: personality, capabilities, tone; user can override via SQLite `identity` key (Mini App or chat); uses `{{USER_NAME}}` / `{{ASSISTANT_NAME}}` placeholders |
-| `identity/IDENTITY.template.md` | Neutral starter template for new bot instances (without Vova-specific content) |
+| `identity/IDENTITY.template.md` | Neutral starter template for new bot instances (without owner-specific content) |
 | `config/nanobot.json` | Model, token limits, timezone, history window, `gdrive.root_folder`, `user.name`/`user.assistant_name`, `integrations` flags, `database.path` |
 | `schedules/heartbeats.json` | Documentation of all scheduled tasks (not loaded at runtime) |
 | `docs/snezhanna-tz.md` | Technical specification (TZ) — infrastructure, integrations, architecture decisions |
@@ -162,8 +162,8 @@ sudo systemctl daemon-reload
 
 ### Google OAuth flow
 
-1. On startup (or on `/status`), if `token.json` is missing, Snezhanna sends Vova a Google auth URL
-2. Vova visits the URL, copies the code, sends `/auth <code>` to the bot
+1. On startup (or on `/status`), if `token.json` is missing, Snezhanna sends the owner a Google auth URL
+2. The owner visits the URL, copies the code, sends `/auth <code>` to the bot
 3. `lib/google.js::saveToken()` exchanges the code and writes `token.json`
 4. Scopes: `calendar` (read/write), `gmail.modify`, `drive` (full file storage)
 5. Token file path overrideable via `GOOGLE_TOKEN_FILE` env var (for multi-instance deploys)
@@ -192,7 +192,7 @@ Max (tutor bot) writes reports to local `KIDS_DATA_DIR` (`/opt/snezhanna/data/ki
 
 ### Timezone
 
-All cron schedules use `Europe/Madrid`. Dates/times shown to Vova are localized to `Europe/Madrid` via `toLocaleString('ru-RU', { timeZone: config.timezone })`.
+All cron schedules use `Europe/Madrid`. Dates/times shown to the owner are localized to `Europe/Madrid` via `toLocaleString('ru-RU', { timeZone: config.timezone })`.
 
 ## Configuration
 
@@ -214,7 +214,7 @@ All cron schedules use `Europe/Madrid`. Dates/times shown to Vova are localized 
 ```
 ANTHROPIC_API_KEY        # Claude API
 TELEGRAM_BOT_TOKEN       # Snezhanna's Telegram bot
-TELEGRAM_ALLOWED_USER_ID # Vova's numeric Telegram ID (or @username)
+TELEGRAM_ALLOWED_USER_ID # owner's numeric Telegram ID (or @username)
 WATCHDOG_BOT_TOKEN       # Zhora's Telegram bot
 OPENAI_API_KEY           # Whisper transcription + TTS
 GOOGLE_CLIENT_ID         # Google OAuth2 (Calendar + Gmail + Drive)
@@ -222,7 +222,7 @@ GOOGLE_CLIENT_SECRET     # Google OAuth2
 TUTOR_BOT_TOKEN          # Max tutor bot (from @BotFather)
 TUTOR_ALLOWED_USER_ID    # Son's numeric Telegram ID
 KIDS_DATA_DIR            # local kids data dir (default: /opt/snezhanna/data/kids)
-PARENT_CHAT_ID           # Vova's numeric Telegram ID (same as TELEGRAM_ALLOWED_USER_ID); receives parent notifications via Max's bot
+PARENT_CHAT_ID           # owner's numeric Telegram ID (same as TELEGRAM_ALLOWED_USER_ID); receives parent notifications via Max's bot
 QUEST_HMAC_SECRET        # 64-char hex secret for HMAC-signing balance.json (shared with TimeGuard)
 GITHUB_TOKEN             # (optional) GitHub personal access token; scopes: public_repo or repo
 STRAVA_CLIENT_ID         # (optional) Strava API

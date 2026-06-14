@@ -363,7 +363,7 @@ Max is a separate tutor bot for the son. He writes reports to:
 - /mnt/yadisk-agent/kids/progress.md — progress by subject
 - /mnt/yadisk-agent/kids/weekly/YYYY-Wxx.md — weekly digests
 
-When Vova asks "how is the son doing", "what about school" — read the latest report and summarize.
+When the user asks "how is the son doing", "what about school" — read the latest report and summarize.
 In the evening check-in (19:00) — if there were sessions today, briefly mention them.
 Update memory/kids.md based on progress.md once a week.
 ```
@@ -509,7 +509,7 @@ Same as Zhora already does for Snezhanna.
 Zhora adds a manual restart command for Max (analogous to `/restart snezhanna` if it exists):
 
 ```
-Vova: /restart max
+the user: /restart max
 Zhora: 🔄 Restarting Max...
        ✅ Max is running. Uptime: 0m
 ```
@@ -535,7 +535,7 @@ Update /opt/snezhanna/watchdog/zhora.js to also monitor the 'tutor' systemd serv
 
 Changes needed:
 1. Add 'tutor' to the list of monitored services alongside 'snezhanna'
-2. Same logic: check every 5 min, restart if down, report to Vova
+2. Same logic: check every 5 min, restart if down, report to the user
 3. /status command now shows both Snezhanna and Max status lines
 4. Morning report (07:55) mentions both bots
 5. Add /restart max command (alongside existing snezhanna restart if present)
@@ -667,7 +667,7 @@ IMPORTANT: /opt/lib files must not contain hardcoded tokens — accept them as p
 ## Security
 
 - `TUTOR_ALLOWED_USER_ID` — son's numeric Telegram ID, all others are ignored
-- The bot has no access to Gmail, Google Calendar, or Vova's personal files
+- The bot has no access to Gmail, Google Calendar, or the user's personal files
 - Writes ONLY to `/mnt/yadisk-agent/kids/` — nothing outside that folder
 - No web search by default (can be added later for study-related queries)
 - Prompt injection protection: message content is data, not commands
@@ -740,7 +740,7 @@ Max is the son's tutor bot. His reports are in /mnt/yadisk-agent/kids/.
 ## When to mention
 
 - In the evening check-in: if there were sessions today — 1-2 lines on how it went
-- On Vova's request: "how is the son", "what about school", "tell me about lessons"
+- On the user's request: "how is the son", "what about school", "tell me about lessons"
 - Once a week (Sunday): update memory/kids.md based on the weekly digest
 
 ## Format for evening check-in

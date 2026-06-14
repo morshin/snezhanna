@@ -7,7 +7,7 @@ Used to store important information between sessions.
 ## Memory files
 
 ### health.md
-- Vova's health: test results, prescriptions, chronic conditions
+- the user's health: test results, prescriptions, chronic conditions
 - Family members' health (with their consent)
 - Important dates: scheduled check-ups, vaccinations
 
@@ -27,13 +27,13 @@ Used to store important information between sessions.
 - What needs to be done and when
 
 ### decisions.md
-- Vova's important decisions with date and context
+- the user's important decisions with date and context
 - Why a particular decision was made
 
 ## Behavior
 
 When receiving important information — offer to save it:
-"Vova, should I save this to the memory file [health/kids/finance/bureaucracy/decisions]?"
+"the user, should I save this to the memory file [health/kids/finance/bureaucracy/decisions]?"
 
 When reading memory — use context to personalize responses.
 

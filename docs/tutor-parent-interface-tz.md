@@ -12,11 +12,11 @@
 Add to `/opt/snezhanna/.env`:
 
 ```
-PARENT_CHAT_ID=          # Vova's numeric Telegram ID (same value as TELEGRAM_ALLOWED_USER_ID in Snezhanna)
+PARENT_CHAT_ID=          # the user's numeric Telegram ID (same value as TELEGRAM_ALLOWED_USER_ID in Snezhanna)
 QUEST_HMAC_SECRET=       # random 32-char string, shared with TimeGuard later
 ```
 
-`PARENT_CHAT_ID` uses the **same** bot token as Max (`TUTOR_BOT_TOKEN`) — Vova gets notified via Max's bot, not Snezhanna.
+`PARENT_CHAT_ID` uses the **same** bot token as Max (`TUTOR_BOT_TOKEN`) — the user gets notified via Max's bot, not Snezhanna.
 
 ---
 
@@ -27,7 +27,7 @@ Two actor types in Max's bot:
 | Actor | Identified by | What they can do |
 |-------|--------------|-----------------|
 | Student (son) | `TUTOR_ALLOWED_USER_ID` | Chat, /done, /schedule, /homework, /reset, /status |
-| Parent (Vova) | `PARENT_CHAT_ID` | /report, /week, /homework, /assign (text or photo), /quest, /quests, /setday, /resetschedule, /schedule, /balance, /codes, /gencodes |
+| Parent (the user) | `PARENT_CHAT_ID` | /report, /week, /homework, /assign (text or photo), /quest, /quests, /setday, /resetschedule, /schedule, /balance, /codes, /gencodes |
 
 If `msg.from.id == PARENT_CHAT_ID` → route to parent handler, skip student flow entirely.  
 Parent messages are never forwarded to Claude's tutoring session — they go to a separate handler.  
@@ -398,7 +398,7 @@ Restart: sudo systemctl restart tutor
 ## 12. Data flow summary
 
 ```
-Vova                    Max (tutor bot)              Son
+the user                    Max (tutor bot)              Son
   |                           |                        |
   |-- /quest Inglés +30 --> saves quests.json          |
   |                           |                        |

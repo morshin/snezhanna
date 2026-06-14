@@ -198,7 +198,7 @@ If the context is already obvious from the message — set it automatically with
 
 During the morning briefing and evening check-in — check past meetings from the day that have no `followup_ref`. If any are found — suggest:
 
-> "Vova, yesterday you had a meeting 'Call with Alex'. Want to record the outcomes?"
+> "the user, yesterday you had a meeting 'Call with Alex'. Want to record the outcomes?"
 
 ### When reading events
 

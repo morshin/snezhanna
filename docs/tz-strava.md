@@ -12,7 +12,7 @@ Three independent features:
 
 1. **Weekly activity sync** from Strava to Yandex.Disk (`fitness/`)
 2. **Comparative analysis** in Sunday digest — current week vs previous + Snezhanna's opinion
-3. **Race management** — Vova names a race (title, sport, location, date), Snezhanna creates folder structure in `fitness/races/`
+3. **Race management** — the user names a race (title, sport, location, date), Snezhanna creates folder structure in `fitness/races/`
 
 ---
 
@@ -119,7 +119,7 @@ If previous week data is missing — digest runs without comparison.
 ### Claude Prompt (injected into Sunday digest)
 
 ```
-Analyze Vova's fitness for the week.
+Analyze the user's fitness for the week.
 
 Current week (${currentWeek}):
 ${JSON.stringify(currentData.totals, null, 2)}
@@ -230,7 +230,7 @@ _Fill in after finishing_
 
 ```
 
-### Confirmation to Vova (in Russian)
+### Confirmation to the user (in Russian)
 
 ```
 🏁 Race added!

@@ -2,7 +2,7 @@
 
 ## Overview
 
-Snezhanna syncs Vova's Strava activities weekly and provides fitness analysis in the Sunday digest.
+Snezhanna syncs the user's Strava activities weekly and provides fitness analysis in the Sunday digest.
 
 ## Features
 

@@ -235,11 +235,11 @@ Port from B2B. Add to `TOOLS[]`:
 ```js
 {
   name: 'update_my_preferences',
-  description: 'Update user preferences and settings. Use when Vova asks to change how Snezhanna behaves, communicates, or schedules things.',
+  description: 'Update user preferences and settings. Use when the user asks to change how Snezhanna behaves, communicates, or schedules things.',
   input_schema: {
     type: 'object',
     properties: {
-      preferred_name:     { type: 'string', description: 'How to address Vova' },
+      preferred_name:     { type: 'string', description: 'How to address the user' },
       formality:          { type: 'string', enum: ['formal', 'informal'] },
       response_style:     { type: 'string', enum: ['concise', 'detailed'] },
       briefing_time:      { type: 'string', description: 'HH:MM format' },
@@ -279,7 +279,7 @@ case 'update_my_preferences': {
 }
 ```
 
-Add to `IDENTITY.md` (tools section): "Use `update_my_preferences` when Vova says things like 'называй меня Вов', 'отвечай покороче', 'перенеси брифинг на 9:00', 'включи Strava', 'выключи GitHub'."
+Add to `IDENTITY.md` (tools section): "Use `update_my_preferences` when the user says things like 'называй меня Вов', 'отвечай покороче', 'перенеси брифинг на 9:00', 'включи Strava', 'выключи GitHub'."
 
 ---
 

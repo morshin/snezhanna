@@ -42,7 +42,7 @@ The feature is intentionally "human" — Snezhanna acts as a caring close friend
 | **Google Calendar** | Events count per domain in past 7 days; presence of free time blocks; back-to-back meeting days; family/personal event presence |
 | **Gmail** | Approximate email volume; presence of urgent/flagged threads; unanswered threads older than 3 days |
 | **Yandex.Disk project tasks** | Task overload signals from `tasks/tasks.json` + `projects/*/tasks.json` — see details below |
-| **GitHub Issues** | Open issues assigned to Vova — fetched live via `lib/github-issues.js`, counted alongside local tasks |
+| **GitHub Issues** | Open issues assigned to the user — fetched live via `lib/github-issues.js`, counted alongside local tasks |
 | **Strava** | Number of activities in past 7 days; total distance/duration; rest days vs. active days |
 
 ### Yandex.Disk Tasks — Detail
@@ -74,24 +74,24 @@ Tasks are stored as JSON files, managed by `lib/tasks.js` (existing integration)
 - Count of open Q1 tasks (`urgent:true, important:true`) — high Q1 backlog = fire-fighting mode, significant score penalty
 - Count of overdue tasks (due_date in the past, status todo/in_progress) — 3+ overdue = major penalty
 - Ratio of `done`/total tasks created or updated in past 7 days — low completion = loss of control
-- Open Q3 tasks (`urgent:true, important:false`) still owned by Vova — signal that delegation isn't happening
+- Open Q3 tasks (`urgent:true, important:false`) still owned by the user — signal that delegation isn't happening
 - Open Q4 tasks (`urgent:false, important:false`) — signal of inability to cut non-essential work
-- Open GitHub Issues assigned to Vova (from `lib/github-issues.js`) — counted alongside local tasks
+- Open GitHub Issues assigned to the user (from `lib/github-issues.js`) — counted alongside local tasks
 
 **For the morning briefing overload block:** when score ≤ 5, Snezhanna picks 1–3 specific tasks by title — preferring Q3 (delegate candidates) and Q4 (cut candidates), plus oldest overdue Q1 if any — and names them with project context: *"This task is Q3 — maybe someone else could take it?"*
 
 ### Self-reported (collected via weekly check-in message)
 
-On the weekly trigger, before running analysis, Snezhanna sends a short conversational check-in to Vova asking 3–4 quick questions:
+On the weekly trigger, before running analysis, Snezhanna sends a short conversational check-in to the user asking 3–4 quick questions:
 
 1. "How did this week feel overall — did you manage or not?" (1 sentence)
 2. "Was there time with family / kids?" (yes/no or brief)
 3. "How's sleep and energy?" (brief)
 4. "Was there anything personal — hobbies, rest, your own time?" (brief)
 
-> Task status (overdue, volume, priorities) is collected automatically from Yandex.Disk — no need to ask Vova about it.
+> Task status (overdue, volume, priorities) is collected automatically from Yandex.Disk — no need to ask the user about it.
 
-Vova can answer all in one message or skip questions. Responses are factored into scoring before analysis.
+the user can answer all in one message or skip questions. Responses are factored into scoring before analysis.
 
 ---
 
@@ -99,13 +99,13 @@ Vova can answer all in one message or skip questions. Responses are factored int
 
 - **Weekly trigger:** Every Monday at 09:00 Europe/Madrid
 - **Flow:**
-  1. Send check-in questions to Vova
+  1. Send check-in questions to the user
   2. Wait up to 30 minutes for responses (use a timeout handler)
   3. If no response within 30 min: proceed with automated data only, note "no check-in response"
   4. Fetch Google Calendar, Gmail, Strava data
   5. Run scoring analysis via Claude
-  6. Send full weekly report to Vova
-- **On-demand:** Vova can trigger analysis any time with commands like "как я справляюсь?", "мой скор", "обзор недели"
+  6. Send full weekly report to the user
+- **On-demand:** the user can trigger analysis any time with commands like "как я справляюсь?", "мой скор", "обзор недели"
 
 ---
 
@@ -114,7 +114,7 @@ Vova can answer all in one message or skip questions. Responses are factored int
 The scoring is performed by a dedicated Claude call (not inline in conversation) with a structured system prompt. Claude receives:
 
 - Raw data from all sources (calendar events, gmail summary, strava stats)
-- Vova's self-reported check-in responses (if provided)
+- the user's self-reported check-in responses (if provided)
 - Last week's score history from Yandex.Disk (for trend context)
 - Current date and timezone
 
@@ -150,7 +150,7 @@ The report is a single Telegram message. Snezhanna writes it in her natural voic
 **Structure:**
 
 ```
-[Emoji + color indicator] Your weekly review, Vova
+[Emoji + color indicator] Your weekly review, the user
 
 Overall score: [SCORE]/10 [COLOR_EMOJI]
 
@@ -175,7 +175,7 @@ Overall score: [SCORE]/10 [COLOR_EMOJI]
 - Score 0–3 (burnout/stop): *"Слушай, ну вижу что не закрываешь совсем что-то задачки свои. Не успеваешь мне сообщить или и правда подвыгораешь? Если да, то давай найдем время для отдыха и себя — что если..."*
 - Score 7–10 (everything's great): *"Ты — красавчик! 🖤 Всё получается)) И кажется, что можем вместе ещё за что-то интересное взяться — м?"*
 
-These are not templates to fill in — they are the **reference voice**. Claude must write in this register: informal, warm, slightly playful, uses "Вов" not "Вова", short sentences, rhetorical questions, trailing "м?" or "да?" to invite dialogue. Never sounds like a report.
+These are not templates to fill in — they are the **reference voice**. Claude must write in this register: informal, warm, slightly playful, uses the short nickname form (configured `preferred_name`), short sentences, rhetorical questions, trailing "м?" or "да?" to invite dialogue. Never sounds like a report.
 
 ---
 
@@ -217,7 +217,7 @@ These are not templates to fill in — they are the **reference voice**. Claude 
 
 ## On-Demand Commands
 
-Vova can trigger analysis or query history via natural language. Snezhanna should recognize intents including (not exhaustive):
+the user can trigger analysis or query history via natural language. Snezhanna should recognize intents including (not exhaustive):
 
 | Intent | Example phrases |
 |--------|----------------|
@@ -226,7 +226,7 @@ Vova can trigger analysis or query history via natural language. Snezhanna shoul
 | Trend query | "как я в последнее время?", "лучше или хуже стало?" |
 | History | "покажи мой скор за прошлые недели" |
 
-On-demand analysis uses same logic as weekly, minus the check-in step (goes straight to data collection + scoring), unless Vova naturally provides context in his message — in which case that context is included.
+On-demand analysis uses same logic as weekly, minus the check-in step (goes straight to data collection + scoring), unless the user naturally provides context in his message — in which case that context is included.
 
 ---
 
@@ -268,7 +268,7 @@ The last weekly score is read from `workload-history.json` on Yandex.Disk at bri
 After the standard briefing content (schedule, weather, tasks), Snezhanna appends an **Overload Coach block**. She looks at today's and tomorrow's calendar events and identifies candidates for:
 
 - **Postponement** — event that is non-critical, has no external hard deadline, or has been rescheduled before
-- **Delegation** — event that someone else could handle (detected by: Vova is organizer but not the only attendee, or it's a routine/recurring sync)
+- **Delegation** — event that someone else could handle (detected by: the user is organizer but not the only attendee, or it's a routine/recurring sync)
 - **Cancellation** — event with no clear purpose, very short, or a 1:1 with no agenda
 
 She names the specific events by title and time, explains briefly why she thinks each could be moved/delegated/dropped, and asks for a reaction. She does **not** act on Calendar herself.
@@ -280,7 +280,7 @@ She names the specific events by title and time, explains briefly why she thinks
 
 ---
 
-💛 By the way, Vova — based on recent data you're at [SCORE]/10, and it shows.
+💛 By the way, the user — based on recent data you're at [SCORE]/10, and it shows.
 Looking at your day I see a couple of things that might be possible to drop:
 
 • [Event title], [time] — [reason: "looks like a non-essential meeting", 
@@ -297,11 +297,11 @@ Informal, close, slightly playful — matches the canonical voice samples define
 
 ### Follow-up
 
-If Vova responds positively (e.g. "да, перенеси ту встречу" / "помоги написать отмену"):
+If the user responds positively (e.g. "да, перенеси ту встречу" / "помоги написать отмену"):
 - Snezhanna drafts the cancellation/reschedule message text for him to send manually
 - She can suggest a new time slot based on calendar free slots if asked
 
-If Vova ignores or dismisses: drop the topic, no follow-up nagging.
+If the user ignores or dismisses: drop the topic, no follow-up nagging.
 
 ### Implementation Notes
 
