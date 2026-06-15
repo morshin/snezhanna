@@ -39,5 +39,23 @@ else
 fi
 
 $RUN npm install --production --ignore-scripts -q
+
+# Merge new vars from .env.example into .env (add missing only, never overwrite existing)
+if [ -f .env.example ] && [ -f .env ]; then
+  added=0
+  while IFS= read -r line; do
+    [[ "$line" =~ ^[[:space:]]*# ]] && continue   # skip comments
+    [[ -z "${line// }" ]] && continue              # skip blank lines
+    key="${line%%=*}"
+    [[ -z "$key" ]] && continue
+    if ! grep -q "^${key}=" .env 2>/dev/null; then
+      echo "$line" >> .env
+      echo "  + $key"
+      added=$((added + 1))
+    fi
+  done < .env.example
+  [ "$added" -gt 0 ] && echo "$added new var(s) merged into .env" || true
+fi
+
 sudo systemctl restart "$INSTANCE_NAME"
 echo "Done. $INSTANCE_NAME restarted at $REF"

@@ -211,6 +211,7 @@ All cron schedules use `Europe/Madrid`. Dates/times shown to the owner are local
 - `mini_app.port`: HTTP port for the Tasks Mini App API server (default 3001)
 - `github.repos`: list of `{ repo: "owner/repo", project: "ProjectName" }` for GitHub Milestones; `project` is optional; `github.milestone_due_within_days`: show milestones due within this many days or already overdue (default 14)
 - `github.self_repo`: the bot's own repository slug (e.g. `"morshin/snezhanna"`) used by `create_github_issue` tool and `lib/release-check.js`
+- `github.app_id`: GitHub App ID for issue reporting — committed here (safe, just a number); private key stays in `.env` (not committed, repo is public)
 - `database.path`: path to SQLite DB file (default `"data/snezhanna.db"`)
 
 ## Required environment variables
@@ -229,9 +230,8 @@ KIDS_DATA_DIR            # local kids data dir (default: /opt/snezhanna/data/kid
 PARENT_CHAT_ID           # owner's numeric Telegram ID (same as TELEGRAM_ALLOWED_USER_ID); receives parent notifications via Max's bot
 QUEST_HMAC_SECRET        # 64-char hex secret for HMAC-signing balance.json (shared with TimeGuard)
 GITHUB_TOKEN                  # (optional) tenant's own GitHub PAT for reading milestones; scopes: public_repo or repo
-GITHUB_APP_ID                 # (optional) GitHub App ID for issue reporting — preferred auth method; safe to pre-fill in .env.example
-GITHUB_APP_PRIVATE_KEY_FILE   # (optional) path to GitHub App .pem private key file
-GITHUB_APP_PRIVATE_KEY        # (optional) GitHub App private key inline (literal \n); alternative to _FILE
+GITHUB_APP_PRIVATE_KEY        # (optional) GitHub App private key inline (literal \n); NOT committed — repo is public
+GITHUB_APP_PRIVATE_KEY_FILE   # (optional) path to local .pem file; alternative to inline key
 GITHUB_ISSUES_TOKEN           # (optional) fallback PAT for Zhora bot account if App not configured
 STRAVA_CLIENT_ID         # (optional) Strava API
 STRAVA_CLIENT_SECRET     # (optional) Strava API
