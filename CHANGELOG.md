@@ -13,6 +13,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), [Semantic Vers
 
 - **Release notifications:** bot checks GitHub for a new release during morning briefing and sends a human-readable summary (via Claude) with an inline «Обновить сейчас» button that runs `scripts/update.sh` — no more than once per day per version
 - **GitHub issue creation:** new `create_github_issue` tool lets the bot file bug reports and feature requests in the bot's own GitHub repo directly from chat; attaches a Telegram screenshot (uploaded to `_screenshots/` in the repo) when the user sends a photo with the request
+- **GitHub issue relay via Zhora:** tenant Snezhanna instances relay issue creation through a shared Telegram group — Zhora receives `/report_issue` commands and creates GitHub issues using its own `GITHUB_TOKEN`; no HTTP endpoints or shared secrets required; set `ZHORA_REPORT_CHAT` in all instances
 
 ## [1.3.12] — 2026-06-14
 

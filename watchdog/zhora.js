@@ -8,6 +8,16 @@ const cron = require('node-cron');
 
 const BOT_TOKEN = process.env.WATCHDOG_BOT_TOKEN;
 const OWNER_ID = process.env.TELEGRAM_ALLOWED_USER_ID.replace('@', '');
+const REPORT_CHAT_ID = process.env.ZHORA_REPORT_CHAT || '';
+
+// Read self_repo from nanobot.json (fallback to default)
+let GITHUB_REPO = 'morshin/snezhanna';
+try {
+  const cfg = JSON.parse(require('fs').readFileSync(
+    require('path').join(__dirname, '../config/nanobot.json'), 'utf8'
+  ));
+  if (cfg.github && cfg.github.self_repo) GITHUB_REPO = cfg.github.self_repo;
+} catch (e) { /* use default */ }
 
 // ── Telegram send (no deps, pure https) ──────────────────────────────────────
 
@@ -420,6 +430,79 @@ async function handleLangCommand(chatId, arg) {
   }
 }
 
+// ── GitHub issue creation ────────────────────────────────────────────────────
+
+function createGitHubIssue(title, body, labels) {
+  return new Promise((resolve) => {
+    const token = process.env.GITHUB_TOKEN;
+    if (!token) { resolve({ error: 'GITHUB_TOKEN not set' }); return; }
+
+    const payload = JSON.stringify({
+      title,
+      body,
+      ...(labels && labels.length ? { labels } : {})
+    });
+    const options = {
+      hostname: 'api.github.com',
+      path: `/repos/${GITHUB_REPO}/issues`,
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Accept': 'application/vnd.github+json',
+        'X-GitHub-Api-Version': '2022-11-28',
+        'User-Agent': 'zhora-watchdog',
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(payload)
+      }
+    };
+    const req = https.request(options, (res) => {
+      let data = '';
+      res.on('data', c => (data += c));
+      res.on('end', () => {
+        try {
+          const result = JSON.parse(data);
+          if (res.statusCode >= 400) resolve({ error: `GitHub ${res.statusCode}: ${result.message || 'error'}` });
+          else resolve({ number: result.number, url: result.html_url, title: result.title });
+        } catch (e) { resolve({ error: 'parse error: ' + e.message }); }
+      });
+    });
+    req.on('error', (e) => resolve({ error: e.message }));
+    req.write(payload);
+    req.end();
+  });
+}
+
+async function handleIssueReport(msg) {
+  const jsonStr = msg.text.slice('/report_issue '.length).trim();
+  let payload;
+  try {
+    payload = JSON.parse(jsonStr);
+  } catch (e) {
+    console.error('[Zhora] Invalid JSON in /report_issue:', e.message);
+    return;
+  }
+  if (payload.type !== 'github_issue') return;
+
+  const { title, body, labels, instance } = payload;
+  if (!title || !body) {
+    await sendRaw(REPORT_CHAT_ID, '❌ /report_issue: missing title or body');
+    return;
+  }
+  const instanceTag = instance ? ` (${instance})` : '';
+  console.log(`[Zhora] Issue report${instanceTag}: "${title}"`);
+
+  const result = await createGitHubIssue(title, body, labels);
+  if (result.error) {
+    await sendRaw(REPORT_CHAT_ID, `❌ GitHub error: ${result.error}`);
+    await send(`🚨 *Жора:* не удалось создать issue${instanceTag}: ${result.error}`);
+    return;
+  }
+
+  await sendRaw(REPORT_CHAT_ID, `✅ Issue #${result.number} создан`);
+  await send(`📋 *Новый issue${instanceTag}:*\n*${title}*\n${result.url}`);
+  console.log(`[Zhora] Issue #${result.number} created: ${result.url}`);
+}
+
 // Ожидающие подтверждения перезапуска: chatId → { timestamp, unit, name }
 const pendingRestarts = new Map();
 
@@ -484,7 +567,18 @@ async function pollLoop() {
       for (const update of updates) {
         pollOffset = update.update_id + 1;
         const msg = update.message;
-        if (!msg || !msg.text || !isAllowed(msg)) continue;
+        if (!msg || !msg.text) continue;
+
+        // Issue reports from the designated relay group (any sender)
+        if (REPORT_CHAT_ID && String(msg.chat.id) === String(REPORT_CHAT_ID)
+            && msg.text.startsWith('/report_issue ')) {
+          handleIssueReport(msg).catch(e =>
+            console.error('[Zhora] handleIssueReport error:', e.message)
+          );
+          continue;
+        }
+
+        if (!isAllowed(msg)) continue;
 
         if (msg.text === '/status') {
           console.log('[Zhora] /status command from', msg.from.id);
@@ -599,6 +693,7 @@ async function registerCommands() {
         { command: 'restart',         description: 'Перезапустить сервис: /restart [snezhanna|max]' },
         { command: 'restart_confirm', description: 'Подтвердить перезапуск' },
         { command: 'lang',            description: 'Язык недели Макса: /lang [ru|es]' },
+        { command: 'report_issue',    description: 'Создать GitHub issue (внутренний — для Снежанны)' },
       ]
     });
     console.log('[Zhora] Bot commands registered');
