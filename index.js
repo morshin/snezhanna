@@ -32,6 +32,7 @@ const { buildReplyContext } = require('./lib/reply-chain');
 const { start: apiStart, setApiContext } = require('./lib/api');
 const mailManager = require('./lib/mail-manager');
 const onboarding = require('./lib/onboarding');
+const releaseCheck = require('./lib/release-check');
 
 // ── Config & Identity ─────────────────────────────────────────────────────────
 
@@ -596,6 +597,12 @@ bot.on('message', async (msg) => {
         return;
       }
 
+      // /onboarding — restart setup wizard
+      if (userText === '/onboarding' || /онбординг.{0,15}сначала|(проведи|запусти|начн[иёе]).{0,20}онбординг|настрой.{0,10}(всё|бота|).{0,10}заново/i.test(userText)) {
+        await onboarding.restart(bot, chatId, msg, appState, config);
+        return;
+      }
+
       // ── /quiet — vacation mode ──
       if (userText.startsWith('/quiet')) {
         const arg = userText.slice(6).trim();
@@ -933,11 +940,42 @@ bot.on('callback_query', async (query) => {
   try {
     await bot.answerCallbackQuery(query.id);
     if (!isAllowed(query)) return;
-    if (!appState.onboarding_completed && query.data && query.data.startsWith('ob:')) {
+
+    const data = query.data || '';
+    const chatId = query.message?.chat?.id;
+
+    if (!appState.onboarding_completed && data.startsWith('ob:')) {
       await onboarding.handleCallback(bot, query, appState);
+      return;
+    }
+
+    if (data === 'update:confirm') {
+      await bot.sendMessage(chatId,
+        '⚠️ Бот перезапустится на 30–60 секунд. Продолжить?',
+        {
+          reply_markup: {
+            inline_keyboard: [[
+              { text: '✅ Да, обновить', callback_data: 'update:run' },
+              { text: '❌ Отмена', callback_data: 'update:skip' }
+            ]]
+          }
+        }
+      );
+    } else if (data === 'update:run') {
+      await bot.sendMessage(chatId, '🔄 Запускаю обновление...\nБот перезапустится автоматически.');
+      const { exec } = require('child_process');
+      const instanceDir = path.join(__dirname);
+      const instanceName = path.basename(instanceDir);
+      exec(
+        `nohup bash ${instanceDir}/scripts/update.sh > /tmp/${instanceName}-update.log 2>&1 &`,
+        { timeout: 5000 },
+        (err) => { if (err) console.error('[ReleaseCheck] update spawn error:', err.message); }
+      );
+    } else if (data === 'update:skip') {
+      // Nothing to do — already marked notified for today
     }
   } catch (e) {
-    console.error('[Onboarding] callback_query error:', e.message);
+    console.error('[Callback] callback_query error:', e.message);
   }
 });
 
@@ -1117,19 +1155,34 @@ function formatTasksForBriefing(taskList) {
 // ── Briefing helpers ──────────────────────────────────────────────────────────
 
 async function sendMorningBriefingFull(chatId) {
+  // Parallel: events, tasks, release check
   let eventsText = '• Событий нет';
-  if (google.isAuthorized()) {
-    const events = await google.getCalendarEvents(1);
-    if (events.length > 0) {
-      eventsText = events.map(e => `• ${e.summary} (${formatEventTime(e)})`).join('\n');
-    }
-  }
+  let updateInfo = null;
+
+  const [eventsResult, tasksResult, releaseResult] = await Promise.allSettled([
+    (async () => {
+      if (!google.isAuthorized()) return null;
+      const events = await google.getCalendarEvents(1);
+      return events.length > 0
+        ? events.map(e => `• ${e.summary} (${formatEventTime(e)})`).join('\n')
+        : null;
+    })(),
+    tasksMerge.getTodayTasksWithGithub(2, { wideGithubWindow: true }),
+    releaseCheck.checkForUpdate()
+  ]);
+
+  if (eventsResult.status === 'fulfilled' && eventsResult.value) eventsText = eventsResult.value;
+  else if (eventsResult.status === 'rejected') console.error('[Briefing] Failed to load events:', eventsResult.reason?.message);
+
   let tasksText = '• Задач нет';
-  try {
-    const todayTasks = await tasksMerge.getTodayTasksWithGithub(2, { wideGithubWindow: true });
-    tasksText = formatTasksForBriefing(todayTasks);
-  } catch (e) {
-    console.error('[Briefing] Failed to load tasks:', e.message);
+  if (tasksResult.status === 'fulfilled') {
+    tasksText = formatTasksForBriefing(tasksResult.value);
+  } else {
+    console.error('[Briefing] Failed to load tasks:', tasksResult.reason?.message);
+  }
+
+  if (releaseResult.status === 'fulfilled' && releaseResult.value) {
+    updateInfo = releaseResult.value;
   }
 
   const prompt = `Составь утренний брифинг для ${userName}. Сегодня ${todayStr()}.
@@ -1174,6 +1227,28 @@ ${tasksText}
 
   await bot.sendMessage(chatId, briefingText);
   console.log('[Briefing] full briefing sent');
+
+  // Release update notification
+  if (updateInfo) {
+    const { release, summary } = updateInfo;
+    const lines = [`🆕 *Доступно обновление ${release.tag}*`];
+    if (summary) lines.push('', summary);
+    lines.push('', `[Подробнее →](${release.url})`);
+    try {
+      await bot.sendMessage(chatId, lines.join('\n'), {
+        parse_mode: 'Markdown',
+        reply_markup: {
+          inline_keyboard: [[
+            { text: '🚀 Обновить сейчас', callback_data: 'update:confirm' },
+            { text: 'Позже', callback_data: 'update:skip' }
+          ]]
+        }
+      });
+      console.log(`[ReleaseCheck] notified about ${release.tag}`);
+    } catch (e) {
+      console.error('[ReleaseCheck] failed to send update notification:', e.message);
+    }
+  }
 }
 
 async function sendComebackDigest(chatId, daysAway) {

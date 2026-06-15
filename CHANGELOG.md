@@ -9,6 +9,10 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), [Semantic Vers
 <!-- Format: - <One-sentence description> (#<issue or branch ref>) -->
 <!-- Categories: Added | Changed | Fixed | Security | Removed -->
 
+### Added
+
+- **Release notifications:** bot checks GitHub for a new release during morning briefing and sends a human-readable summary (via Claude) with an inline «Обновить сейчас» button that runs `scripts/update.sh` — no more than once per day per version
+
 ## [1.3.12] — 2026-06-14
 
 ### Fixed
