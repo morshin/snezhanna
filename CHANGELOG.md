@@ -9,6 +9,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), [Semantic Vers
 <!-- Format: - <One-sentence description> (#<issue or branch ref>) -->
 <!-- Categories: Added | Changed | Fixed | Security | Removed -->
 
+## [1.3.14] — 2026-06-15
+
+### Fixed
+
+- **User name resolution:** `{{USER_NAME}}` in identity prompts and all hardcoded bot messages now read `preferred_name` from settings (SQLite) instead of the `config.user.name` fallback — bot now correctly addresses the user by their onboarding name
+
 ## [1.3.13] — 2026-06-15
 
 ### Added
