@@ -229,6 +229,7 @@ KIDS_DATA_DIR            # local kids data dir (default: /opt/snezhanna/data/kid
 PARENT_CHAT_ID           # owner's numeric Telegram ID (same as TELEGRAM_ALLOWED_USER_ID); receives parent notifications via Max's bot
 QUEST_HMAC_SECRET        # 64-char hex secret for HMAC-signing balance.json (shared with TimeGuard)
 GITHUB_TOKEN             # (optional) GitHub personal access token; scopes: public_repo or repo
+GITHUB_ISSUES_TOKEN      # (optional) developer's token with Issues+Contents write on morshin/snezhanna; used by create_github_issue on tenant instances that lack write access; falls back to GITHUB_TOKEN
 STRAVA_CLIENT_ID         # (optional) Strava API
 STRAVA_CLIENT_SECRET     # (optional) Strava API
 STRAVA_REFRESH_TOKEN     # (optional) Strava OAuth2
