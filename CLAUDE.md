@@ -230,9 +230,11 @@ KIDS_DATA_DIR            # local kids data dir (default: /opt/snezhanna/data/kid
 PARENT_CHAT_ID           # owner's numeric Telegram ID (same as TELEGRAM_ALLOWED_USER_ID); receives parent notifications via Max's bot
 QUEST_HMAC_SECRET        # 64-char hex secret for HMAC-signing balance.json (shared with TimeGuard)
 GITHUB_TOKEN                  # (optional) tenant's own GitHub PAT for reading milestones; scopes: public_repo or repo
-GITHUB_APP_PRIVATE_KEY        # (optional) GitHub App private key inline (literal \n); NOT committed — repo is public
+REPORT_ISSUE_ENDPOINT         # (optional) URL of main instance API for proxied issue creation (e.g. http://ip:3001); tenant instances use this instead of GitHub credentials
+REPORT_ISSUE_SECRET           # (optional) shared Bearer secret for /api/report-issue; same value on main and all tenant instances
+GITHUB_APP_PRIVATE_KEY        # (optional) GitHub App private key inline (literal \n); main instance only; NOT committed — repo is public
 GITHUB_APP_PRIVATE_KEY_FILE   # (optional) path to local .pem file; alternative to inline key
-GITHUB_ISSUES_TOKEN           # (optional) fallback PAT for Zhora bot account if App not configured
+GITHUB_ISSUES_TOKEN           # (optional) fallback PAT for Zhora bot account if neither proxy nor App is configured
 STRAVA_CLIENT_ID         # (optional) Strava API
 STRAVA_CLIENT_SECRET     # (optional) Strava API
 STRAVA_REFRESH_TOKEN     # (optional) Strava OAuth2
