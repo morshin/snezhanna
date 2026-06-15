@@ -34,7 +34,8 @@
   },
   "github": {
     "milestone_due_within_days": 14,
-    "repos": []
+    "repos": [],
+    "self_repo": "morshin/snezhanna"
   },
   "chat_monitor": {
     "chats": []

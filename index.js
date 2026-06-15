@@ -14,7 +14,7 @@ const { db, backup: dbBackup } = require('./lib/db');
 const google = require('./lib/google');
 const gdrive = require('./lib/gdrive');
 const whisper = require('./lib/whisper');
-const { getAvailableTools, executeTool, setContext: setToolsContext } = require('./lib/tools');
+const { getAvailableTools, executeTool, setContext: setToolsContext, setPendingPhoto, clearPendingPhoto } = require('./lib/tools');
 const { buildSkillsBlock } = require('./lib/skills');
 const skillContext = require('./lib/skill-context');
 const settings = require('./lib/settings');
@@ -866,6 +866,9 @@ bot.on('photo', async (msg) => {
 
     const caption = msg.caption || '';
 
+    // Make photo available to tools (e.g. create_github_issue) for this request
+    setPendingPhoto(base64, mime_type);
+
     // Reply context for photo messages
     const replyContext = buildReplyContext(msg, history, { botName: 'Snezhanna' });
     const photoCaption = replyContext
@@ -877,6 +880,7 @@ bot.on('photo', async (msg) => {
     if (msg.reply_to_message) photoMeta.reply_to_message_id = msg.reply_to_message.message_id;
 
     const reply = await askClaude(content, 'photo', photoMeta);
+    clearPendingPhoto();
 
     // Replace base64-heavy content in history with a lightweight placeholder
     const lastUserIdx = history.findLastIndex(h => h.role === 'user');
