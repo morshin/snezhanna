@@ -42,7 +42,7 @@ On first run (or `/status`), Snezhanna sends a Google auth URL via Telegram. Vis
 Key settings for a new instance:
 ```json
 {
-  "user": { "name": "хозяин", "assistant_name": "Снежанна" },
+  "user": { "name": "шеф", "assistant_name": "Снежанна" },
   "gdrive": { "root_folder": "Снежанна" },
   "mini_app": { "port": 3001 }
 }

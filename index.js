@@ -37,7 +37,7 @@ const releaseCheck = require('./lib/release-check');
 // ── Config & Identity ─────────────────────────────────────────────────────────
 
 const config = JSON.parse(fs.readFileSync(path.join(__dirname, 'config/nanobot.json'), 'utf8'));
-const userName = config.user?.name || 'хозяин';
+const userName = config.user?.name || 'шеф';
 const assistantName = config.user?.assistant_name || 'Ассистент';
 
 function resolveIdentityPlaceholders(raw) {

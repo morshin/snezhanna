@@ -205,7 +205,7 @@ All cron schedules use `Europe/Madrid`. Dates/times shown to the owner are local
 - `max_tokens`: per-response token limit
 - `history.max_messages` / `history.keep_last`: conversation window
 - `timezone`: Europe/Madrid
-- `user.name`: owner's name for `{{USER_NAME}}` substitution in IDENTITY.md (default `"хозяин"`)
+- `user.name`: owner's name for `{{USER_NAME}}` substitution in IDENTITY.md (default `"шеф"`)
 - `user.assistant_name`: bot's name for `{{ASSISTANT_NAME}}` substitution (default `"Ассистент"`)
 - `gdrive.root_folder`: root folder name in Google Drive (default `"Snezhanna"`)
 - `integrations.strava` / `integrations.github` / `integrations.chat_monitor`: enable/disable optional integrations
