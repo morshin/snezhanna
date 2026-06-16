@@ -54,6 +54,9 @@ fi
 
 $RUN npm install --production --ignore-scripts -q
 
+# Run pending migrations (idempotent; failures are logged but don't abort the update)
+$RUN node scripts/run-migrations.js || echo "⚠  Migration runner exited with errors — check output above"
+
 # Merge new vars from .env.example into .env (add missing only, never overwrite existing)
 if [ -f .env.example ] && [ -f .env ]; then
   added=0
