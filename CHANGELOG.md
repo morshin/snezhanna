@@ -9,6 +9,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), [Semantic Vers
 <!-- Format: - <One-sentence description> (#<issue or branch ref>) -->
 <!-- Categories: Added | Changed | Fixed | Security | Removed -->
 
+## [1.3.17] — 2026-06-16
+
+### Changed
+
+- **`config/nanobot.json` removed:** all configuration now lives in environment variables with sane defaults; `lib/config.js` is the single source of truth. Tenant-specific values (`ASSISTANT_NAME`, `GDRIVE_ROOT_FOLDER`, `TIMEZONE`, `CLAUDE_MODEL`, `GITHUB_SELF_REPO`, etc.) go in `.env` — no per-tenant JSON file to manage or stash on updates.
+
 ## [1.3.16] — 2026-06-16
 
 ### Added
