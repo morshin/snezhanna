@@ -9,6 +9,13 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), [Semantic Vers
 <!-- Format: - <One-sentence description> (#<issue or branch ref>) -->
 <!-- Categories: Added | Changed | Fixed | Security | Removed -->
 
+## [1.3.18] — 2026-06-16
+
+### Added
+
+- **Migration system:** `update.sh` now runs `scripts/run-migrations.js` after `npm install`; pending migrations from `migrations/*.js` (named `{semver}-{description}.js`) are executed in semver order and tracked in `.nanobot/migrations.json` — structural changes between releases are applied automatically without manual intervention
+- **Migration 1.3.17 — nanobot.json → .env:** first migration reads the tenant's `config/nanobot.json` (if present) and writes any non-default values into `.env`, ensuring nothing is lost when upgrading from a version that still used the JSON config file
+
 ## [1.3.17] — 2026-06-16
 
 ### Changed
