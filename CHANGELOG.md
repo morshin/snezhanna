@@ -9,6 +9,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), [Semantic Vers
 <!-- Format: - <One-sentence description> (#<issue or branch ref>) -->
 <!-- Categories: Added | Changed | Fixed | Security | Removed -->
 
+## [1.3.19] — 2026-06-16
+
+### Fixed
+
+- **Migration 1.3.17:** `update.sh` now backs up `config/nanobot.json` to `/tmp` before any git operations; the migration reads from that backup when the original file has already been deleted by `git checkout` — previously the migration silently skipped on tenants upgrading from v1.3.16
+
 ## [1.3.18] — 2026-06-16
 
 ### Added
