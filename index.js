@@ -989,6 +989,7 @@ bot.on('callback_query', async (query) => {
       );
     } else if (data === 'update:run') {
       await bot.sendMessage(chatId, '🔄 Запускаю обновление...\nБот перезапустится автоматически.');
+      settings.set('update_pending_from', releaseCheck.getCurrentVersion());
       const { exec } = require('child_process');
       const instanceDir = path.join(__dirname);
       const instanceName = path.basename(instanceDir);
@@ -1639,6 +1640,22 @@ async function main() {
       console.log('[Snezhanna] Startup message sent to chatId:', appState.chatId);
     } catch (e) {
       console.error('[Snezhanna] Failed to send startup message:', e.message);
+    }
+
+    // Report result of a pending update (triggered before previous restart)
+    const updatePendingFrom = settings.get('update_pending_from');
+    if (updatePendingFrom) {
+      settings.set('update_pending_from', '');
+      const currentVer = releaseCheck.getCurrentVersion();
+      try {
+        if (currentVer !== updatePendingFrom) {
+          await bot.sendMessage(appState.chatId, `✅ Обновился до v${currentVer}`);
+        } else {
+          await bot.sendMessage(appState.chatId, `❌ Обновление не прошло — версия осталась v${currentVer}. Попробуй позже или проверь логи.`);
+        }
+      } catch (e) {
+        console.error('[ReleaseCheck] failed to send update result:', e.message);
+      }
     }
 
     if (!google.isAuthorized()) {
