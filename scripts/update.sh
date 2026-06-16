@@ -14,6 +14,14 @@ done
 
 echo "Updating $INSTANCE_NAME..."
 
+# Back up nanobot.json BEFORE any git operations — migrations need it even
+# after git checkout removes it from the repo (v1.3.17+).
+NANOBOT_BACKUP="/tmp/${INSTANCE_NAME}-nanobot-backup.json"
+if [ -f config/nanobot.json ]; then
+  cp config/nanobot.json "$NANOBOT_BACKUP"
+  echo "Backed up config/nanobot.json → $NANOBOT_BACKUP"
+fi
+
 # When called from Mini App the process already runs as $INSTANCE_NAME,
 # so sudo -u is unnecessary and unavailable. When called as root (CLI),
 # we drop privileges for git/npm to avoid root-owned files.

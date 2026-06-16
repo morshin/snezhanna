@@ -12,9 +12,15 @@
 const fs   = require('fs');
 const path = require('path');
 
-const ROOT         = path.join(__dirname, '..');
-const NANOBOT_JSON = path.join(ROOT, 'config', 'nanobot.json');
-const ENV_FILE     = path.join(ROOT, '.env');
+const ROOT          = path.join(__dirname, '..');
+const NANOBOT_JSON  = path.join(ROOT, 'config', 'nanobot.json');
+const ENV_FILE      = path.join(ROOT, '.env');
+
+// update.sh backs up nanobot.json before git operations (it gets deleted by
+// git checkout when upgrading from v1.3.16 → v1.3.17+ since the file was
+// removed from the repo). Check the backup as a fallback.
+const INSTANCE_NAME = path.basename(ROOT);
+const NANOBOT_BACKUP = `/tmp/${INSTANCE_NAME}-nanobot-backup.json`;
 
 // Mapping: nanobot.json path → { envKey, default }
 // Only fields that tenants commonly customise per-instance.
@@ -42,15 +48,19 @@ const MAPPINGS = [
 exports.description = 'Migrate config/nanobot.json tenant values → .env';
 
 exports.run = async function () {
-  if (!fs.existsSync(NANOBOT_JSON)) {
-    return { applied: false, message: 'config/nanobot.json not found — nothing to migrate' };
+  const source = fs.existsSync(NANOBOT_JSON) ? NANOBOT_JSON
+               : fs.existsSync(NANOBOT_BACKUP) ? NANOBOT_BACKUP
+               : null;
+
+  if (!source) {
+    return { applied: false, message: 'config/nanobot.json not found (no backup either) — nothing to migrate' };
   }
 
   let cfg;
   try {
-    cfg = JSON.parse(fs.readFileSync(NANOBOT_JSON, 'utf8'));
+    cfg = JSON.parse(fs.readFileSync(source, 'utf8'));
   } catch (e) {
-    return { applied: false, message: `Could not parse nanobot.json: ${e.message}` };
+    return { applied: false, message: `Could not parse ${source}: ${e.message}` };
   }
 
   // Read current .env content
