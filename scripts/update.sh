@@ -23,6 +23,14 @@ else
   RUN=""
 fi
 
+# Stash local changes (e.g. tenant-specific config/nanobot.json) so checkout succeeds
+STASHED=false
+if ! $RUN git diff --quiet || ! $RUN git diff --cached --quiet; then
+  $RUN git stash push -q -m "update.sh: before update"
+  STASHED=true
+  echo "Local changes stashed"
+fi
+
 if [ "$DEV_MODE" = true ]; then
   echo "⚠  --dev mode: pulling latest master"
   $RUN git fetch origin -q
@@ -36,6 +44,12 @@ else
   $RUN git fetch --tags -q
   $RUN git checkout -q "$LATEST_TAG"
   REF="$LATEST_TAG"
+fi
+
+# Restore stashed changes; warn on conflict but don't abort the update
+if [ "$STASHED" = true ]; then
+  $RUN git stash pop -q && echo "Local changes restored" \
+    || echo "⚠  Stash pop had conflicts — run 'git stash show' to review and restore manually"
 fi
 
 $RUN npm install --production --ignore-scripts -q
