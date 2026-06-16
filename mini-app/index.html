@@ -1733,6 +1733,8 @@
     }
   }
 
+  let _latestVersion = null;
+
   async function loadVersionInfo() {
     const footer = document.getElementById('settingsFooter');
     const updateBtn = document.getElementById('systemUpdateBtn');
@@ -1740,6 +1742,7 @@
     try {
       const data = await api('GET', '/api/system/version');
       if (footer) footer.textContent = `v${data.current}`;
+      _latestVersion = data.latest || null;
       if (data.updateAvailable && data.latest) {
         if (updateBtn) updateBtn.disabled = false;
         if (versionBadge) versionBadge.innerHTML = `<a href="https://github.com/morshin/snezhanna/releases/tag/v${data.latest}" target="_blank" title="Открыть описание нового релиза на GitHub" style="color:var(--tg-theme-link-color,#2481cc);text-decoration:none">→ v${data.latest}</a>`;
@@ -1751,6 +1754,58 @@
       if (footer) footer.textContent = '';
       if (updateBtn) updateBtn.disabled = true;
     }
+  }
+
+  function bindUpdateBtn() {
+    const btn = document.getElementById('systemUpdateBtn');
+    const versionBadge = document.getElementById('systemVersionBadge');
+    const footer = document.getElementById('settingsFooter');
+    if (!btn) return;
+    btn.addEventListener('click', async () => {
+      if (!confirm('Обновить бота? git pull + npm install + перезапуск. Займёт ~60 секунд.')) return;
+      const targetVersion = _latestVersion;
+      btn.disabled = true;
+      if (versionBadge) { versionBadge.style.color = 'var(--tg-theme-hint-color,#999)'; versionBadge.textContent = '⏳ обновляю...'; }
+      try {
+        await api('POST', '/api/system/update');
+      } catch {
+        if (versionBadge) { versionBadge.style.color = '#e53935'; versionBadge.textContent = '❌ не прошло, попробуй позже'; }
+        setTimeout(() => loadVersionInfo(), 5000);
+        return;
+      }
+      // Poll until version changes or timeout (~2 min total)
+      const started = Date.now();
+      const MAX_WAIT = 120000;
+      const POLL_INTERVAL = 5000;
+      const INITIAL_WAIT = 15000;
+      await new Promise(r => setTimeout(r, INITIAL_WAIT));
+      const poll = async () => {
+        if (Date.now() - started > MAX_WAIT) {
+          if (versionBadge) { versionBadge.style.color = '#e53935'; versionBadge.textContent = '❌ не прошло, попробуй позже'; }
+          setTimeout(() => loadVersionInfo(), 5000);
+          return;
+        }
+        try {
+          const data = await api('GET', '/api/system/version');
+          if (targetVersion && data.current === targetVersion) {
+            if (footer) footer.textContent = `v${data.current}`;
+            if (versionBadge) { versionBadge.style.color = 'var(--tg-theme-hint-color,#999)'; versionBadge.textContent = `✅ обновлено до v${data.current}`; }
+            setTimeout(() => loadVersionInfo(), 4000);
+          } else if (!targetVersion && data.current) {
+            // version known, just show success
+            if (footer) footer.textContent = `v${data.current}`;
+            if (versionBadge) { versionBadge.style.color = 'var(--tg-theme-hint-color,#999)'; versionBadge.textContent = `✅ обновлено до v${data.current}`; }
+            setTimeout(() => loadVersionInfo(), 4000);
+          } else {
+            setTimeout(poll, POLL_INTERVAL);
+          }
+        } catch {
+          // bot is restarting — keep polling
+          setTimeout(poll, POLL_INTERVAL);
+        }
+      };
+      poll();
+    });
   }
 
 
@@ -2154,7 +2209,6 @@
         <span class="settings-row-label">Обновить бота</span>
         <button class="settings-form-btn secondary" id="systemUpdateBtn" style="width:auto;padding:6px 14px" disabled>Обновить</button>
         <span id="systemVersionBadge" style="font-size:12px;color:var(--tg-theme-hint-color,#999);margin-left:6px"></span>
-        <span class="save-indicator" id="si_update"></span>
       </div>
     </div>
     <div style="text-align:center;padding:12px 0 4px;font-size:12px;color:var(--tg-theme-hint-color,#999)" id="settingsFooter">…</div>`;
@@ -2579,7 +2633,7 @@
 
     bindSystemBtn('systemRestartBtn', '/api/system/restart', 'Перезапустить бота? Соединение прервётся на несколько секунд.', 'si_restart');
     bindSystemBtn('systemStartBtn',   '/api/system/start',   null, 'si_restart');
-    bindSystemBtn('systemUpdateBtn',  '/api/system/update',  'Обновить бота? git pull + npm install + перезапуск. Займёт несколько секунд.', 'si_update');
+    bindUpdateBtn();
   }
 
   const PARAM_TOGGLES = [
