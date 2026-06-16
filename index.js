@@ -1644,6 +1644,28 @@ async function main() {
     if (!google.isAuthorized()) {
       setTimeout(() => offerGoogleAuth(appState.chatId), 2000);
     }
+
+    // Check for updates ~10s after startup (non-blocking, same logic as briefing)
+    setTimeout(async () => {
+      try {
+        const updateInfo = await releaseCheck.checkForUpdate();
+        if (!updateInfo) return;
+        const { release, summary } = updateInfo;
+        const lines = [`🆕 *Доступно обновление ${release.tag}*`];
+        if (summary) lines.push('', summary);
+        lines.push('', `[Подробнее →](${release.url})`);
+        await bot.sendMessage(appState.chatId, lines.join('\n'), {
+          parse_mode: 'Markdown',
+          reply_markup: { inline_keyboard: [[
+            { text: '🚀 Обновить сейчас', callback_data: 'update:confirm' },
+            { text: 'Позже',              callback_data: 'update:skip'    }
+          ]] }
+        });
+        console.log(`[ReleaseCheck] startup: notified about ${release.tag}`);
+      } catch (e) {
+        console.error('[ReleaseCheck] startup check error:', e.message);
+      }
+    }, 10000);
   } else {
     console.log('[Snezhanna] No chatId saved — will send startup message on first message from owner');
     pendingStartup = true;
