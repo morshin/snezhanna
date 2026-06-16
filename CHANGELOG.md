@@ -9,6 +9,17 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), [Semantic Vers
 <!-- Format: - <One-sentence description> (#<issue or branch ref>) -->
 <!-- Categories: Added | Changed | Fixed | Security | Removed -->
 
+## [1.3.16] — 2026-06-16
+
+### Added
+
+- **Update result in chat:** after restarting from an update the bot sends ✅ Обновился до vX.Y.Z or ❌ Обновление не прошло depending on whether the version actually changed
+- **Update progress in Mini App:** version badge shows ⏳ обновляю... while the update runs, then ✅ обновлено до vX.Y.Z or ❌ не прошло — polls /api/system/version every 5 s and handles bot restart gaps gracefully
+
+### Fixed
+
+- **update.sh:** stashes local uncommitted changes (e.g. tenant config/nanobot.json) before git checkout and restores them after, so tenants with customised configs no longer get a checkout failure
+
 ## [1.3.15] — 2026-06-16
 
 ### Added
