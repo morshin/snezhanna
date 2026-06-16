@@ -9,6 +9,17 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), [Semantic Vers
 <!-- Format: - <One-sentence description> (#<issue or branch ref>) -->
 <!-- Categories: Added | Changed | Fixed | Security | Removed -->
 
+## [1.3.15] — 2026-06-16
+
+### Added
+
+- **Self-update from chat:** new `update_bot` tool lets the bot check for a newer release and trigger `update.sh` via a Telegram button click — injection-safe because the actual exec requires a physical button press, not just a chat message
+- **Startup update check:** bot checks GitHub for a newer release ~10 seconds after startup and sends the same update notification it would send after the morning briefing — covers tenants with briefing disabled or deployed mid-day
+
+### Fixed
+
+- **Cumulative release changelog:** update notification now summarises all versions between the installed version and latest, not just the latest release body — tenants several versions behind no longer miss intermediate changes
+
 ## [1.3.14] — 2026-06-15
 
 ### Fixed
