@@ -232,6 +232,27 @@ async function _askClaude(userMessage, requestType = 'text', meta = {}) {
             console.log(`[Tools] Calling ${block.name}:`, JSON.stringify(block.input));
             try {
               const result = await executeTool(block.name, block.input);
+
+              // update_bot: send a Telegram button so the actual exec requires
+              // a physical user click — cannot be triggered by prompt injection.
+              if (block.name === 'update_bot' && result.confirm_via_button) {
+                const updateChatId = appState.chatId;
+                if (updateChatId) {
+                  bot.sendMessage(updateChatId,
+                    `🆕 Подтверди обновление с v${result.from} до ${result.to}\n_Бот перезапустится на ~60 секунд_`,
+                    {
+                      parse_mode: 'Markdown',
+                      reply_markup: { inline_keyboard: [[
+                        { text: '✅ Запустить обновление', callback_data: 'update:run' },
+                        { text: '❌ Отмена',               callback_data: 'update:skip' }
+                      ]] }
+                    }
+                  ).catch(e => console.error('[UpdateBot] button send error:', e.message));
+                }
+                delete result.confirm_via_button;
+                result.button_sent = true;
+              }
+
               toolResults.push({
                 type: 'tool_result',
                 tool_use_id: block.id,
