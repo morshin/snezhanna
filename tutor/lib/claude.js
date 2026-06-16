@@ -11,7 +11,7 @@ const langWeek = require('./lang-week');
 const storage = require('./storage');
 
 // M-1: читаем из общего конфига чтобы не дублировать значения
-const config = require('../../config/nanobot.json');
+const config = require('../../lib/config');
 const MAX_MESSAGES = config.history.max_messages;
 const KEEP_LAST = config.history.keep_last;
 const MODEL = config.model;

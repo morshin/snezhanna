@@ -24,7 +24,7 @@ require('dotenv').config({ path: require('path').join(__dirname, '../.env') });
 const fs   = require('fs');
 const path = require('path');
 
-const config = JSON.parse(fs.readFileSync(path.join(__dirname, '../config/nanobot.json'), 'utf8'));
+const config = require('../lib/config');
 const google = require('../lib/google');
 const gdrive = require('../lib/gdrive');
 

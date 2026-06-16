@@ -10,14 +10,7 @@ const BOT_TOKEN = process.env.WATCHDOG_BOT_TOKEN;
 const OWNER_ID = process.env.TELEGRAM_ALLOWED_USER_ID.replace('@', '');
 const REPORT_CHAT_ID = process.env.ZHORA_REPORT_CHAT || '';
 
-// Read self_repo from nanobot.json (fallback to default)
-let GITHUB_REPO = 'morshin/snezhanna';
-try {
-  const cfg = JSON.parse(require('fs').readFileSync(
-    require('path').join(__dirname, '../config/nanobot.json'), 'utf8'
-  ));
-  if (cfg.github && cfg.github.self_repo) GITHUB_REPO = cfg.github.self_repo;
-} catch (e) { /* use default */ }
+const GITHUB_REPO = process.env.GITHUB_SELF_REPO || 'morshin/snezhanna';
 
 // ── Telegram send (no deps, pure https) ──────────────────────────────────────
 
