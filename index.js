@@ -37,7 +37,7 @@ const releaseCheck = require('./lib/release-check');
 // ── Config & Identity ─────────────────────────────────────────────────────────
 
 const config = require('./lib/config');
-const userName = settings.get('preferred_name') || config.user?.name || 'шеф';
+const userName = (settings.get('preferred_name') || config.user?.name || 'шеф').split(',')[0].trim();
 const assistantName = config.user?.assistant_name || 'Ассистент';
 
 function resolveIdentityPlaceholders(raw) {
@@ -55,14 +55,13 @@ const defaultIdentity = resolveIdentityPlaceholders(
 );
 
 function buildSystemPrompt(nowStr) {
-  const identity = resolveIdentityPlaceholders(settings.getIdentity(defaultIdentity));
+  const identityWithSettings = resolveIdentityPlaceholders(settings.getIdentityWithSettings(defaultIdentity));
   const tools = getAvailableTools();
   const skillContexts = skillContext.getAll();
   return [
     { type: 'text', text: coreIdentity, cache_control: { type: 'ephemeral' } },
-    { type: 'text', text: identity, cache_control: { type: 'ephemeral' } },
+    { type: 'text', text: identityWithSettings, cache_control: { type: 'ephemeral' } },
     { type: 'text', text: buildSkillsBlock(tools, skillContexts) },
-    { type: 'text', text: settings.getSystemPromptBlock() },
     { type: 'text', text: `Сейчас: ${nowStr} (${config.timezone}).` },
   ];
 }
