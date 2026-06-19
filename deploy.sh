@@ -320,6 +320,9 @@ ok "npm install done"
 # ── nanobot.json ──────────────────────────────────────────────────────────────
 
 step "Configuration files"
+if [ ! -f "$INSTANCE_DIR/config/nanobot.json" ]; then
+  cp "$INSTANCE_DIR/config/nanobot.json.example" "$INSTANCE_DIR/config/nanobot.json"
+fi
 node - "$INSTANCE_DIR/config/nanobot.json" \
      "$USER_NAME" "$ASSISTANT_NAME" "$TIMEZONE" "$PORT" "$GDRIVE_FOLDER" <<'EOF'
 const fs = require('fs');

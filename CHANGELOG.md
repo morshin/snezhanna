@@ -9,6 +9,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), [Semantic Vers
 <!-- Format: - <One-sentence description> (#<issue or branch ref>) -->
 <!-- Categories: Added | Changed | Fixed | Security | Removed -->
 
+## [1.3.22] — 2026-06-19
+
+### Fixed
+
+- **`deploy.sh` crashes on fresh clone with `ENOENT config/nanobot.json`:** added `config/nanobot.json.example` template (committed to repo) and a copy-if-missing step in `deploy.sh` before the config node script, mirroring the existing `.env.example` pattern
+
 ## [1.3.21] — 2026-06-19
 
 ### Fixed
