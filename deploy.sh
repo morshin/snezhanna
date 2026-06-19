@@ -148,7 +148,9 @@ if [ "$IN_REPO" = false ]; then
   if [ -d "$INSTANCE_DIR" ]; then
     echo
     yellow "  Directory $INSTANCE_DIR already exists (previous failed deploy?)."
+    printf '\e[?2004l\e[?1004l' 2>/dev/null || true
     read -rp "  Remove it and start fresh? [y/N]: " REMOVE_DIR
+    REMOVE_DIR=$(printf '%s' "$REMOVE_DIR" | tr -cd '[:alpha:]')
     [[ "$REMOVE_DIR" =~ ^[Yy]$ ]] || die "Aborted. Remove $INSTANCE_DIR manually and re-run."
     rm -rf "$INSTANCE_DIR"
     ok "Removed $INSTANCE_DIR"
@@ -290,7 +292,9 @@ echo
 echo "  Telegram user ID: $TELEGRAM_ALLOWED_USER_ID"
 bold "──────────────────────────────────────────────────"
 echo
+printf '\e[?2004l\e[?1004l' 2>/dev/null || true
 read -rp "Proceed? [y/N] " CONFIRM
+CONFIRM=$(printf '%s' "$CONFIRM" | tr -cd '[:alpha:]')
 [[ "$CONFIRM" =~ ^[yY]$ ]] || { echo "Aborted."; exit 1; }
 
 # ── System user ───────────────────────────────────────────────────────────────

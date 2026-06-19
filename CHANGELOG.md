@@ -9,6 +9,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), [Semantic Vers
 <!-- Format: - <One-sentence description> (#<issue or branch ref>) -->
 <!-- Categories: Added | Changed | Fixed | Security | Removed -->
 
+## [1.3.21] — 2026-06-19
+
+### Fixed
+
+- **`deploy.sh` `[y/N]` prompts now work reliably over SSH:** re-disable bracketed paste mode before each confirmation read and strip non-alpha characters from input, fixing "Aborted." when the terminal injects `\e[200~y\e[201~` escape sequences around keystrokes
+
 ## [1.3.20] — 2026-06-19
 
 ### Changed
