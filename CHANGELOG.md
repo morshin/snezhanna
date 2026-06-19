@@ -9,6 +9,16 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), [Semantic Vers
 <!-- Format: - <One-sentence description> (#<issue or branch ref>) -->
 <!-- Categories: Added | Changed | Fixed | Security | Removed -->
 
+## [1.3.20] — 2026-06-19
+
+### Changed
+
+- **System prompt Layer 2 now includes user settings:** preferred name, formality, response style, persona, and character notes are merged into the cached IDENTITY block via `settings.getIdentityWithSettings()`; Layer 4 is now timestamp-only — reduces uncached tokens on every request
+
+### Fixed
+
+- **`preferred_name` with comma-separated variants** (e.g. `Вова, Вовик, Вов`) is now formatted as a list of alternatives in the prompt so Claude picks the right one by context; startup hardcoded messages now use only the first variant instead of the full string
+
 ## [1.3.19] — 2026-06-16
 
 ### Fixed
