@@ -9,6 +9,16 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), [Semantic Vers
 <!-- Format: - <One-sentence description> (#<issue or branch ref>) -->
 <!-- Categories: Added | Changed | Fixed | Security | Removed -->
 
+## [1.3.24] — 2026-06-24
+
+### Added
+
+- **`scripts/teardown.sh`:** removes a deployed instance cleanly (stops service, deletes instance dir, removes systemd unit, sudoers rule, and nginx config) in one command — `sudo bash scripts/teardown.sh <name>`
+
+### Changed
+
+- **`deploy.sh` now supports `--answers-file <path>` and `--yes` flags:** prompts are skipped for variables pre-set in the answers file (with inline validation); `--yes` skips the final confirmation — enables non-interactive redeploy cycle during debugging (`teardown.sh` → `deploy.sh --answers-file /root/deploy.local.env --yes`)
+
 ## [1.3.23] — 2026-06-24
 
 ### Added

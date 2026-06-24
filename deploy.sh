@@ -11,7 +11,9 @@
 # For adding a second instance on the SAME VPS see scripts/deploy-instance.sh
 #
 # Flags:
-#   --dev   Clone latest commit from master instead of the latest release tag
+#   --dev                    Clone latest commit from master instead of the latest release tag
+#   --answers-file <path>    Source variables from file, skipping prompts for pre-set values
+#   --yes                    Skip the final confirmation prompt (use with --answers-file)
 
 set -euo pipefail
 trap 'echo ""; red "Deploy failed at line $LINENO (exit code: $?)"; exit 1' ERR
@@ -84,15 +86,22 @@ check_node() {
 # ── Flags ─────────────────────────────────────────────────────────────────────
 
 DEV_MODE=false
-for arg in "$@"; do
-  [[ "$arg" == "--dev" ]] && DEV_MODE=true
+ANSWERS_FILE=""
+YES_MODE=false
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --dev)           DEV_MODE=true ;;
+    --answers-file)  shift; ANSWERS_FILE="${1:-}" ;;
+    --yes)           YES_MODE=true ;;
+  esac
+  shift
 done
 
 # ── Root check ────────────────────────────────────────────────────────────────
 
 require_root
 
-DEPLOY_SCRIPT_VERSION="1.3.9"
+DEPLOY_SCRIPT_VERSION="1.4.0"
 
 # Disable terminal modes that inject escape sequences into stdin during read:
 #   ?2004l — bracketed paste mode (sends \e[200~ / \e[201~ around pasted text)
@@ -105,6 +114,13 @@ bold "║        Snezhanna — Deployment Script              ║"
 bold "╚══════════════════════════════════════════════════╝"
 echo "  Script version: $DEPLOY_SCRIPT_VERSION"
 echo
+
+if [ -n "$ANSWERS_FILE" ]; then
+  [ -f "$ANSWERS_FILE" ] || die "Answers file not found: $ANSWERS_FILE"
+  # shellcheck source=/dev/null
+  source "$ANSWERS_FILE"
+  ok "Loaded answers from $ANSWERS_FILE"
+fi
 
 # ── Detect mode: clone needed or already in repo ─────────────────────────────
 
@@ -136,10 +152,15 @@ if [ "$IN_REPO" = false ]; then
   fi
 
   DEFAULT_REPO="https://github.com/morshin/snezhanna"
-  read -rp "  Repository URL [$DEFAULT_REPO]: " REPO_URL
+  REPO_URL="${REPO_URL:-}"
+  if [ -z "$REPO_URL" ]; then
+    read -rp "  Repository URL [$DEFAULT_REPO]: " REPO_URL
+  fi
   REPO_URL="${REPO_URL:-$DEFAULT_REPO}"
 
-  read -rp "  Bot directory name (e.g. alice): " DIR_NAME
+  if [ -z "${DIR_NAME:-}" ]; then
+    read -rp "  Bot directory name (e.g. alice): " DIR_NAME
+  fi
   DIR_NAME=$(printf '%s' "$DIR_NAME" | tr -cd 'a-zA-Z0-9_-')
   [ -z "$DIR_NAME" ] && die "Directory name is required"
   echo "  → /opt/$DIR_NAME"
@@ -148,12 +169,17 @@ if [ "$IN_REPO" = false ]; then
   if [ -d "$INSTANCE_DIR" ]; then
     echo
     yellow "  Directory $INSTANCE_DIR already exists (previous failed deploy?)."
-    printf '\e[?2004l\e[?1004l' 2>/dev/null || true
-    read -rp "  Remove it and start fresh? [y/N]: " REMOVE_DIR
-    REMOVE_DIR=$(printf '%s' "$REMOVE_DIR" | tr -cd '[:alpha:]')
-    [[ "$REMOVE_DIR" =~ ^[Yy]$ ]] || die "Aborted. Remove $INSTANCE_DIR manually and re-run."
-    rm -rf "$INSTANCE_DIR"
-    ok "Removed $INSTANCE_DIR"
+    if [ "$YES_MODE" = true ]; then
+      rm -rf "$INSTANCE_DIR"
+      ok "Removed $INSTANCE_DIR (--yes)"
+    else
+      printf '\e[?2004l\e[?1004l' 2>/dev/null || true
+      read -rp "  Remove it and start fresh? [y/N]: " REMOVE_DIR
+      REMOVE_DIR=$(printf '%s' "$REMOVE_DIR" | tr -cd '[:alpha:]')
+      [[ "$REMOVE_DIR" =~ ^[Yy]$ ]] || die "Aborted. Remove $INSTANCE_DIR manually and re-run."
+      rm -rf "$INSTANCE_DIR"
+      ok "Removed $INSTANCE_DIR"
+    fi
   fi
 
   if [ "$DEV_MODE" = true ]; then
@@ -187,20 +213,24 @@ INSTANCE_NAME="$(basename "$INSTANCE_DIR")"
 
 step "Bot configuration"
 
-read -rp "  Bot name (e.g. Алиса): "           ASSISTANT_NAME
+[ -n "${ASSISTANT_NAME:-}" ] || read -rp "  Bot name (e.g. Алиса): " ASSISTANT_NAME
 [ -z "$ASSISTANT_NAME" ] && die "Bot name is required"
 
-read -rp "  User name (e.g. Алекс): "          USER_NAME
+[ -n "${USER_NAME:-}" ] || read -rp "  User name (e.g. Алекс): " USER_NAME
 [ -z "$USER_NAME" ] && die "User name is required"
 
-while true; do
-  echo "  Common timezones: Europe/Moscow  Europe/Madrid  Europe/London"
-  echo "                    America/New_York  Asia/Almaty  Asia/Dubai"
-  read -rp "  Timezone [Europe/Madrid]: " TIMEZONE
-  TIMEZONE="${TIMEZONE:-Europe/Madrid}"
-  [ -f "/usr/share/zoneinfo/$TIMEZONE" ] && break
-  red "  Unknown timezone '$TIMEZONE'. Use format Region/City (e.g. Europe/Moscow)"
-done
+if [ -z "${TIMEZONE:-}" ]; then
+  while true; do
+    echo "  Common timezones: Europe/Moscow  Europe/Madrid  Europe/London"
+    echo "                    America/New_York  Asia/Almaty  Asia/Dubai"
+    read -rp "  Timezone [Europe/Madrid]: " TIMEZONE
+    TIMEZONE="${TIMEZONE:-Europe/Madrid}"
+    [ -f "/usr/share/zoneinfo/$TIMEZONE" ] && break
+    red "  Unknown timezone '$TIMEZONE'. Use format Region/City (e.g. Europe/Moscow)"
+  done
+else
+  [ -f "/usr/share/zoneinfo/$TIMEZONE" ] || die "Unknown timezone in answers file: $TIMEZONE"
+fi
 
 # Auto-detect next available port
 USED_PORTS=$(grep -h '"port"' /opt/*/config/nanobot.json 2>/dev/null \
@@ -209,67 +239,101 @@ SUGGESTED_PORT=3001
 while echo "$USED_PORTS" | grep -qw "$SUGGESTED_PORT"; do
   SUGGESTED_PORT=$((SUGGESTED_PORT + 1))
 done
-read -rp "  Mini App port [$SUGGESTED_PORT]: "  PORT
+[ -n "${PORT:-}" ] || read -rp "  Mini App port [$SUGGESTED_PORT]: " PORT
 PORT="${PORT:-$SUGGESTED_PORT}"
 
-read -rp "  Google Drive folder name (e.g. Алиса): " GDRIVE_FOLDER
+[ -n "${GDRIVE_FOLDER:-}" ] || read -rp "  Google Drive folder name (e.g. Алиса): " GDRIVE_FOLDER
 [ -z "$GDRIVE_FOLDER" ] && die "Google Drive folder name is required"
 
-read -rp "  Domain for Mini App (e.g. alice.example.com, Enter to skip): " DOMAIN
-if [ -n "$DOMAIN" ]; then
-  while true; do
-    read -rp "  Admin email for Let's Encrypt: " LE_EMAIL
-    [[ "$LE_EMAIL" =~ ^[^@]+@[^@]+\.[^@]+$ ]] && break
-    red "  Enter a valid email address"
-  done
+if [ -z "${DOMAIN+x}" ]; then
+  read -rp "  Domain for Mini App (e.g. alice.example.com, Enter to skip): " DOMAIN
+fi
+if [ -n "${DOMAIN:-}" ]; then
+  if [ -z "${LE_EMAIL:-}" ]; then
+    while true; do
+      read -rp "  Admin email for Let's Encrypt: " LE_EMAIL
+      [[ "$LE_EMAIL" =~ ^[^@]+@[^@]+\.[^@]+$ ]] && break
+      red "  Enter a valid email address"
+    done
+  fi
 fi
 
 # ── API keys ──────────────────────────────────────────────────────────────────
 
 step "API keys"
-echo "  (input is hidden)"
-echo
 
 # Anthropic
-while true; do
-  read -rsp "  ANTHROPIC_API_KEY: " ANTHROPIC_API_KEY; echo
-  ANTHROPIC_API_KEY=$(printf '%s' "$ANTHROPIC_API_KEY" | grep -oE 'sk-ant-[A-Za-z0-9_-]+' | head -1 || true)
-  [[ "$ANTHROPIC_API_KEY" == sk-ant-* ]] && break
-  red "  Must start with sk-ant-  (got: ${ANTHROPIC_API_KEY:0:10}...)"
-done
+if [ -z "${ANTHROPIC_API_KEY:-}" ]; then
+  echo "  (input is hidden)"
+  while true; do
+    read -rsp "  ANTHROPIC_API_KEY: " ANTHROPIC_API_KEY; echo
+    ANTHROPIC_API_KEY=$(printf '%s' "$ANTHROPIC_API_KEY" | grep -oE 'sk-ant-[A-Za-z0-9_-]+' | head -1 || true)
+    [[ "$ANTHROPIC_API_KEY" == sk-ant-* ]] && break
+    red "  Must start with sk-ant-  (got: ${ANTHROPIC_API_KEY:0:10}...)"
+  done
+else
+  [[ "$ANTHROPIC_API_KEY" == sk-ant-* ]] || die "ANTHROPIC_API_KEY in answers file is invalid"
+  ok "ANTHROPIC_API_KEY (from answers file)"
+fi
 
 # Telegram bot token
-while true; do
-  read -rsp "  TELEGRAM_BOT_TOKEN: " TELEGRAM_BOT_TOKEN; echo
-  TELEGRAM_BOT_TOKEN=$(printf '%s' "$TELEGRAM_BOT_TOKEN" | grep -oE '[0-9]+:[A-Za-z0-9_-]+' | head -1 || true)
-  [[ "$TELEGRAM_BOT_TOKEN" =~ ^[0-9]+:[A-Za-z0-9_-]+$ ]] && break
-  red "  Invalid format (expected 123456:ABC-xyz)"
-done
+if [ -z "${TELEGRAM_BOT_TOKEN:-}" ]; then
+  echo "  (input is hidden)"
+  while true; do
+    read -rsp "  TELEGRAM_BOT_TOKEN: " TELEGRAM_BOT_TOKEN; echo
+    TELEGRAM_BOT_TOKEN=$(printf '%s' "$TELEGRAM_BOT_TOKEN" | grep -oE '[0-9]+:[A-Za-z0-9_-]+' | head -1 || true)
+    [[ "$TELEGRAM_BOT_TOKEN" =~ ^[0-9]+:[A-Za-z0-9_-]+$ ]] && break
+    red "  Invalid format (expected 123456:ABC-xyz)"
+  done
+else
+  [[ "$TELEGRAM_BOT_TOKEN" =~ ^[0-9]+:[A-Za-z0-9_-]+$ ]] || die "TELEGRAM_BOT_TOKEN in answers file is invalid"
+  ok "TELEGRAM_BOT_TOKEN (from answers file)"
+fi
 
 # Telegram user ID
-while true; do
-  read -rp "  TELEGRAM_ALLOWED_USER_ID: " TELEGRAM_ALLOWED_USER_ID
-  [[ "$TELEGRAM_ALLOWED_USER_ID" =~ ^[0-9]+$ ]] && break
-  red "  Must be a numeric Telegram user ID"
-done
+if [ -z "${TELEGRAM_ALLOWED_USER_ID:-}" ]; then
+  while true; do
+    read -rp "  TELEGRAM_ALLOWED_USER_ID: " TELEGRAM_ALLOWED_USER_ID
+    [[ "$TELEGRAM_ALLOWED_USER_ID" =~ ^[0-9]+$ ]] && break
+    red "  Must be a numeric Telegram user ID"
+  done
+else
+  [[ "$TELEGRAM_ALLOWED_USER_ID" =~ ^[0-9]+$ ]] || die "TELEGRAM_ALLOWED_USER_ID in answers file is invalid"
+  ok "TELEGRAM_ALLOWED_USER_ID (from answers file)"
+fi
 
 # Google OAuth
-while true; do
-  read -rsp "  GOOGLE_CLIENT_ID: " GOOGLE_CLIENT_ID; echo
-  GOOGLE_CLIENT_ID=$(printf '%s' "$GOOGLE_CLIENT_ID" | tr -cd '[:print:]' | tr -d ' ')
-  [ -n "$GOOGLE_CLIENT_ID" ] && break
-  red "  Cannot be empty"
-done
-while true; do
-  read -rsp "  GOOGLE_CLIENT_SECRET: " GOOGLE_CLIENT_SECRET; echo
-  GOOGLE_CLIENT_SECRET=$(printf '%s' "$GOOGLE_CLIENT_SECRET" | tr -cd '[:print:]' | tr -d ' ')
-  [ -n "$GOOGLE_CLIENT_SECRET" ] && break
-  red "  Cannot be empty"
-done
+if [ -z "${GOOGLE_CLIENT_ID:-}" ]; then
+  echo "  (input is hidden)"
+  while true; do
+    read -rsp "  GOOGLE_CLIENT_ID: " GOOGLE_CLIENT_ID; echo
+    GOOGLE_CLIENT_ID=$(printf '%s' "$GOOGLE_CLIENT_ID" | tr -cd '[:print:]' | tr -d ' ')
+    [ -n "$GOOGLE_CLIENT_ID" ] && break
+    red "  Cannot be empty"
+  done
+else
+  ok "GOOGLE_CLIENT_ID (from answers file)"
+fi
+if [ -z "${GOOGLE_CLIENT_SECRET:-}" ]; then
+  echo "  (input is hidden)"
+  while true; do
+    read -rsp "  GOOGLE_CLIENT_SECRET: " GOOGLE_CLIENT_SECRET; echo
+    GOOGLE_CLIENT_SECRET=$(printf '%s' "$GOOGLE_CLIENT_SECRET" | tr -cd '[:print:]' | tr -d ' ')
+    [ -n "$GOOGLE_CLIENT_SECRET" ] && break
+    red "  Cannot be empty"
+  done
+else
+  ok "GOOGLE_CLIENT_SECRET (from answers file)"
+fi
 
 # OpenAI (optional)
-read -rsp "  OPENAI_API_KEY (optional, Enter to skip): " OPENAI_API_KEY; echo
-OPENAI_API_KEY=$(printf '%s' "$OPENAI_API_KEY" | grep -oE 'sk-[A-Za-z0-9_-]+' | head -1 || true)
+if [ -z "${OPENAI_API_KEY+x}" ]; then
+  echo "  (input is hidden)"
+  read -rsp "  OPENAI_API_KEY (optional, Enter to skip): " OPENAI_API_KEY; echo
+  OPENAI_API_KEY=$(printf '%s' "$OPENAI_API_KEY" | grep -oE 'sk-[A-Za-z0-9_-]+' | head -1 || true)
+elif [ -n "${OPENAI_API_KEY:-}" ]; then
+  ok "OPENAI_API_KEY (from answers file)"
+fi
 
 # ── Confirmation ──────────────────────────────────────────────────────────────
 
@@ -292,10 +356,14 @@ echo
 echo "  Telegram user ID: $TELEGRAM_ALLOWED_USER_ID"
 bold "──────────────────────────────────────────────────"
 echo
-printf '\e[?2004l\e[?1004l' 2>/dev/null || true
-read -rp "Proceed? [y/N] " CONFIRM
-CONFIRM=$(printf '%s' "$CONFIRM" | tr -cd '[:alpha:]')
-[[ "$CONFIRM" =~ ^[yY]$ ]] || { echo "Aborted."; exit 1; }
+if [ "$YES_MODE" = true ]; then
+  ok "Skipping confirmation (--yes)"
+else
+  printf '\e[?2004l\e[?1004l' 2>/dev/null || true
+  read -rp "Proceed? [y/N] " CONFIRM
+  CONFIRM=$(printf '%s' "$CONFIRM" | tr -cd '[:alpha:]')
+  [[ "$CONFIRM" =~ ^[yY]$ ]] || { echo "Aborted."; exit 1; }
+fi
 
 # ── System user ───────────────────────────────────────────────────────────────
 
