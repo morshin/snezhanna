@@ -9,6 +9,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), [Semantic Vers
 <!-- Format: - <One-sentence description> (#<issue or branch ref>) -->
 <!-- Categories: Added | Changed | Fixed | Security | Removed -->
 
+## [1.3.29] — 2026-06-24
+
+### Removed
+
+- **`scripts/export-deploy-secrets.py` deleted:** logic folded into `teardown.sh` (since v1.3.28); standalone script was redundant. Updated `docs/deploy-new-server.md` to reflect the simplified two-step redeploy cycle.
+
 ## [1.3.28] — 2026-06-24
 
 ### Changed
