@@ -9,6 +9,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), [Semantic Vers
 <!-- Format: - <One-sentence description> (#<issue or branch ref>) -->
 <!-- Categories: Added | Changed | Fixed | Security | Removed -->
 
+## [1.3.28] — 2026-06-24
+
+### Changed
+
+- **`teardown.sh` now exports secrets and downloads latest `deploy.sh` automatically:** before removing files, exports all credentials and config from the instance to `/root/deploy.local.env`; then fetches the latest release `deploy.sh` to `/tmp/deploy.sh` — so after teardown the redeploy command works immediately with no manual steps.
+
 ## [1.3.27] — 2026-06-24
 
 ### Fixed
