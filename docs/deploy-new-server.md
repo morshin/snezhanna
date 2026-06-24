@@ -79,6 +79,31 @@ sudo bash /opt/<name>/scripts/update.sh
 
 ---
 
+## Debug: teardown → redeploy cycle
+
+When iterating on `deploy.sh` itself, you need to wipe and redeploy repeatedly without re-entering secrets.
+
+**One-time setup** — save secrets from an existing instance:
+
+```bash
+sudo python3 /opt/<name>/scripts/export-deploy-secrets.py /opt/<name>
+# writes /root/deploy.local.env (chmod 600)
+```
+
+**Each iteration:**
+
+```bash
+# 1. Tear down cleanly (service + files + systemd + sudoers + nginx)
+sudo bash /opt/<name>/scripts/teardown.sh <name>
+
+# 2. Redeploy without any prompts
+sudo bash /tmp/deploy.sh --answers-file /root/deploy.local.env --yes
+```
+
+`/root/deploy.local.env` survives the teardown — it's outside `/opt/<name>/`.
+
+---
+
 <details>
 <summary>Manual deployment (step by step)</summary>
 
