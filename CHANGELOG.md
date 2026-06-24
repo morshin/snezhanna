@@ -9,6 +9,16 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), [Semantic Vers
 <!-- Format: - <One-sentence description> (#<issue or branch ref>) -->
 <!-- Categories: Added | Changed | Fixed | Security | Removed -->
 
+## [1.3.23] — 2026-06-24
+
+### Added
+
+- **`scripts/export-deploy-secrets.py`:** extracts secrets and config from an existing instance into `/root/deploy.local.env`, making it easy to preserve credentials across teardown/redeploy cycles during debugging
+
+### Changed
+
+- **README rewritten with deploy-first structure:** sections now cover Deploy, First run, Update, Service management, Bot commands, Configuration, Mini App, and Scheduled tasks
+
 ## [1.3.22] — 2026-06-19
 
 ### Fixed
