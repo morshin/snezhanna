@@ -1,12 +1,16 @@
 #!/usr/bin/env python3
 """
-Export secrets and config from an existing instance to /root/deploy.local.env.
+Export secrets from an existing instance to /root/deploy.local.env.
 Used to preserve credentials across teardown/redeploy cycles during debugging.
+
+Exports: API keys, bot/user tokens, DIR_NAME, TIMEZONE, PORT, GDRIVE_FOLDER.
+Does NOT export ASSISTANT_NAME / USER_NAME — those are tenant-specific and
+deploy.sh will prompt for them if missing.
 
 Usage:
   sudo python3 scripts/export-deploy-secrets.py [/path/to/instance]
 
-Default instance path: directory containing this script's parent (i.e. the repo root).
+Default instance path: repo root (parent of this script's directory).
 """
 import json, os, sys
 
@@ -37,8 +41,8 @@ dir_name = os.path.basename(instance_dir)
 
 lines = [
     f'DIR_NAME={dir_name}',
-    f'ASSISTANT_NAME={cfg["user"]["assistant_name"]}',
-    f'USER_NAME={cfg["user"]["name"]}',
+    f'# ASSISTANT_NAME=  ← fill in: deploy.sh will prompt if missing',
+    f'# USER_NAME=       ← fill in: deploy.sh will prompt if missing',
     f'TIMEZONE={cfg["timezone"]}',
     f'PORT={cfg["mini_app"]["port"]}',
     f'GDRIVE_FOLDER={cfg["gdrive"]["root_folder"]}',
@@ -64,3 +68,5 @@ for line in lines:
         print(f'  {k}={"*" * 8}{v[-4:] if len(v) > 4 else "****"}')
     else:
         print(f'  {line}')
+print()
+print('⚠  Edit /root/deploy.local.env and fill in ASSISTANT_NAME and USER_NAME before deploying.')

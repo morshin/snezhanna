@@ -9,6 +9,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), [Semantic Vers
 <!-- Format: - <One-sentence description> (#<issue or branch ref>) -->
 <!-- Categories: Added | Changed | Fixed | Security | Removed -->
 
+## [1.3.26] — 2026-06-24
+
+### Fixed
+
+- **`scripts/export-deploy-secrets.py` no longer exports `ASSISTANT_NAME` / `USER_NAME`:** these are tenant-specific and should always be entered per deploy; previously they were copied from the source instance causing the new bot to inherit the wrong name; `deploy.sh` will now prompt for them if missing from the answers file
+
 ## [1.3.25] — 2026-06-24
 
 ### Fixed
