@@ -16,7 +16,7 @@ echo "Updating $INSTANCE_NAME..."
 
 # Back up nanobot.json BEFORE any git operations — migrations need it even
 # after git checkout removes it from the repo (v1.3.17+).
-NANOBOT_BACKUP="/tmp/${INSTANCE_NAME}-nanobot-backup.json"
+NANOBOT_BACKUP="$(mktemp "/tmp/${INSTANCE_NAME}-nanobot-backup.XXXXXX.json")"
 if [ -f config/nanobot.json ]; then
   cp config/nanobot.json "$NANOBOT_BACKUP"
   echo "Backed up config/nanobot.json → $NANOBOT_BACKUP"
