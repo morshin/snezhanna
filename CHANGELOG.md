@@ -9,6 +9,13 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), [Semantic Vers
 <!-- Format: - <One-sentence description> (#<issue or branch ref>) -->
 <!-- Categories: Added | Changed | Fixed | Security | Removed -->
 
+## [1.3.27] — 2026-06-24
+
+### Fixed
+
+- **Update notification showed "undefined" version and API URL:** `getReleasesSince` returned raw GitHub API objects (`tag_name`/`html_url`) but callers expected `.tag`/`.url` — fixed by normalising to `{ tag, url, body }` at the source; `checkForUpdate` also referenced non-existent `.version` field.
+- **`export-deploy-secrets.py` now exports `ASSISTANT_NAME`, `USER_NAME`, and `REPO_URL`:** previously these were commented out or missing, causing `deploy.sh` to prompt for them even when `--answers-file` was passed.
+
 ## [1.3.26] — 2026-06-24
 
 ### Fixed
