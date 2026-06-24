@@ -9,6 +9,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), [Semantic Vers
 <!-- Format: - <One-sentence description> (#<issue or branch ref>) -->
 <!-- Categories: Added | Changed | Fixed | Security | Removed -->
 
+## [1.3.25] — 2026-06-24
+
+### Fixed
+
+- **`scripts/update.sh` stash pop conflict on `package-lock.json`:** after `git stash pop`, always restore `package-lock.json` from the release tag via `git checkout HEAD -- package-lock.json` — the release version is always authoritative and conflicts here are spurious
+
 ## [1.3.24] — 2026-06-24
 
 ### Added

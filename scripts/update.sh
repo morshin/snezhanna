@@ -58,6 +58,8 @@ fi
 if [ "$STASHED" = true ]; then
   $RUN git stash pop -q && echo "Local changes restored" \
     || echo "⚠  Stash pop had conflicts — run 'git stash show' to review and restore manually"
+  # package-lock.json always comes from the release tag — discard any conflict
+  $RUN git checkout HEAD -- package-lock.json 2>/dev/null || true
 fi
 
 $RUN npm install --production --ignore-scripts -q
