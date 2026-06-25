@@ -160,8 +160,7 @@ sudo systemctl daemon-reload
 - **Runtime state** (chatId): `.nanobot/state.json` — gitignored, auto-created
 - **Tutor state** (chatId): `tutor/.tutor-state.json` — gitignored, auto-created
 - **Google OAuth token**: `token.json` — gitignored; obtained via `/auth <code>` flow in Telegram
-- **Google app credentials**: `credentials.json` — gitignored; must be a Desktop-type OAuth2 client
-- **All secrets**: `.env` — gitignored; loaded by dotenv and referenced in `systemd/snezhanna.service` as `EnvironmentFile`
+- **Secrets** (API keys, bot tokens, OAuth credentials): `.env` — gitignored; loaded by dotenv, referenced in `systemd/snezhanna.service` as `EnvironmentFile`; instance configuration goes in `config/nanobot.json`, not here
 
 ### Google OAuth flow
 
