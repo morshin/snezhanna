@@ -9,6 +9,11 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), [Semantic Vers
 <!-- Format: - <One-sentence description> (#<issue or branch ref>) -->
 <!-- Categories: Added | Changed | Fixed | Security | Removed -->
 
+## [1.3.41] — 2026-06-25
+
+### Fixed
+- Onboarding greeting now uses `config.user.name` instead of Telegram `first_name` — so bots deployed with a pre-configured name (e.g. "Ира") greet correctly even when the admin is the first to message
+
 ## [1.3.40] — 2026-06-25
 
 ### Changed
