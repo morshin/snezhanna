@@ -9,6 +9,21 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), [Semantic Vers
 <!-- Format: - <One-sentence description> (#<issue or branch ref>) -->
 <!-- Categories: Added | Changed | Fixed | Security | Removed -->
 
+## [1.3.36] — 2026-06-25
+
+### Fixed
+- Google OAuth: replaced deprecated OOB flow (`urn:ietf:wg:oauth:2.0:oob`) with `http://localhost` fallback — fixes "Error 400: invalid_request" on auth
+
+### Added
+- Google OAuth callback endpoint `GET /auth/google/callback` in the API server — when `mini_app.url` is set, Google redirects back automatically and the bot confirms in Telegram with no manual code copying
+- `config/nanobot.local.json` support in `lib/config.js` (deep-merged over `nanobot.json`, gitignored) — per-instance overrides survive `git pull`
+- `mini_app.url` config key: when set, auto-derives Google OAuth redirect URI; onboarding and `offerGoogleAuth()` show context-appropriate instructions
+- `deploy.sh`: writes `config/nanobot.local.json` with `mini_app.url` after successful TLS setup; final box shows correct Google Console redirect URI and auto-redirect instructions
+
+### Changed
+- `/auth` handler now accepts a full redirect URL (e.g. `http://localhost/?code=...`) in addition to a bare code — bot extracts and URL-decodes automatically
+- Onboarding Google auth message and `offerGoogleAuth()` share the same `isAutoRedirect` logic
+
 ## [1.3.35] — 2026-06-25
 
 ### Added

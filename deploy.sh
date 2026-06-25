@@ -546,6 +546,7 @@ journalctl -u "$INSTANCE_NAME" -n 8 --no-pager 2>/dev/null \
 # ── nginx + TLS ───────────────────────────────────────────────────────────────
 
 MINI_APP_URL=""
+AUTO_REDIRECT=false
 if [ -n "$DOMAIN" ]; then
   step "nginx + TLS ($DOMAIN)"
 
@@ -586,6 +587,18 @@ EOF
        --non-interactive --agree-tos -m "$LE_EMAIL" -q 2>/dev/null; then
     ok "TLS certificate issued — auto-renewal via certbot.timer"
     MINI_APP_URL="https://$DOMAIN"
+    AUTO_REDIRECT=true
+    # Write nanobot.local.json with mini_app.url so Google OAuth callback works automatically
+    cat > "$INSTANCE_DIR/config/nanobot.local.json" <<LOCALEOF
+{
+  "mini_app": {
+    "url": "https://$DOMAIN"
+  }
+}
+LOCALEOF
+    chown "$INSTANCE_NAME:$INSTANCE_NAME" "$INSTANCE_DIR/config/nanobot.local.json"
+    ok "nanobot.local.json written (mini_app.url: https://$DOMAIN)"
+    systemctl restart "$INSTANCE_NAME" 2>/dev/null || true
     # Verify the full HTTPS chain is reachable
     if curl -sf --max-time 10 "https://$DOMAIN/" -o /dev/null 2>/dev/null; then
       ok "Mini App reachable at https://$DOMAIN/"
@@ -609,12 +622,23 @@ bold "╠═══════════════════════�
 bold "║                                                          ║"
 bold "║  Next: authorize Google                                  ║"
 bold "║                                                          ║"
+if [ "$AUTO_REDIRECT" = true ]; then
+bold "║  1. Google Console → OAuth client →                      ║"
+bold "║     Authorized redirect URIs → add:                      ║"
+printf "║     \033[1m%-52s\033[0m ║\n" "https://$DOMAIN/auth/google/callback"
+bold "║  2. Open Telegram → find your bot                        ║"
+bold "║  3. Click the Google auth link the bot sends             ║"
+bold "║     (or /status to trigger it)                           ║"
+bold "║  4. Authorize → browser redirects automatically          ║"
+bold "║     Bot confirms in Telegram — done!                     ║"
+else
 bold "║  1. Open Telegram → find your bot                        ║"
 bold "║  2. Bot will send a Google auth URL on first start       ║"
 bold "║     (or send /status to trigger it)                      ║"
 bold "║  3. Visit the URL → authorize Calendar + Gmail + Drive   ║"
 bold "║  4. Copy code from the redirect URL (code=... param)     ║"
 bold "║  5. Send to bot: /auth <code>                            ║"
+fi
 bold "║                                                          ║"
 bold "║  After auth → onboarding wizard starts automatically     ║"
 bold "║                                                          ║"

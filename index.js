@@ -552,7 +552,7 @@ bot.on('message', async (msg) => {
 
   // /auth <code> — Google OAuth callback; must be reachable even during onboarding
   if (msg.text && msg.text.startsWith('/auth ') && !msg.text.startsWith('/auth2')) {
-    const code = msg.text.slice(6).trim();
+    const code = decodeURIComponent(msg.text.slice(6).trim());
     await handleGoogleAuthCode(code, msg.chat.id);
     return;
   }
@@ -580,7 +580,7 @@ bot.on('message', async (msg) => {
 
       // /auth <code> — Google OAuth callback (main account)
       if (userText.startsWith('/auth ')) {
-        const code = userText.slice(6).trim();
+        const code = decodeURIComponent(userText.slice(6).trim());
         await handleGoogleAuthCode(code, chatId);
         return;
       }
@@ -1061,33 +1061,44 @@ bot.on('business_message', (msg) => {
 // ── Google OAuth ──────────────────────────────────────────────────────────────
 
 async function offerGoogleAuth(chatId) {
-  const url = google.getAuthUrl();
+  const authUrl = google.getAuthUrl();
+  const miniAppUrl = config.mini_app && config.mini_app.url;
+  const redirectUri = (config.google && config.google.redirect_uri) || process.env.GOOGLE_REDIRECT_URI || (miniAppUrl ? `${miniAppUrl}/auth/google/callback` : '');
+  const isAutoRedirect = redirectUri && !redirectUri.startsWith('http://localhost');
+  const instructions = isAutoRedirect
+    ? `1\\. Нажми кнопку ниже — откроется браузер\n` +
+      `2\\. Войди в свой Google\\-аккаунт и разреши доступ\n` +
+      `3\\. Произойдёт автоматический редирект — всё готово\\!`
+    : `1\\. Нажми кнопку ниже — откроется браузер\n` +
+      `2\\. Войди в свой Google\\-аккаунт и разреши доступ\n` +
+      `3\\. Браузер покажет ошибку подключения — это нормально\n` +
+      `4\\. Скопируй значение \`code=\` из адресной строки \\(до следующего \`&\`\\)\n` +
+      `5\\. Отправь: \`/auth КОД\``;
   await bot.sendMessage(chatId,
-    `🔐 *Нужна авторизация Google*\n\n` +
-    `1\\. Нажми кнопку ниже — откроется браузер\n` +
-    `2\\. Войди в свой Google\\-аккаунт\n` +
-    `3\\. Разреши Calendar, Gmail, Drive\n` +
-    `4\\. Скопируй код из адресной строки, параметр \`code=\`\n` +
-    `5\\. Отправь: \`/auth КОД\``,
+    `🔐 *Нужна авторизация Google*\n\n${instructions}`,
     {
       parse_mode: 'MarkdownV2',
       reply_markup: {
         inline_keyboard: [[
-          { text: '🔗 Открыть Google →', url }
+          { text: '🔗 Открыть Google →', url: authUrl }
         ]]
       }
     }
   );
 }
 
+async function notifyGoogleAuthSuccess(chatId) {
+  if (appState.onboarding_step === 'waiting_google') {
+    await onboarding.resumeAfterGoogleAuth(bot, chatId, appState, config);
+  } else {
+    await bot.sendMessage(chatId, '✅ Google авторизован! Теперь работаю с Calendar и Gmail.');
+  }
+}
+
 async function handleGoogleAuthCode(code, chatId) {
   try {
     await google.saveToken(code);
-    if (appState.onboarding_step === 'waiting_google') {
-      await onboarding.resumeAfterGoogleAuth(bot, chatId, appState, config);
-    } else {
-      await bot.sendMessage(chatId, '✅ Google авторизован! Теперь работаю с Calendar и Gmail.');
-    }
+    await notifyGoogleAuthSuccess(chatId);
   } catch (err) {
     await bot.sendMessage(chatId, `❌ Ошибка авторизации: ${err.message}`);
   }
@@ -1659,7 +1670,8 @@ async function main() {
   console.log('[Snezhanna] Starting...');
 
   apiStart();
-  setApiContext(appState, state.save, rescheduleBriefing, rescheduleEmailPoll);
+  setApiContext(appState, state.save, rescheduleBriefing, rescheduleEmailPoll, bot,
+    () => notifyGoogleAuthSuccess(appState.chatId));
   setupSchedules();
 
   // Ensure Google Drive folder structure (non-blocking)

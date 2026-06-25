@@ -9,3 +9,4 @@ token.json
 *.pem
 data/
 config/nanobot.json
+config/nanobot.local.json

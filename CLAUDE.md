@@ -208,6 +208,7 @@ All cron schedules use `Europe/Madrid`. Dates/times shown to the owner are local
 - `gdrive.root_folder`: root folder name in Google Drive (default `"Snezhanna"`)
 - `integrations.strava` / `integrations.github` / `integrations.chat_monitor`: enable/disable optional integrations
 - `mini_app.port`: HTTP port for the Tasks Mini App API server (default 3001)
+- `mini_app.url`: public HTTPS URL of this instance's Mini App (e.g. `https://snezhanna.morshin.pro`); set per-instance in `config/nanobot.local.json` (gitignored), not in `nanobot.json`; used to auto-derive the Google OAuth redirect URI (`<url>/auth/google/callback`) — if absent, falls back to `http://localhost` (manual code copy flow)
 - `github.repos`: list of `{ repo: "owner/repo", project: "ProjectName" }` for GitHub Milestones; `project` is optional; `github.milestone_due_within_days`: show milestones due within this many days or already overdue (default 14)
 - `github.self_repo`: the bot's own repository slug (e.g. `"morshin/snezhanna"`) used by `create_github_issue` tool and `lib/release-check.js`
 - `github.app_id`: GitHub App ID for issue reporting — committed here (safe, just a number); private key stays in `.env` (not committed, repo is public)
