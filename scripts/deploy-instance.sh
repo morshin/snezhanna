@@ -6,7 +6,6 @@
 #
 # Prerequisites:
 #   - Repo already cloned to /opt/<name>/
-#   - credentials.json placed in /opt/<name>/
 #
 # Deploying on a FRESH server? Use deploy.sh instead:
 #   curl -fsSL https://raw.githubusercontent.com/morshin/snezhanna/master/deploy.sh \
@@ -138,17 +137,10 @@ echo "║     nano $INSTANCE_DIR/.env"
 echo "║     (ANTHROPIC_API_KEY, TELEGRAM_BOT_TOKEN,              ║"
 echo "║      TELEGRAM_ALLOWED_USER_ID, GOOGLE_CLIENT_ID/SECRET)  ║"
 echo "║                                                          ║"
-if [ ! -f "$INSTANCE_DIR/credentials.json" ]; then
-echo "║  2. Copy Google credentials:                             ║"
-echo "║     scp credentials.json server:$INSTANCE_DIR/"
-echo "║                                                          ║"
-echo "║  3. Start:                                               ║"
-else
 echo "║  2. Start:                                               ║"
-fi
 echo "║     sudo systemctl start $INSTANCE_NAME"
 echo "║                                                          ║"
-echo "║  4. Authorize Google — send /status to the bot           ║"
+echo "║  3. Authorize Google — send /status to the bot           ║"
 echo "║                                                          ║"
 echo "║  Logs:  journalctl -u $INSTANCE_NAME -f"
 echo "╚══════════════════════════════════════════════════════════╝"
