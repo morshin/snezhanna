@@ -9,6 +9,8 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), [Semantic Vers
 <!-- Format: - <One-sentence description> (#<issue or branch ref>) -->
 <!-- Categories: Added | Changed | Fixed | Security | Removed -->
 
+## [1.3.45] — 2026-06-25
+
 ### Fixed
 - `create_github_issue`: removed dead `uploadScreenshot` path (incompatible with Telegram relay); Claude now describes screenshot content as text in the issue body instead of attempting to attach the image
 
