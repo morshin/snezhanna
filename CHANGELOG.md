@@ -9,6 +9,15 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), [Semantic Vers
 <!-- Format: - <One-sentence description> (#<issue or branch ref>) -->
 <!-- Categories: Added | Changed | Fixed | Security | Removed -->
 
+## [1.3.38] — 2026-06-25
+
+### Added
+- TTS voice auto-selected during onboarding based on bot persona: `male_*` → `onyx`, `female_mature` → `shimmer`, `female_young` → `nova`
+- Voice selector in Mini App Settings → «Личность бота»: dropdown with five OpenAI TTS voices (`nova`, `shimmer`, `alloy`, `echo`, `onyx`) saved to user settings
+
+### Changed
+- TTS call in `index.js` now reads voice from `settings.tts_voice` (user-overridable) with fallback to `config.voice.tts_voice`
+
 ## [1.3.37] — 2026-06-25
 
 ### Changed

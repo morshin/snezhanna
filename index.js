@@ -848,7 +848,8 @@ bot.on('message', async (msg) => {
     if (wantsVoice) {
       try {
         await bot.sendChatAction(chatId, 'record_voice');
-        const audio = await whisper.tts(reply);
+        const ttsVoice = settings.get('tts_voice') || config.voice?.tts_voice || 'nova';
+        const audio = await whisper.tts(reply, ttsVoice);
         const sentVoice = await bot.sendVoice(chatId, audio, {}, { filename: 'voice.mp3', contentType: 'audio/mpeg' });
         if (sentVoice && sentVoice.message_id) {
           const idx = history.findLastIndex(h => h.role === 'assistant');

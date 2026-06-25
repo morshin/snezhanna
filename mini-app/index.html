@@ -1868,6 +1868,19 @@
           ${makeSaveIndicator('char')}
         </div>
       </div>
+      <div class="settings-row">
+        <span class="settings-row-label">Голос</span>
+        <div class="settings-row-value">
+          ${makeSaveIndicator('voice')}
+          <select id="si_voice" style="background:var(--tg-theme-secondary-bg-color,#f0f0f0);border:1px solid rgba(0,0,0,0.1);border-radius:8px;padding:6px 10px;font-size:14px;color:var(--tg-theme-text-color,#000)">
+            <option value="nova"    ${(s.tts_voice||'nova')==='nova'    ? 'selected':''}>nova — женский, молодой</option>
+            <option value="shimmer" ${(s.tts_voice||'nova')==='shimmer' ? 'selected':''}>shimmer — женский, мягкий</option>
+            <option value="alloy"   ${(s.tts_voice||'nova')==='alloy'   ? 'selected':''}>alloy — нейтральный</option>
+            <option value="echo"    ${(s.tts_voice||'nova')==='echo'    ? 'selected':''}>echo — мужской</option>
+            <option value="onyx"    ${(s.tts_voice||'nova')==='onyx'    ? 'selected':''}>onyx — мужской, глубокий</option>
+          </select>
+        </div>
+      </div>
     </div>`;
 
     // ── РАСПИСАНИЕ ──
@@ -2243,6 +2256,9 @@
         saveSetting('character_notes', ta ? ta.value : '', 'char');
       });
     }
+
+    const voiceSel = document.getElementById('si_voice');
+    if (voiceSel) voiceSel.addEventListener('change', () => saveSetting('tts_voice', voiceSel.value, 'voice'));
 
     // Segmented toggles (formality, response_style)
     body.querySelectorAll('.seg-toggle-btn').forEach(btn => {
