@@ -37,7 +37,7 @@ The script will ask for:
 - Directory name, bot name and user, timezone
 - API keys: Anthropic, Telegram bot token, Telegram ID, Google Client ID + Secret, OpenAI (optional)
 
-The script then: clones the latest release into `/opt/<name>/`, generates `credentials.json`, configures the service, creates a systemd unit, and starts the bot.
+The script then: clones the latest release into `/opt/<name>/`, configures the service, creates a systemd unit, and starts the bot.
 
 **After startup:** the bot will send a Google authorization link. Visit it, grant access to Calendar + Gmail + Drive, copy the `code=...` from the address bar, and send it to the bot: `/auth <code>`. The onboarding wizard will start automatically on the first message.
 
@@ -118,15 +118,7 @@ sudo chown -R snezhanna:snezhanna /opt/snezhanna
 sudo -u snezhanna bash -c "cd /opt/snezhanna && npm install"
 ```
 
-### Step 3. Copy Google credentials
-
-```bash
-# From local machine to the new server
-scp credentials.json user@new-server:/opt/snezhanna/credentials.json
-sudo chown snezhanna:snezhanna /opt/snezhanna/credentials.json
-```
-
-### Step 4. Configure .env
+### Step 3. Configure .env
 
 ```bash
 sudo -u snezhanna cp /opt/snezhanna/.env.example /opt/snezhanna/.env
@@ -147,9 +139,9 @@ Optional:
 OPENAI_API_KEY=...               # for voice messages
 ```
 
-**Not needed** on a standalone server: `WATCHDOG_BOT_TOKEN`, `GOOGLE_TOKEN_FILE`, `STATE_FILE`, `GOOGLE_CREDENTIALS_FILE`, `TUTOR_BOT_TOKEN`.
+**Not needed** on a standalone server: `WATCHDOG_BOT_TOKEN`, `GOOGLE_TOKEN_FILE`, `STATE_FILE`, `TUTOR_BOT_TOKEN`.
 
-### Step 5. Configure config/nanobot.json
+### Step 4. Configure config/nanobot.json
 
 ```bash
 sudo nano /opt/snezhanna/config/nanobot.json
@@ -181,7 +173,7 @@ Key fields:
 
 `gdrive.root_folder` — unique folder name in Google Drive for this instance.
 
-### Step 6. Configure bot personality
+### Step 5. Configure bot personality
 
 ```bash
 sudo -u snezhanna cp /opt/snezhanna/identity/IDENTITY.template.md \
@@ -191,7 +183,7 @@ sudo nano /opt/snezhanna/identity/IDENTITY.md
 
 `{{USER_NAME}}` and `{{ASSISTANT_NAME}}` are substituted automatically from `config.user` on startup.
 
-### Step 7. Create the systemd service
+### Step 6. Create the systemd service
 
 ```bash
 sed 's|INSTANCE_NAME|snezhanna|g; s|INSTANCE_USER|snezhanna|g; s|INSTANCE_DIR|/opt/snezhanna|g' \
@@ -216,7 +208,7 @@ Expected lines on successful startup:
 [Bot] started
 ```
 
-### Step 8. Configure sudoers for service management from Mini App
+### Step 7. Configure sudoers for service management from Mini App
 
 ```bash
 printf 'snezhanna ALL=(ALL) NOPASSWD: /bin/systemctl restart snezhanna\nsnezhanna ALL=(ALL) NOPASSWD: /bin/systemctl start snezhanna\n' \
@@ -224,7 +216,7 @@ printf 'snezhanna ALL=(ALL) NOPASSWD: /bin/systemctl restart snezhanna\nsnezhann
 sudo chmod 440 /etc/sudoers.d/snezhanna-restart
 ```
 
-### Step 9. Authorize Google
+### Step 8. Authorize Google
 
 The bot will send an authorization link on first startup (or send `/status`):
 
@@ -236,13 +228,13 @@ The bot will send an authorization link on first startup (or send `/status`):
 
 The bot will create the Google Drive folder structure and be ready to use.
 
-### Step 10. Onboarding
+### Step 9. Onboarding
 
 On the first message, the bot will automatically launch the setup wizard: check integrations, ask for name, communication style, briefing and check-in schedule. Takes about 2 minutes.
 
 After onboarding, additional settings are available in the Mini App (button in the bot's menu).
 
-### Step 11. Verification
+### Step 10. Verification
 
 ```bash
 journalctl -u snezhanna -n 100

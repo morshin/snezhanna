@@ -437,27 +437,6 @@ chmod 600 "$ENV_FILE"
 chown "$INSTANCE_NAME:$INSTANCE_NAME" "$ENV_FILE"
 ok ".env written"
 
-# ── credentials.json ──────────────────────────────────────────────────────────
-
-if [ ! -f "$INSTANCE_DIR/credentials.json" ]; then
-  node - "$INSTANCE_DIR/credentials.json" "$GOOGLE_CLIENT_ID" "$GOOGLE_CLIENT_SECRET" <<'EOF'
-const fs = require('fs');
-const [,, out, id, secret] = process.argv;
-fs.writeFileSync(out, JSON.stringify({
-  installed: {
-    client_id: id,
-    client_secret: secret,
-    redirect_uris: ["http://localhost"]
-  }
-}, null, 2) + '\n');
-EOF
-  chmod 600 "$INSTANCE_DIR/credentials.json"
-  chown "$INSTANCE_NAME:$INSTANCE_NAME" "$INSTANCE_DIR/credentials.json"
-  ok "credentials.json generated"
-else
-  skip "credentials.json already exists"
-fi
-
 # ── IDENTITY.md ───────────────────────────────────────────────────────────────
 
 if [ ! -f "$INSTANCE_DIR/identity/IDENTITY.md" ]; then

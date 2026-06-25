@@ -2,8 +2,8 @@
 
 Each user gets an isolated copy of the bot: their own directory `/opt/<name>`, their own system user, their own systemd service, and their own Mini App port.
 
-> **Quick path** — the script `scripts/deploy-instance.sh` performs steps 1–8 automatically.  
-> Clone the repo, place `credentials.json`, run the script and fill in `.env`.  
+> **Quick path** — the script `scripts/deploy-instance.sh` performs steps 1–7 automatically.  
+> Clone the repo, run the script and fill in `.env`.  
 > The manual step-by-step breakdown below is for understanding or troubleshooting.
 
 In the examples below the instance name is `ira`. Substitute your actual name everywhere: `eugenio`, `lena`, etc.
@@ -21,13 +21,13 @@ sudo bash /opt/ira/scripts/deploy-instance.sh
 # → will ask: bot name, user name, timezone, port, Drive folder
 # → creates user, service, sudoers, .env and nanobot.json
 
-# 4. Fill in API keys
+# 3. Fill in API keys
 sudo nano /opt/ira/.env
 
-# 5. Start
+# 4. Start
 sudo systemctl start ira
 
-# 6. Authorize Google — send /status to the bot
+# 5. Authorize Google — send /status to the bot
 ```
 
 ---
@@ -97,12 +97,12 @@ Optional:
 OPENAI_API_KEY=...               # for voice messages
 ```
 
-> `GOOGLE_TOKEN_FILE`, `STATE_FILE`, `GOOGLE_CREDENTIALS_FILE` are not needed —
+> `GOOGLE_TOKEN_FILE` and `STATE_FILE` are not needed —
 > each instance has its own directory, so default paths do not conflict.
 
 ---
 
-## Step 5. Configure config/nanobot.json
+## Step 4. Configure config/nanobot.json
 
 ```bash
 sudo -u ira nano /opt/ira/config/nanobot.json
@@ -136,7 +136,7 @@ sudo -u ira nano /opt/ira/config/nanobot.json
 
 ---
 
-## Step 6. Configure bot personality
+## Step 5. Configure bot personality
 
 ```bash
 sudo -u ira cp /opt/ira/identity/IDENTITY.template.md /opt/ira/identity/IDENTITY.md
@@ -147,7 +147,7 @@ sudo nano /opt/ira/identity/IDENTITY.md
 
 ---
 
-## Step 7. Create the systemd service
+## Step 6. Create the systemd service
 
 ```bash
 sed 's|INSTANCE_NAME|ira|g; s|INSTANCE_USER|ira|g; s|INSTANCE_DIR|/opt/ira|g' \
@@ -175,7 +175,7 @@ Expected lines on successful startup:
 
 ---
 
-## Step 8. Configure sudoers for restart from Mini App
+## Step 7. Configure sudoers for restart from Mini App
 
 ```bash
 echo "ira ALL=(ALL) NOPASSWD: /bin/systemctl restart ira" \
@@ -185,7 +185,7 @@ sudo chmod 440 /etc/sudoers.d/ira-restart
 
 ---
 
-## Step 9. Authorize Google
+## Step 8. Authorize Google
 
 The bot will send an authorization link on first startup (or send `/status`):
 
@@ -199,7 +199,7 @@ The bot will create the Google Drive folder structure and be ready to use.
 
 ---
 
-## Step 10. Onboarding
+## Step 9. Onboarding
 
 On the first message, the bot will automatically launch the setup wizard: check integrations, ask for name, communication style, briefing schedule. Takes about 2 minutes.
 
