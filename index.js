@@ -531,6 +531,32 @@ bot.on('message', async (msg) => {
     return;
   }
 
+  // /start — works in any state
+  if (msg.text === '/start') {
+    if (appState.onboarding_completed) {
+      const savedName = settings.get('preferred_name') || '';
+      const name = savedName ? savedName.split(',')[0].trim() : (msg.from && msg.from.first_name) || '';
+      const nameStr = name ? `, ${name}` : '';
+      await bot.sendMessage(msg.chat.id,
+        `Мы с тобой уже познакомились${nameStr} 😊 — /start нужен только при первом запуске.\n\nХочешь начать онбординг заново?`,
+        { reply_markup: { inline_keyboard: [[
+          { text: '🔄 Да, начать заново', callback_data: 'start:restart' },
+          { text: 'Нет, всё хорошо',     callback_data: 'start:cancel'  },
+        ]] } }
+      );
+    } else {
+      await onboarding.restart(bot, msg.chat.id, msg, appState, config);
+    }
+    return;
+  }
+
+  // /auth <code> — Google OAuth callback; must be reachable even during onboarding
+  if (msg.text && msg.text.startsWith('/auth ') && !msg.text.startsWith('/auth2')) {
+    const code = msg.text.slice(6).trim();
+    await handleGoogleAuthCode(code, msg.chat.id);
+    return;
+  }
+
   // Onboarding in progress — intercept before normal processing
   if (!appState.onboarding_completed) {
     if (!appState.onboarding_step) {
@@ -973,6 +999,14 @@ bot.on('callback_query', async (query) => {
       await onboarding.handleCallback(bot, query, appState);
       return;
     }
+
+    if (data === 'start:restart') {
+      const fakeMsg = { from: query.from, chat: query.message.chat };
+      await onboarding.restart(bot, chatId, fakeMsg, appState, config);
+      return;
+    }
+
+    if (data === 'start:cancel') return;
 
     if (data === 'update:confirm') {
       await bot.sendMessage(chatId,

@@ -9,6 +9,14 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), [Semantic Vers
 <!-- Format: - <One-sentence description> (#<issue or branch ref>) -->
 <!-- Categories: Added | Changed | Fixed | Security | Removed -->
 
+## [1.3.35] — 2026-06-25
+
+### Added
+- `/start` now works in any state: restarts onboarding if not completed; if completed — shows a friendly prompt ("мы уже познакомились, хочешь заново?") with inline buttons
+
+### Fixed
+- `/auth <code>` was unreachable during onboarding (`waiting_google` step intercepted it before the handler) — moved both `/start` and `/auth` above the onboarding block in the message handler
+
 ## [1.3.34] — 2026-06-25
 
 ### Added
