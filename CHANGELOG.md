@@ -9,6 +9,11 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), [Semantic Vers
 <!-- Format: - <One-sentence description> (#<issue or branch ref>) -->
 <!-- Categories: Added | Changed | Fixed | Security | Removed -->
 
+## [1.3.34] — 2026-06-25
+
+### Added
+- Onboarding integration check now includes Mini App status (`✅ Mini App — запущен (порт 3001)` / `⚠️ не запущен`) via `api.isRunning()` and exported `PORT`
+
 ## [1.3.33] — 2026-06-25
 
 ### Changed
