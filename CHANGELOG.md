@@ -9,6 +9,11 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), [Semantic Vers
 <!-- Format: - <One-sentence description> (#<issue or branch ref>) -->
 <!-- Categories: Added | Changed | Fixed | Security | Removed -->
 
+## [1.3.49] — 2026-06-25
+
+### Fixed
+- `update.sh`: `git describe` in post-update phase now runs via `$RUN` (as the instance user) to avoid "dubious ownership" error when script is invoked with `sudo`
+
 ## [1.3.48] — 2026-06-25
 
 ### Added
