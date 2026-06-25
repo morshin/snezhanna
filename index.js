@@ -1682,6 +1682,17 @@ async function main() {
     gdrive.ensureDirs().catch(e => console.warn('[GDrive] ensureDirs error:', e.message));
   }
 
+  // If ALLOWED is a numeric ID, verify that saved chatId matches it.
+  // Protects against chatId mismatch after TELEGRAM_ALLOWED_USER_ID change or instance handoff.
+  // (When ALLOWED is a username we can't verify here — chatId is always numeric.)
+  if (appState.chatId && /^\d+$/.test(ALLOWED)) {
+    if (String(appState.chatId) !== ALLOWED) {
+      console.warn(`[SECURITY] Saved chatId ${appState.chatId} does not match ALLOWED (${ALLOWED}) — clearing chatId, will wait for owner's first message`);
+      appState.chatId = null;
+      state.save(appState);
+    }
+  }
+
   if (appState.chatId) {
     try {
       await sendToUser(`${userName}, я онлайн! 🦞`, {}, { urgent: true });
