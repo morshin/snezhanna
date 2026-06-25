@@ -9,6 +9,14 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), [Semantic Vers
 <!-- Format: - <One-sentence description> (#<issue or branch ref>) -->
 <!-- Categories: Added | Changed | Fixed | Security | Removed -->
 
+## [1.3.31] — 2026-06-25
+
+### Changed
+- Consolidated deploy docs into single `docs/deploy.md` (removed `docs/new-instance-setup.md` and `docs/deploy-new-server.md`)
+- Removed redundant `scripts/deploy-instance.sh` — `deploy.sh` already handles same-VPS via `IN_REPO` auto-detection
+- Removed dead `setup.sh` (legacy hardcoded script)
+- Removed dead credentials.json generation from `deploy.sh` and all remaining references across scripts and docs
+
 ## [1.3.30] — 2026-06-25
 
 ### Changed
