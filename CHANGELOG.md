@@ -9,6 +9,11 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), [Semantic Vers
 <!-- Format: - <One-sentence description> (#<issue or branch ref>) -->
 <!-- Categories: Added | Changed | Fixed | Security | Removed -->
 
+## [1.4.1] — 2026-06-25
+
+### Security
+- On startup, if the saved `chatId` doesn't match `TELEGRAM_ALLOWED_USER_ID` (numeric), it is cleared and the bot waits silently for the real owner's first message — prevents "я онлайн!" leaking to a previous user after instance handoff or config change
+
 ## [1.4.0] — 2026-06-25
 
 ### Security
