@@ -9,6 +9,8 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), [Semantic Vers
 <!-- Format: - <One-sentence description> (#<issue or branch ref>) -->
 <!-- Categories: Added | Changed | Fixed | Security | Removed -->
 
+## [1.3.46] — 2026-06-25
+
 ### Fixed
 - `create_github_issue` is no longer hidden when `integrations.github = false` — bug reporting must work on all instances regardless of the GitHub milestones integration flag; only `list_github_milestones` is now gated by that flag
 
