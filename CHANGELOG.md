@@ -9,6 +9,11 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), [Semantic Vers
 <!-- Format: - <One-sentence description> (#<issue or branch ref>) -->
 <!-- Categories: Added | Changed | Fixed | Security | Removed -->
 
+## [1.3.43] — 2026-06-25
+
+### Fixed
+- Migration `1.3.42-public-issues-token`: copies `github.public_issues_token` from `config/nanobot.json.example` into existing `config/nanobot.json` on update — the v1.3.42 `update.sh` merge approach didn't work because bash executes the old script version before `git checkout` replaces the file
+
 ## [1.3.42] — 2026-06-25
 
 ### Added
