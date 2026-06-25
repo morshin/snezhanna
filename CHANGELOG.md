@@ -9,6 +9,11 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), [Semantic Vers
 <!-- Format: - <One-sentence description> (#<issue or branch ref>) -->
 <!-- Categories: Added | Changed | Fixed | Security | Removed -->
 
+## [1.3.39] — 2026-06-25
+
+### Changed
+- `scripts/update.sh`: after update, checks if `mini_app.url` is set in `config/nanobot.local.json`; in interactive mode prompts the operator and writes it; in non-interactive mode (Mini App trigger) logs a warning
+
 ## [1.3.38] — 2026-06-25
 
 ### Added

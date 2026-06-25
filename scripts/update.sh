@@ -84,5 +84,35 @@ if [ -f .env.example ] && [ -f .env ]; then
   [ "$added" -gt 0 ] && echo "$added new var(s) merged into .env" || true
 fi
 
+# Ensure mini_app.url is set in nanobot.local.json (needed for Google OAuth callback)
+LOCAL_CFG="config/nanobot.local.json"
+HAS_URL=$($RUN node -e "
+  try {
+    const c = JSON.parse(require('fs').readFileSync('$LOCAL_CFG', 'utf8'));
+    process.stdout.write(c.mini_app && c.mini_app.url ? 'yes' : 'no');
+  } catch(e) { process.stdout.write('no'); }
+" 2>/dev/null || echo "no")
+
+if [ "$HAS_URL" != "yes" ]; then
+  if [ -t 0 ]; then
+    echo ""
+    echo "⚠  mini_app.url not set in $LOCAL_CFG (needed for Google OAuth callback)"
+    read -rp "   Enter public HTTPS URL (e.g. https://snezhanna.example.com) or Enter to skip: " MINI_APP_URL
+    if [ -n "$MINI_APP_URL" ]; then
+      $RUN node -e "
+        const fs = require('fs');
+        let cfg = {};
+        try { cfg = JSON.parse(fs.readFileSync('$LOCAL_CFG', 'utf8')); } catch(e) {}
+        cfg.mini_app = cfg.mini_app || {};
+        cfg.mini_app.url = '$MINI_APP_URL';
+        fs.writeFileSync('$LOCAL_CFG', JSON.stringify(cfg, null, 2) + '\n');
+      "
+      echo "   Saved mini_app.url to $LOCAL_CFG"
+    fi
+  else
+    echo "⚠  mini_app.url not set in $LOCAL_CFG — Google OAuth redirect will not work. Set it manually."
+  fi
+fi
+
 sudo systemctl restart "$INSTANCE_NAME"
 echo "Done. $INSTANCE_NAME restarted at $REF"
