@@ -9,6 +9,11 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), [Semantic Vers
 <!-- Format: - <One-sentence description> (#<issue or branch ref>) -->
 <!-- Categories: Added | Changed | Fixed | Security | Removed -->
 
+## [1.4.2] — 2026-06-25
+
+### Security
+- Mini App now shows a blank page to unauthorized users: `api()` checks for HTTP 401 and wipes the DOM, leaving an empty background — no tasks, calendar, or settings are visible
+
 ## [1.4.1] — 2026-06-25
 
 ### Security
