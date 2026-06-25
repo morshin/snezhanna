@@ -9,6 +9,11 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), [Semantic Vers
 <!-- Format: - <One-sentence description> (#<issue or branch ref>) -->
 <!-- Categories: Added | Changed | Fixed | Security | Removed -->
 
+## [1.3.44] — 2026-06-25
+
+### Fixed
+- `scripts/update.sh` now re-execs itself via `exec bash` after `git checkout` so all post-update steps (npm install, migrations, `.env` merge, `nanobot.json` merge) always run from the newly checked-out script inode — previously bash held the old inode and any code added to `update.sh` in the same release was silently skipped on first update
+
 ## [1.3.43] — 2026-06-25
 
 ### Fixed
