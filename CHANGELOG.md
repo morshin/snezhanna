@@ -9,6 +9,18 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), [Semantic Vers
 <!-- Format: - <One-sentence description> (#<issue or branch ref>) -->
 <!-- Categories: Added | Changed | Fixed | Security | Removed -->
 
+## [1.4.0] — 2026-06-25
+
+### Security
+- Mini App API now verifies that `user.id` (or username) in Telegram initData matches `TELEGRAM_ALLOWED_USER_ID`; previously any Telegram user with a bot-signed initData could access tasks, calendar, and settings
+
+### Added
+- `scripts/reset-onboarding.sh`: resets bot to pre-onboarding state (drops DB, clears state.json flags) while keeping integrations intact; works on any instance — service name derived from directory name, DB path from config
+
+### Fixed
+- `update.sh --dev`: use `FETCH_HEAD` instead of `origin/master` so dev-mode pull works on instances where the remote tracking ref is not set up
+- `update.sh`: `git describe` in post-update phase now runs via `$RUN` (as the instance user) to avoid "dubious ownership" error when invoked with `sudo`
+
 ## [1.3.49] — 2026-06-25
 
 ### Fixed
