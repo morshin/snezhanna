@@ -36,8 +36,7 @@
     "milestone_due_within_days": 14,
     "repos": [],
     "self_repo": "",
-    "app_id": "",
-    "public_issues_token": "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"
+    "app_id": ""
   },
   "chat_monitor": {
     "chats": []

@@ -9,6 +9,9 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), [Semantic Vers
 <!-- Format: - <One-sentence description> (#<issue or branch ref>) -->
 <!-- Categories: Added | Changed | Fixed | Security | Removed -->
 
+### Changed
+- `create_github_issue` availability now gated on `githubIssues.isConfigured()` (i.e. `GITHUB_ISSUES_TOKEN` or `GITHUB_TOKEN` in `.env`) — tool is hidden from Claude when not configured, visible when token is present; `public_issues_token` config field removed
+
 ## [1.3.46] — 2026-06-25
 
 ### Fixed
