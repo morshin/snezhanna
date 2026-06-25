@@ -71,7 +71,7 @@ if [ "$POST_UPDATE" = false ]; then
 fi
 
 # ── Post-update phase (running from new script inode after exec) ──────────────
-REF=$(git describe --tags --exact-match HEAD 2>/dev/null || git rev-parse --short HEAD)
+REF=$($RUN git describe --tags --exact-match HEAD 2>/dev/null || $RUN git rev-parse --short HEAD)
 
 $RUN npm install --production --ignore-scripts -q
 
