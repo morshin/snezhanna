@@ -9,6 +9,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), [Semantic Vers
 <!-- Format: - <One-sentence description> (#<issue or branch ref>) -->
 <!-- Categories: Added | Changed | Fixed | Security | Removed -->
 
+## [1.3.33] — 2026-06-25
+
+### Changed
+- Onboarding welcome message rewritten to be more human and empathetic: uses Telegram first name, single conversational paragraph, mentions all key skills (chats, Strava, briefing)
+- `lib/skills.js`: GitHub group now mentions issue creation; Settings group now lists skill context tools and `update_bot`
+
 ## [1.3.32] — 2026-06-25
 
 ### Changed
