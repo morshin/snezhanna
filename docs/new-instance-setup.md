@@ -16,10 +16,7 @@ In the examples below the instance name is `ira`. Substitute your actual name ev
 # 1. Clone the repo
 sudo git clone https://github.com/morshin/snezhanna /opt/ira
 
-# 2. Place credentials.json
-scp credentials.json user@server:/opt/ira/credentials.json
-
-# 3. Run the script
+# 2. Run the script
 sudo bash /opt/ira/scripts/deploy-instance.sh
 # → will ask: bot name, user name, timezone, port, Drive folder
 # → creates user, service, sudoers, .env and nanobot.json
@@ -41,7 +38,7 @@ sudo systemctl start ira
 
 - **Telegram bot**: create via @BotFather → get `TELEGRAM_BOT_TOKEN`
 - **Telegram user ID**: look up via @userinfobot → numeric ID
-- **Google OAuth credentials**: Google Cloud Console → Desktop-type OAuth 2.0 Client → download `credentials.json`
+- **Google OAuth credentials**: Google Cloud Console → Desktop-type OAuth 2.0 Client → copy `Client ID` and `Client Secret` into `.env`
   - You can reuse the same Google Cloud Project as the main instance
 - **Anthropic API key**: platform.anthropic.com
 - **OpenAI API key** _(optional — only needed for voice messages)_
@@ -79,17 +76,7 @@ sudo -u ira bash -c "cd /opt/ira && npm install"
 
 ---
 
-## Step 3. Copy Google credentials
-
-```bash
-# From local machine to server
-scp credentials.json user@server:/opt/ira/credentials.json
-sudo chown ira:ira /opt/ira/credentials.json
-```
-
----
-
-## Step 4. Configure .env
+## Step 3. Configure .env
 
 ```bash
 sudo -u ira cp /opt/ira/.env.example /opt/ira/.env
