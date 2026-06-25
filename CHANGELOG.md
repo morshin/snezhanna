@@ -9,6 +9,11 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), [Semantic Vers
 <!-- Format: - <One-sentence description> (#<issue or branch ref>) -->
 <!-- Categories: Added | Changed | Fixed | Security | Removed -->
 
+## [1.3.32] — 2026-06-25
+
+### Changed
+- `lib/config.js` now reads `config/nanobot.json` directly instead of `process.env.*` — `nanobot.json` is the single source of truth for instance configuration; `.env` contains secrets only
+
 ## [1.3.31] — 2026-06-25
 
 ### Changed
