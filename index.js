@@ -552,7 +552,7 @@ bot.on('message', async (msg) => {
 
   // /auth <code> — Google OAuth callback; must be reachable even during onboarding
   if (msg.text && msg.text.startsWith('/auth ') && !msg.text.startsWith('/auth2')) {
-    const code = decodeURIComponent(msg.text.slice(6).trim());
+    const code = extractGoogleCode(msg.text.slice(6));
     await handleGoogleAuthCode(code, msg.chat.id);
     return;
   }
@@ -580,7 +580,7 @@ bot.on('message', async (msg) => {
 
       // /auth <code> — Google OAuth callback (main account)
       if (userText.startsWith('/auth ')) {
-        const code = decodeURIComponent(userText.slice(6).trim());
+        const code = extractGoogleCode(userText.slice(6));
         await handleGoogleAuthCode(code, chatId);
         return;
       }
@@ -1062,20 +1062,12 @@ bot.on('business_message', (msg) => {
 
 async function offerGoogleAuth(chatId) {
   const authUrl = google.getAuthUrl();
-  const miniAppUrl = config.mini_app && config.mini_app.url;
-  const redirectUri = (config.google && config.google.redirect_uri) || process.env.GOOGLE_REDIRECT_URI || (miniAppUrl ? `${miniAppUrl}/auth/google/callback` : '');
-  const isAutoRedirect = redirectUri && !redirectUri.startsWith('http://localhost');
-  const instructions = isAutoRedirect
-    ? `1\\. Нажми кнопку ниже — откроется браузер\n` +
-      `2\\. Войди в свой Google\\-аккаунт и разреши доступ\n` +
-      `3\\. Произойдёт автоматический редирект — всё готово\\!`
-    : `1\\. Нажми кнопку ниже — откроется браузер\n` +
-      `2\\. Войди в свой Google\\-аккаунт и разреши доступ\n` +
-      `3\\. Браузер покажет ошибку подключения — это нормально\n` +
-      `4\\. Скопируй значение \`code=\` из адресной строки \\(до следующего \`&\`\\)\n` +
-      `5\\. Отправь: \`/auth КОД\``;
   await bot.sendMessage(chatId,
-    `🔐 *Нужна авторизация Google*\n\n${instructions}`,
+    `🔐 *Нужна авторизация Google*\n\n` +
+    `Нужно подключить Google\\-аккаунт бота \\(не твой личный — тот, что создан специально для этого бота\\)\\.\n\n` +
+    `1\\. Нажми кнопку ниже — откроется браузер\n` +
+    `2\\. Войди в Google\\-аккаунт бота и разреши доступ\n` +
+    `3\\. Произойдёт автоматический редирект — всё готово\\!`,
     {
       parse_mode: 'MarkdownV2',
       reply_markup: {
@@ -1085,6 +1077,16 @@ async function offerGoogleAuth(chatId) {
       }
     }
   );
+}
+
+function extractGoogleCode(arg) {
+  const raw = arg.trim();
+  try {
+    const u = new URL(raw);
+    const c = u.searchParams.get('code');
+    if (c) return c;
+  } catch {}
+  return decodeURIComponent(raw);
 }
 
 async function notifyGoogleAuthSuccess(chatId) {

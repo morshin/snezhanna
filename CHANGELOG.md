@@ -9,6 +9,15 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), [Semantic Vers
 <!-- Format: - <One-sentence description> (#<issue or branch ref>) -->
 <!-- Categories: Added | Changed | Fixed | Security | Removed -->
 
+## [1.3.37] — 2026-06-25
+
+### Changed
+- Google auth instructions now clarify that the account to connect is the **bot's dedicated Google account**, not the operator's personal account
+- `/auth` handler accepts a full redirect URL in addition to a bare code — bot extracts and URL-decodes automatically, no manual parsing needed
+- Simplified auth flow in onboarding and `offerGoogleAuth()` — always shows auto-redirect instructions (manual fallback removed from UX, kept as silent emergency command)
+- `docs/deploy.md`: updated Google OAuth section to reflect auto-redirect flow, Web application client type requirement, and per-instance redirect URI setup; added `config/nanobot.local.json` instructions for Cloudflare Tunnel option
+- `CLAUDE.md`: updated Google OAuth flow description and bot commands reference
+
 ## [1.3.36] — 2026-06-25
 
 ### Fixed

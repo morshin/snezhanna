@@ -57,7 +57,7 @@ sudo systemctl daemon-reload
 - Workload & Wellbeing scoring: weekly life-balance score (0–10) across 4 domains (work, family, health, personal). Monday 09:00 check-in collects self-reported data, then `lib/workload.js` aggregates Calendar/Gmail/Tasks/Strava data and runs a standalone Claude scoring call. Morning briefing appends an overload coach block when score ≤ 5. On-demand via phrases like "мой скор", "как я справляюсь". History persisted in SQLite `workload_history` table (last 12 weeks)
 - Evening check-in includes a summary of all Google Drive write operations logged during the day (via `lib/disk-log.js`); log is cleared after sending
 - Release update notifications: `sendMorningBriefingFull()` calls `lib/release-check.js::checkForUpdate()` in parallel; if a newer release exists on GitHub (`morshin/snezhanna`) and hasn't been announced today, a separate message with Claude-generated summary and inline «Обновить сейчас» button is sent after the briefing; button triggers `scripts/update.sh` via `nohup`; state tracked in `user_settings` (`update_notified_tag`, `update_notified_date`)
-- Bot commands: `/reset` (clear history), `/status`, `/auth <code>` (Google OAuth callback)
+- Bot commands: `/reset` (clear history), `/status`, `/auth <code-or-url>` (Google OAuth emergency fallback — normally handled automatically via callback)
 - Voice messages: downloaded from Telegram → transcribed via OpenAI Whisper → sent to Claude
 - Reply context: when user replies to a specific message, `lib/reply-chain.js` builds a context block from `msg.reply_to_message` (+ `msg.quote` if present) and walks the reply chain via `message_id` lookups in history; context is prepended to the user message before Claude sees it
 - Identity templates: `identity/CORE.md` (Layer 1, locked) and `identity/IDENTITY.md` (Layer 2 default) both use `{{USER_NAME}}` and `{{ASSISTANT_NAME}}` placeholders resolved at startup via `resolveIdentityPlaceholders()`; user settings block is appended to Layer 2 at call time via `getIdentityWithSettings()`; Layer 3 skills block is generated at call time from the live tools list (no placeholders needed)
@@ -159,16 +159,21 @@ sudo systemctl daemon-reload
 
 - **Runtime state** (chatId): `.nanobot/state.json` — gitignored, auto-created
 - **Tutor state** (chatId): `tutor/.tutor-state.json` — gitignored, auto-created
-- **Google OAuth token**: `token.json` — gitignored; obtained via `/auth <code>` flow in Telegram
+- **Google OAuth token**: `token.json` — gitignored; obtained via the OAuth callback flow on first startup
 - **Secrets** (API keys, bot tokens, OAuth credentials): `.env` — gitignored; loaded by dotenv, referenced in `systemd/snezhanna.service` as `EnvironmentFile`; instance configuration goes in `config/nanobot.json`, not here
 
 ### Google OAuth flow
 
-1. On startup (or on `/status`), if `token.json` is missing, Snezhanna sends the owner a Google auth URL
-2. The owner visits the URL, copies the code, sends `/auth <code>` to the bot
-3. `lib/google.js::saveToken()` exchanges the code and writes `token.json`
-4. Scopes: `calendar` (read/write), `gmail.modify`, `drive` (full file storage)
-5. Token file path overrideable via `GOOGLE_TOKEN_FILE` env var (for multi-instance deploys)
+The OAuth client in Google Cloud Console must be **Web application** type (not Desktop) — required for HTTPS redirect URIs.
+
+1. On startup (or on `/status`), if `token.json` is missing, Snezhanna sends a Google auth link
+2. User clicks the link → signs in with the **bot's dedicated Google account** (not their personal account)
+3. Google redirects to `https://<mini_app.url>/auth/google/callback` — the API server exchanges the code for a token, writes `token.json`, and sends a Telegram confirmation
+4. Onboarding continues automatically
+5. Scopes: `calendar` (read/write), `gmail.modify`, `drive` (full file storage)
+6. Token file path overrideable via `GOOGLE_TOKEN_FILE` env var (for multi-instance deploys)
+7. The redirect URI is derived from `config.mini_app.url` (set in `config/nanobot.local.json`); must also be registered in Google Console → OAuth client → Authorized redirect URIs
+8. `/auth <code-or-url>` command remains available as emergency fallback (accepts bare code or full redirect URL)
 
 ### Google Drive structure
 
