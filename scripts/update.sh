@@ -47,7 +47,7 @@ if [ "$POST_UPDATE" = false ]; then
   if [ "$DEV_MODE" = true ]; then
     echo "⚠  --dev mode: pulling latest master"
     $RUN git fetch origin -q
-    $RUN git checkout -q origin/master
+    $RUN git checkout -q FETCH_HEAD
   else
     LATEST_TAG=$(curl -fsSL "https://api.github.com/repos/morshin/snezhanna/releases/latest" \
       | grep '"tag_name"' | head -1 | cut -d'"' -f4 || true)
