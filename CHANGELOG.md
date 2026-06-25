@@ -9,6 +9,17 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), [Semantic Vers
 <!-- Format: - <One-sentence description> (#<issue or branch ref>) -->
 <!-- Categories: Added | Changed | Fixed | Security | Removed -->
 
+## [1.3.42] — 2026-06-25
+
+### Added
+- `github.public_issues_token` in `config/nanobot.json.example` — shared fine-grained PAT (Issues: write, `morshin/snezhanna` only) committed to repo so any instance can create GitHub issues without per-instance token setup
+- `scripts/update.sh`: after git update, merges new fields from `config/nanobot.json.example` into existing `config/nanobot.json` (add-only, never overwrites — same pattern as `.env` merge)
+- `deploy.sh`: prompts for `GITHUB_TOKEN` during setup (optional, skip with Enter)
+
+### Fixed
+- Onboarding step messages no longer address the user with all comma-separated name variants at once (e.g. "Ира, Ирок, Иришка, как представить ассистента") — only the first variant is used in direct address; all variants remain stored in `preferred_name` for Claude to pick from
+- `create_github_issue` error when not configured now returns a clear Russian message telling the operator what to add to `.env`, instead of a technical English string that caused Claude to claim the tool doesn't exist
+
 ## [1.3.41] — 2026-06-25
 
 ### Fixed

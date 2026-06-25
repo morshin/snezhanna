@@ -111,6 +111,31 @@ if [ -f .env.example ] && [ -f .env ]; then
   fi
 fi
 
+# Merge new fields from nanobot.json.example into nanobot.json (add missing only, never overwrite)
+if [ -f config/nanobot.json.example ] && [ -f config/nanobot.json ]; then
+  MERGED=$($RUN node -e "
+    const fs = require('fs');
+    const example = JSON.parse(fs.readFileSync('config/nanobot.json.example', 'utf8'));
+    const current = JSON.parse(fs.readFileSync('config/nanobot.json', 'utf8'));
+    function mergeNew(target, source) {
+      for (const key of Object.keys(source)) {
+        if (!(key in target)) {
+          target[key] = source[key];
+          process.stdout.write('  + ' + key + '\n');
+        } else if (source[key] && typeof source[key] === 'object' && !Array.isArray(source[key]) &&
+                   target[key] && typeof target[key] === 'object' && !Array.isArray(target[key])) {
+          const before = JSON.stringify(target[key]);
+          mergeNew(target[key], source[key]);
+          if (JSON.stringify(target[key]) !== before) process.stdout.write('  ~ ' + key + '\n');
+        }
+      }
+    }
+    mergeNew(current, example);
+    fs.writeFileSync('config/nanobot.json', JSON.stringify(current, null, 2) + '\n');
+  " 2>/dev/null || true)
+  [ -n "$MERGED" ] && echo "nanobot.json updated with new fields from example:" && echo "$MERGED" || true
+fi
+
 # Ensure mini_app.url is set in nanobot.local.json (needed for Google OAuth callback)
 LOCAL_CFG="config/nanobot.local.json"
 HAS_URL=$($RUN node -e "

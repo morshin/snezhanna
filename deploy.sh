@@ -333,6 +333,15 @@ elif [ -n "${OPENAI_API_KEY:-}" ]; then
   ok "OPENAI_API_KEY (from answers file)"
 fi
 
+# GitHub (optional — enables create_github_issue tool for bug reporting)
+if [ -z "${GITHUB_TOKEN+x}" ]; then
+  echo "  (input is hidden)"
+  read -rsp "  GITHUB_TOKEN (optional, Enter to skip): " GITHUB_TOKEN; echo
+  GITHUB_TOKEN=$(printf '%s' "$GITHUB_TOKEN" | tr -cd '[:print:]' | tr -d ' ')
+elif [ -n "${GITHUB_TOKEN:-}" ]; then
+  ok "GITHUB_TOKEN (from answers file)"
+fi
+
 # ── Confirmation ──────────────────────────────────────────────────────────────
 
 echo
@@ -350,6 +359,7 @@ else
 fi
 printf "  Secrets:    ANTHROPIC ✓  TELEGRAM ✓  GOOGLE ✓"
 [ -n "$OPENAI_API_KEY" ] && printf "  OPENAI ✓"
+[ -n "$GITHUB_TOKEN" ] && printf "  GITHUB ✓"
 echo
 echo "  Telegram user ID: $TELEGRAM_ALLOWED_USER_ID"
 bold "──────────────────────────────────────────────────"
@@ -430,6 +440,7 @@ set_env "TELEGRAM_ALLOWED_USER_ID" "$TELEGRAM_ALLOWED_USER_ID"
 set_env "GOOGLE_CLIENT_ID"         "$GOOGLE_CLIENT_ID"
 set_env "GOOGLE_CLIENT_SECRET"     "$GOOGLE_CLIENT_SECRET"
 [ -n "$OPENAI_API_KEY" ] && set_env "OPENAI_API_KEY" "$OPENAI_API_KEY"
+[ -n "$GITHUB_TOKEN" ] && set_env "GITHUB_TOKEN" "$GITHUB_TOKEN"
 
 chmod 600 "$ENV_FILE"
 chown "$INSTANCE_NAME:$INSTANCE_NAME" "$ENV_FILE"
