@@ -9,6 +9,11 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), [Semantic Vers
 <!-- Format: - <One-sentence description> (#<issue or branch ref>) -->
 <!-- Categories: Added | Changed | Fixed | Security | Removed -->
 
+## [1.3.30] — 2026-06-25
+
+### Changed
+- `lib/google.js` reads Google OAuth credentials from `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` env vars instead of `credentials.json` — файл больше не нужен на сервере
+
 ## [1.3.29] — 2026-06-24
 
 ### Removed
