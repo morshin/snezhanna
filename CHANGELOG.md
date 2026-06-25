@@ -9,6 +9,14 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), [Semantic Vers
 <!-- Format: - <One-sentence description> (#<issue or branch ref>) -->
 <!-- Categories: Added | Changed | Fixed | Security | Removed -->
 
+## [1.3.48] — 2026-06-25
+
+### Added
+- `scripts/reset-onboarding.sh`: resets bot to pre-onboarding state (drops DB, clears state.json flags) while keeping integrations intact; works on any instance — service name derived from directory name, DB path from config
+
+### Fixed
+- `update.sh --dev`: use `FETCH_HEAD` instead of `origin/master` so dev-mode pull works on instances where the remote tracking ref is not set up
+
 ## [1.3.47] — 2026-06-25
 
 ### Added
