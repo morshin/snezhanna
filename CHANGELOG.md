@@ -9,7 +9,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), [Semantic Vers
 <!-- Format: - <One-sentence description> (#<issue or branch ref>) -->
 <!-- Categories: Added | Changed | Fixed | Security | Removed -->
 
+### Added
+- `user_gender` setting (female/male/neutral): collected in onboarding after name step, settable via `update_my_preferences`, injected into system prompt so bot addresses user in the correct grammatical gender (#12)
+- `bot_persona` now settable via `update_my_preferences` tool at any time after onboarding (#12)
+
 ### Changed
+- Settings block header changed to "Настройки (приоритет выше текста личности выше)" and `bot_persona` entry explicitly notes it overrides any persona in the identity text — resolves conflict between IDENTITY.md and onboarding-collected persona (#12)
 - `create_github_issue` availability now gated on `githubIssues.isConfigured()` (i.e. `GITHUB_ISSUES_TOKEN` or `GITHUB_TOKEN` in `.env`) — tool is hidden from Claude when not configured, visible when token is present; `public_issues_token` config field removed
 
 ## [1.3.46] — 2026-06-25
