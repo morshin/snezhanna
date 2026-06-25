@@ -9,6 +9,11 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), [Semantic Vers
 <!-- Format: - <One-sentence description> (#<issue or branch ref>) -->
 <!-- Categories: Added | Changed | Fixed | Security | Removed -->
 
+## [1.3.40] — 2026-06-25
+
+### Changed
+- `scripts/update.sh`: after merging new vars from `.env.example`, now detects stale vars in `.env` that no longer exist in `.env.example`; in interactive mode prompts to remove them (backs up `.env` to `.env.bak` first); in non-interactive mode logs a warning
+
 ## [1.3.39] — 2026-06-25
 
 ### Changed

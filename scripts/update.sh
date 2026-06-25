@@ -82,6 +82,33 @@ if [ -f .env.example ] && [ -f .env ]; then
     fi
   done < .env.example
   [ "$added" -gt 0 ] && echo "$added new var(s) merged into .env" || true
+
+  # Find stale vars in .env that no longer exist in .env.example
+  stale=()
+  while IFS= read -r line; do
+    [[ "$line" =~ ^[[:space:]]*# ]] && continue
+    [[ -z "${line// }" ]] && continue
+    key="${line%%=*}"
+    [[ -z "$key" ]] && continue
+    if ! grep -qE "^#?${key}=" .env.example 2>/dev/null; then
+      stale+=("$key")
+    fi
+  done < .env
+
+  if [ ${#stale[@]} -gt 0 ]; then
+    echo "⚠  Stale vars in .env (not in .env.example): ${stale[*]}"
+    if [ -t 0 ]; then
+      read -rp "   Remove them? [y/N]: " REMOVE_STALE
+      if [[ "$REMOVE_STALE" =~ ^[Yy]$ ]]; then
+        cp .env .env.bak
+        for key in "${stale[@]}"; do
+          sed -i "/^${key}=/d" .env
+          echo "   - $key"
+        done
+        echo "   Backup saved to .env.bak"
+      fi
+    fi
+  fi
 fi
 
 # Ensure mini_app.url is set in nanobot.local.json (needed for Google OAuth callback)
