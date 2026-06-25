@@ -8,8 +8,6 @@
 # Usage when repo is already cloned (e.g. same-VPS multi-instance):
 #   sudo bash /opt/alice/deploy.sh
 #
-# For adding a second instance on the SAME VPS see scripts/deploy-instance.sh
-#
 # Flags:
 #   --dev                    Clone latest commit from master instead of the latest release tag
 #   --answers-file <path>    Source variables from file, skipping prompts for pre-set values
@@ -628,7 +626,7 @@ bold "║                                                          ║"
 else
 bold "║  Mini App: set up nginx + HTTPS when ready, then         ║"
 bold "║    @BotFather → /mybots → bot → Menu Button → URL        ║"
-printf "║  See: %-51s ║\n" "docs/deploy-new-server.md → Mini App"
+printf "║  See: %-51s ║\n" "docs/deploy.md → Mini App"
 bold "║                                                          ║"
 fi
 printf "║  Logs:   journalctl -u %-34s ║\n" "$INSTANCE_NAME -f"

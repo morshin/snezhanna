@@ -139,8 +139,7 @@ sudo systemctl daemon-reload
 | `config/nanobot.json` | Model, token limits, timezone, history window, `gdrive.root_folder`, `user.name`/`user.assistant_name`, `integrations` flags, `database.path` |
 | `schedules/heartbeats.json` | Documentation of all scheduled tasks (not loaded at runtime) |
 | `docs/snezhanna-tz.md` | Technical specification (TZ) — infrastructure, integrations, architecture decisions |
-| `docs/new-instance-setup.md` | Guide for deploying a second bot instance on the same VPS |
-| `docs/deploy-new-server.md` | Step-by-step guide for deploying a Snezhanna tenant on a fresh server (no Zhora; service management via Mini App) |
+| `docs/deploy.md` | Deployment guide — fresh server and same-VPS multi-instance (single `deploy.sh` handles both) |
 | `systemd/snezhanna.service.template` | Systemd service template for new instances (parameterized WorkingDirectory + EnvironmentFile) |
 | `lib/skill-context.js` | Per-skill behavioral instructions: `get(domain)`, `set(domain, text)`, `getAll()`, `listDomains()`; stored in `user_settings` with keys `skill_context:{domain}`; domains: global, email_poll, morning_briefing, evening_checkin, calendar_reminder |
 | `lib/skills.js` | Auto-generates the "## Мои актуальные возможности" block injected as Layer 3 of the system prompt; `buildSkillsBlock(tools, skillContexts)` groups tools by category, annotates each with `⚙️` instructions from `skillContexts`, appends self-check meta-instruction; stays in sync with `lib/tools.js` via `/update-docs` |
@@ -243,8 +242,7 @@ STRAVA_REFRESH_TOKEN     # (optional) Strava OAuth2
 
 # Multi-instance overrides (optional — for running multiple instances on the same VPS)
 GOOGLE_TOKEN_FILE        # path to OAuth token (default: ./token.json)
-GOOGLE_CREDENTIALS_FILE  # path to credentials.json (default: ./credentials.json)
 STATE_FILE               # path to state file (default: ./.nanobot/state.json)
 ```
 
-See `docs/new-instance-setup.md` for a second instance on the **same VPS**; see `docs/deploy-new-server.md` for a tenant on a **fresh server** (includes sudoers rule for Mini App restart, onboarding flow).
+See `docs/deploy.md` for deployment instructions (fresh server and same-VPS multi-instance).
