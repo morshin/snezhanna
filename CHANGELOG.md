@@ -9,6 +9,8 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), [Semantic Vers
 <!-- Format: - <One-sentence description> (#<issue or branch ref>) -->
 <!-- Categories: Added | Changed | Fixed | Security | Removed -->
 
+## [1.3.47] — 2026-06-25
+
 ### Added
 - `user_gender` setting (female/male/neutral): collected in onboarding after name step, settable via `update_my_preferences`, injected into system prompt so bot addresses user in the correct grammatical gender (#12)
 - `bot_persona` now settable via `update_my_preferences` tool at any time after onboarding (#12)
