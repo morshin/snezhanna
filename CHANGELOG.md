@@ -9,8 +9,14 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), [Semantic Vers
 <!-- Format: - <One-sentence description> (#<issue or branch ref>) -->
 <!-- Categories: Added | Changed | Fixed | Security | Removed -->
 
+## [1.4.4] — 2026-06-29
+
 ### Added
 - Chat monitoring is now manageable conversationally: `add_monitored_chat` / `remove_monitored_chat` / `list_monitored_chats` tools, plus forwarding any message to the bot exposes the sender's/chat's Telegram ID so Claude can add it in one step (public `@username` resolved via `bot.getChat()`)
+- Migration steps mechanism: releases with a `## ⚙️ После обновления` section in their notes will display required manual actions in the update notification and again after the bot restarts post-update
+
+### Fixed
+- Google OAuth now always requests `prompt=consent` so a valid `refresh_token` is returned on every authorization — prevents `unauthorized_client` errors after token expiry
 
 ### Security
 - `chatMonitor.addChat()` refuses the owner's own DM, the Mini App API surfaces that error, and startup auto-removes the owner's `chatId` from `monitored_chats` if present

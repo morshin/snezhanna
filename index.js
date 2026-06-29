@@ -1381,9 +1381,11 @@ ${tasksText}
 
   // Release update notification
   if (updateInfo) {
-    const { release, summary } = updateInfo;
+    const { release, summary, migrations } = updateInfo;
+    settings.set('update_pending_migrations', migrations || '');
     const lines = [`🆕 *Доступно обновление ${release.tag}*`];
     if (summary) lines.push('', summary);
+    if (migrations) lines.push('', `⚠️ *После обновления потребуются действия:*\n${migrations}`);
     lines.push('', `[Подробнее →](${release.url})`);
     try {
       await bot.sendMessage(chatId, lines.join('\n'), {
@@ -1789,10 +1791,14 @@ async function main() {
     const updatePendingFrom = settings.get('update_pending_from');
     if (updatePendingFrom) {
       settings.set('update_pending_from', '');
+      const pendingMigrations = settings.get('update_pending_migrations') || '';
+      settings.set('update_pending_migrations', '');
       const currentVer = releaseCheck.getCurrentVersion();
       try {
         if (currentVer !== updatePendingFrom) {
-          await bot.sendMessage(appState.chatId, `✅ Обновился до v${currentVer}`);
+          const lines = [`✅ Обновился до v${currentVer}`];
+          if (pendingMigrations) lines.push('', `⚠️ *Требуются действия после обновления:*\n${pendingMigrations}`);
+          await bot.sendMessage(appState.chatId, lines.join('\n'), { parse_mode: 'Markdown' });
         } else {
           await bot.sendMessage(appState.chatId, `❌ Обновление не прошло — версия осталась v${currentVer}. Попробуй позже или проверь логи.`);
         }
@@ -1810,9 +1816,11 @@ async function main() {
       try {
         const updateInfo = await releaseCheck.checkForUpdate();
         if (!updateInfo) return;
-        const { release, summary } = updateInfo;
+        const { release, summary, migrations } = updateInfo;
+        settings.set('update_pending_migrations', migrations || '');
         const lines = [`🆕 *Доступно обновление ${release.tag}*`];
         if (summary) lines.push('', summary);
+        if (migrations) lines.push('', `⚠️ *После обновления потребуются действия:*\n${migrations}`);
         lines.push('', `[Подробнее →](${release.url})`);
         await bot.sendMessage(appState.chatId, lines.join('\n'), {
           parse_mode: 'Markdown',
