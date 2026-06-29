@@ -71,6 +71,51 @@ function buildSystemPrompt(nowStr) {
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 let history = [];
 
+// Удаляет осиротевшие tool_use / tool_result блоки из истории.
+// Вызывается в начале _askClaude — не даёт «отравленной» истории заблокировать
+// все последующие запросы к Claude.
+function sanitizeHistory(hist) {
+  const out = [];
+  for (let i = 0; i < hist.length; i++) {
+    const entry = hist[i];
+
+    if (entry.role === 'assistant' && Array.isArray(entry.content)) {
+      const toolUseIds = entry.content.filter(b => b.type === 'tool_use').map(b => b.id);
+      if (toolUseIds.length > 0) {
+        const next = hist[i + 1];
+        const hasResults = next &&
+          next.role === 'user' &&
+          Array.isArray(next.content) &&
+          toolUseIds.every(id => next.content.some(b => b.type === 'tool_result' && b.tool_use_id === id));
+        if (!hasResults) {
+          console.warn(`[History] Dropping orphaned tool_use (${toolUseIds.length} calls): ${toolUseIds.join(', ')}`);
+          // Пропускаем и следующий user-блок, если он — осиротевший tool_result
+          if (hist[i + 1]?.role === 'user' && Array.isArray(hist[i + 1]?.content) &&
+              hist[i + 1].content.some(b => b.type === 'tool_result')) {
+            i++;
+          }
+          continue;
+        }
+      }
+    }
+
+    // Удаляем tool_result без предшествующего tool_use
+    if (entry.role === 'user' && Array.isArray(entry.content) &&
+        entry.content.some(b => b.type === 'tool_result')) {
+      const prev = out[out.length - 1];
+      const hasPrecedingToolUse = prev?.role === 'assistant' &&
+        Array.isArray(prev.content) && prev.content.some(b => b.type === 'tool_use');
+      if (!hasPrecedingToolUse) {
+        console.warn('[History] Dropping orphaned tool_result block');
+        continue;
+      }
+    }
+
+    out.push(entry);
+  }
+  return out;
+}
+
 // Мьютекс для сериализации вызовов askClaude: предотвращает race condition,
 // когда два параллельных запроса видят историю с осиротевшим tool_use.
 let messageLock = Promise.resolve();
@@ -158,6 +203,10 @@ async function askClaude(userMessage, requestType = 'text', meta = {}) {
 }
 
 async function _askClaude(userMessage, requestType = 'text', meta = {}) {
+  // Чистим историю от осиротевших блоков перед тем, как брать снимок —
+  // это гарантирует, что historyBeforeCall тоже будет чистым.
+  history = sanitizeHistory(history);
+
   // Сохраняем снимок истории до вызова — восстановим при ошибке,
   // чтобы не оставлять в истории осиротевшие tool_use / tool_result блоки
   const historyBeforeCall = [...history];
