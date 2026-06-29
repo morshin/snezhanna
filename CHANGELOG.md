@@ -9,6 +9,16 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), [Semantic Vers
 <!-- Format: - <One-sentence description> (#<issue or branch ref>) -->
 <!-- Categories: Added | Changed | Fixed | Security | Removed -->
 
+## [1.4.3] — 2026-06-29
+
+### Added
+- `bot_gender` setting (female/male/neutral) controls the assistant's self-reference grammatical gender in Russian; configurable via chat ("говори о себе в мужском роде") or `update_my_preferences` tool
+
+### Fixed
+- Removed hardcoded feminine forms ("Девушка, женский род") from `identity/IDENTITY.md` — the file is now gender-neutral so instances with a masculine persona no longer inherit Snezhanna's female gender
+- On startup after update, if `bot_gender`/`bot_persona`/`identity` are unconfigured, the bot sends a one-time prompt so the user can set their preferred gender
+- Auto-sanitize orphaned `tool_use`/`tool_result` blocks from conversation history to prevent API errors after interrupted tool calls
+
 ## [1.4.2] — 2026-06-25
 
 ### Security
