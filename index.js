@@ -577,6 +577,18 @@ bot.on('message', async (msg) => {
     if (!google.isAuthorized()) {
       setTimeout(() => offerGoogleAuth(msg.chat.id), 1500);
     }
+    // Check gender config — warn once until user sets it
+    if (!settings.get('bot_gender') && !settings.get('bot_persona') && !settings.get('identity')) {
+      setTimeout(() => bot.sendMessage(msg.chat.id,
+        '⚙️ *Настройка гендера ассистента*\n\n' +
+        'Гендер для самоупоминаний не задан — я буду использовать нейтральные формы («сделано», «готово»).\n\n' +
+        'Если хочешь изменить — просто скажи:\n' +
+        '• «говори о себе в женском роде»\n' +
+        '• «говори о себе в мужском роде»\n' +
+        '• «оставь нейтральный»',
+        { parse_mode: 'Markdown' }
+      ), 3000);
+    }
     return;
   }
 
