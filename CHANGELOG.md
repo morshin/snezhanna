@@ -9,6 +9,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), [Semantic Vers
 <!-- Format: - <One-sentence description> (#<issue or branch ref>) -->
 <!-- Categories: Added | Changed | Fixed | Security | Removed -->
 
+### Added
+- Chat monitoring is now manageable conversationally: `add_monitored_chat` / `remove_monitored_chat` / `list_monitored_chats` tools, plus forwarding any message to the bot exposes the sender's/chat's Telegram ID so Claude can add it in one step (public `@username` resolved via `bot.getChat()`)
+
+### Security
+- `chatMonitor.addChat()` refuses the owner's own DM, the Mini App API surfaces that error, and startup auto-removes the owner's `chatId` from `monitored_chats` if present
+
 ## [1.4.3] — 2026-06-29
 
 ### Added

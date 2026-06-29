@@ -486,7 +486,7 @@ function rescheduleEmailPoll(intervalMin) {
   scheduleEmailPoll(intervalMin);
 }
 
-setToolsContext(appState, state.save, rescheduleBriefing, rescheduleEmailPoll);
+setToolsContext(appState, state.save, rescheduleBriefing, rescheduleEmailPoll, bot);
 
 function isAllowed(msg) {
   const { id, username } = msg.from || {};
@@ -890,6 +890,22 @@ bot.on('message', async (msg) => {
       }
     } else {
       return; // Ignore unsupported message types
+    }
+
+    // Forwarded-message context: expose the original sender's/chat's Telegram ID so
+    // Claude can offer to add it to chat monitoring via add_monitored_chat.
+    const fwdLines = [];
+    if (msg.forward_from) {
+      const f = msg.forward_from;
+      const fullName = [f.first_name, f.last_name].filter(Boolean).join(' ') || 'без имени';
+      fwdLines.push(`[Переслано от: ${fullName}, @${f.username || 'без ника'}, Telegram ID: ${f.id}]`);
+    }
+    if (msg.forward_from_chat) {
+      const c = msg.forward_from_chat;
+      fwdLines.push(`[Переслано из чата: ${c.title || 'без названия'}, @${c.username || 'без ника'}, ID: ${c.id}, тип: ${c.type}]`);
+    }
+    if (fwdLines.length) {
+      userText = fwdLines.join('\n') + '\n' + userText;
     }
 
     // Reply context: if user replied to a specific message, prepend that context
@@ -1752,6 +1768,13 @@ async function main() {
       appState.chatId = null;
       state.save(appState);
     }
+  }
+
+  // Safety net: never keep the owner's own chat in the monitored list — it would
+  // echo the owner's messages into the digest. Can happen if added by mistake.
+  if (appState.chatId && chatMonitor.isMonitored(appState.chatId)) {
+    chatMonitor.removeChat(appState.chatId);
+    console.warn('[SECURITY] Removed owner chatId from monitored_chats on startup');
   }
 
   if (appState.chatId) {

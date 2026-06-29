@@ -369,7 +369,9 @@ Requires Google OAuth with `drive` scope (in addition to `calendar` and `gmail.m
 
 - Snezhanna passively monitors specified Telegram chats (family + work)
 - Monitored chats stored in SQLite `monitored_chats` table (migrated from `config/nanobot.json → chat_monitor.chats`)
-- Add/remove chats via Mini App Settings → Chats, or via Claude conversation
+- Add/remove chats via Mini App Settings → Chats, or via Claude conversation (`add_monitored_chat` / `remove_monitored_chat` / `list_monitored_chats` tools)
+- Forwarded-message shortcut: when the owner forwards any message, the message handler prepends a `[Переслано от: …, Telegram ID: …]` (or `[Переслано из чата: …]`) header so Claude can offer to add that sender/chat via `add_monitored_chat` with the exposed ID. `add_monitored_chat` can also resolve a public `@username` → `chat_id` via `bot.getChat()` (private user IDs are not resolvable by username in the Bot API)
+- Owner-chat guard: `chatMonitor.addChat()` refuses the owner's own DM, and startup auto-removes the owner's `chatId` from `monitored_chats` if present (`[SECURITY]` log)
 - In-memory message store (cleared after evening check-in)
 - Messages available to Claude as context when the user asks about them
 - Evening check-in includes summary of disk write operations (via `lib/disk-log.js`)
