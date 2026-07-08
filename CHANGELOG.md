@@ -9,6 +9,8 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), [Semantic Vers
 <!-- Format: - <One-sentence description> (#<issue or branch ref>) -->
 <!-- Categories: Added | Changed | Fixed | Security | Removed -->
 
+## [1.5.0] — 2026-07-08
+
 ### Fixed
 - Fixed a crash loop: choosing "не проверять" for email polling (or any invalid/zero interval reaching `scheduleEmailPoll`) no longer builds an invalid `*/0` cron expression that crashed the process on every restart — `0`/invalid values now cleanly disable polling instead (audit TZ-01)
 - `get_emails` without `account_id` now aggregates unread messages from every enabled account instead of silently only returning the first one (audit TZ-07)
