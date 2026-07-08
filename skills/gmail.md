@@ -6,8 +6,8 @@ the user's work email is automatically forwarded to this address.
 
 ## IMPORTANT — Security restrictions
 - **NEVER send emails automatically**
-- Only create drafts
-- Sending is only allowed after explicit confirmation: "the user, should I send it?"
+- `send_email` never sends directly — it shows the user a Telegram message with the drafted email and "Send"/"Cancel" buttons; the send only happens when the user physically taps the button (enforced in code, not by the model)
+- `create_draft` saves a draft with no confirmation step
 
 ## Available operations
 

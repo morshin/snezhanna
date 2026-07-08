@@ -31,6 +31,13 @@ const { logTokens } = require('./lib/token-log');
 const { buildReplyContext } = require('./lib/reply-chain');
 const { start: apiStart, setApiContext } = require('./lib/api');
 const mailManager = require('./lib/mail-manager');
+const pendingEmail = require('./lib/pending-email');
+const oauthState = require('./lib/oauth-state');
+const emailCredentials = require('./lib/email-credentials');
+const historyStore = require('./lib/history-store');
+const { sanitizeHistory, trimHistory } = require('./lib/history-utils');
+const { normalizePollInterval, isWithinHours } = require('./lib/schedule-utils');
+const { splitMessage } = require('./lib/message-utils');
 const onboarding = require('./lib/onboarding');
 const releaseCheck = require('./lib/release-check');
 
@@ -68,53 +75,11 @@ function buildSystemPrompt(nowStr) {
 
 // ── Anthropic ─────────────────────────────────────────────────────────────────
 
+const BRIEFING_POSITIVE_REPLIES = new Set(['да', 'ага', 'го', 'давай', 'готов', 'готова', 'yes', 'yep', 'ok', 'ок', 'конечно', 'погнали', '+', '👍']);
+const BRIEFING_NEGATIVE_REPLIES = new Set(['нет', 'не', 'потом', 'позже', 'подожди']);
+
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-let history = [];
-
-// Удаляет осиротевшие tool_use / tool_result блоки из истории.
-// Вызывается в начале _askClaude — не даёт «отравленной» истории заблокировать
-// все последующие запросы к Claude.
-function sanitizeHistory(hist) {
-  const out = [];
-  for (let i = 0; i < hist.length; i++) {
-    const entry = hist[i];
-
-    if (entry.role === 'assistant' && Array.isArray(entry.content)) {
-      const toolUseIds = entry.content.filter(b => b.type === 'tool_use').map(b => b.id);
-      if (toolUseIds.length > 0) {
-        const next = hist[i + 1];
-        const hasResults = next &&
-          next.role === 'user' &&
-          Array.isArray(next.content) &&
-          toolUseIds.every(id => next.content.some(b => b.type === 'tool_result' && b.tool_use_id === id));
-        if (!hasResults) {
-          console.warn(`[History] Dropping orphaned tool_use (${toolUseIds.length} calls): ${toolUseIds.join(', ')}`);
-          // Пропускаем и следующий user-блок, если он — осиротевший tool_result
-          if (hist[i + 1]?.role === 'user' && Array.isArray(hist[i + 1]?.content) &&
-              hist[i + 1].content.some(b => b.type === 'tool_result')) {
-            i++;
-          }
-          continue;
-        }
-      }
-    }
-
-    // Удаляем tool_result без предшествующего tool_use
-    if (entry.role === 'user' && Array.isArray(entry.content) &&
-        entry.content.some(b => b.type === 'tool_result')) {
-      const prev = out[out.length - 1];
-      const hasPrecedingToolUse = prev?.role === 'assistant' &&
-        Array.isArray(prev.content) && prev.content.some(b => b.type === 'tool_use');
-      if (!hasPrecedingToolUse) {
-        console.warn('[History] Dropping orphaned tool_result block');
-        continue;
-      }
-    }
-
-    out.push(entry);
-  }
-  return out;
-}
+let history = sanitizeHistory(historyStore.load());
 
 // Мьютекс для сериализации вызовов askClaude: предотвращает race condition,
 // когда два параллельных запроса видят историю с осиротевшим tool_use.
@@ -123,6 +88,28 @@ function withMessageLock(fn) {
   const next = messageLock.then(fn);
   messageLock = next.catch(() => {});
   return next;
+}
+
+// Debounced persistence of `history` (SQLite, lib/history-store.js) — survives
+// restarts (auto-update, Zhora, deploy). One write per completed turn is enough;
+// repeated calls within the window coalesce into a single save.
+let historySaveTimer = null;
+function saveHistorySoon() {
+  if (historySaveTimer) clearTimeout(historySaveTimer);
+  historySaveTimer = setTimeout(() => {
+    historySaveTimer = null;
+    historyStore.save(history);
+  }, 2000);
+}
+function flushHistorySave() {
+  if (historySaveTimer) { clearTimeout(historySaveTimer); historySaveTimer = null; }
+  historyStore.save(history);
+}
+for (const sig of ['SIGTERM', 'SIGINT']) {
+  process.on(sig, () => {
+    flushHistorySave();
+    process.exit(0);
+  });
 }
 
 // Одноразовый вызов Claude без использования глобальной истории разговора.
@@ -214,20 +201,7 @@ async function _askClaude(userMessage, requestType = 'text', meta = {}) {
   history.push({ role: 'user', content: userMessage, ...meta });
 
   // Trim history, but never orphan a tool_result or start on an assistant message
-  if (history.length > config.history.max_messages) {
-    let sliceAt = history.length - config.history.keep_last;
-    // Сдвигаемся назад, пока не окажемся на обычном user-сообщении:
-    // — нельзя начинать с tool_result (user, но со служебным контентом)
-    // — нельзя начинать с assistant-сообщения (Claude требует, чтобы первым шёл user)
-    while (sliceAt > 0 && (
-      history[sliceAt].role !== 'user' ||
-      (Array.isArray(history[sliceAt].content) &&
-       history[sliceAt].content.some(b => b.type === 'tool_result'))
-    )) {
-      sliceAt--;
-    }
-    history = history.slice(sliceAt);
-  }
+  history = trimHistory(history, config.history.max_messages, config.history.keep_last);
 
   const tools = getAvailableTools();
   const MAX_TOOL_ROUNDS = 10;
@@ -342,10 +316,12 @@ async function _askClaude(userMessage, requestType = 'text', meta = {}) {
       const textBlocks = response.content.filter(b => b.type === 'text');
       const reply = textBlocks.map(b => b.text).join('\n') || '';
       history.push({ role: 'assistant', content: reply });
+      saveHistorySoon();
       return reply;
     }
 
     // Safety: if we hit max rounds, return whatever we have
+    saveHistorySoon();
     return `Извини, ${userName}, я слишком долго думала. Попробуй переформулировать вопрос.`;
   } catch (err) {
     // При любой ошибке откатываем историю в состояние до вызова.
@@ -426,6 +402,19 @@ function rescheduleBriefing(timeStr) {
   console.log(`[Schedule] Briefing rescheduled to ${timeStr}`);
 }
 
+// Used by the start_briefing tool when Claude judges an ambiguous reply to be
+// acceptance of a pending "Готов к брифингу?" prompt (see briefingNote below).
+async function startBriefingFromTool() {
+  if (!appState.briefingPending) return false;
+  appState.briefingPending = false;
+  appState.briefingPendingAt = null;
+  appState.silenceDaysCount = 0;
+  appState.silenceLevel = 0;
+  state.save(appState);
+  await sendMorningBriefingFull(appState.chatId);
+  return true;
+}
+
 let emailCronJob = null;
 
 async function runEmailPoll() {
@@ -477,16 +466,26 @@ async function runEmailPoll() {
 }
 
 function scheduleEmailPoll(intervalMin) {
-  if (emailCronJob) emailCronJob.stop();
-  emailCronJob = cron.schedule(`*/${intervalMin} * * * *`, runEmailPoll, { timezone: config.timezone });
-  console.log(`[Schedule] Email poll scheduled every ${intervalMin} min`);
+  if (emailCronJob) { emailCronJob.stop(); emailCronJob = null; }
+
+  const plan = normalizePollInterval(intervalMin);
+  if (plan.disabled) {
+    console.log('[Schedule] Email poll disabled (interval:', intervalMin, ')');
+    return;
+  }
+  emailCronJob = cron.schedule(plan.cron, runEmailPoll, { timezone: config.timezone });
+  if (plan.minutes === 60) {
+    console.log('[Schedule] Email poll scheduled hourly (interval:', intervalMin, 'min)');
+  } else {
+    console.log(`[Schedule] Email poll scheduled every ${plan.minutes} min`);
+  }
 }
 
 function rescheduleEmailPoll(intervalMin) {
   scheduleEmailPoll(intervalMin);
 }
 
-setToolsContext(appState, state.save, rescheduleBriefing, rescheduleEmailPoll, bot);
+setToolsContext(appState, state.save, rescheduleBriefing, rescheduleEmailPoll, bot, startBriefingFromTool);
 
 function isAllowed(msg) {
   const { id, username } = msg.from || {};
@@ -497,9 +496,7 @@ function isWithinWorkHours() {
   const start = settings.get('work_hours_start') || '09:00';
   const end   = settings.get('work_hours_end')   || '22:00';
   const nowStr = new Date().toLocaleTimeString('sv-SE', { timeZone: config.timezone, hour: '2-digit', minute: '2-digit' });
-  if (start <= end) return nowStr >= start && nowStr < end;
-  // overnight range (e.g. 22:00–06:00): active outside the gap
-  return nowStr >= start || nowStr < end;
+  return isWithinHours(nowStr, start, end);
 }
 
 // urgent=true: send silently outside work hours instead of skipping
@@ -515,10 +512,15 @@ async function sendToUser(text, options = {}, { urgent = false } = {}) {
     }
     options = { ...options, disable_notification: true };
   }
-  if (Object.keys(options).length > 0 || text.length <= 4096) {
-    await bot.sendMessage(appState.chatId, text, options);
-  } else {
-    await sendLongMessage(appState.chatId, text);
+  // Always split when needed — the old `options.length > 0 || text <= 4096`
+  // check sent oversized text in one call whenever any option (e.g.
+  // disable_notification above) was present, and Telegram rejected it.
+  const { reply_markup, ...commonOptions } = options;
+  const chunks = splitMessage(text);
+  for (let i = 0; i < chunks.length; i++) {
+    const isLast = i === chunks.length - 1;
+    const sendOptions = isLast && reply_markup ? { ...commonOptions, reply_markup } : commonOptions;
+    await bot.sendMessage(appState.chatId, chunks[i], sendOptions);
   }
   return true;
 }
@@ -613,7 +615,7 @@ bot.on('message', async (msg) => {
 
   // /auth <code> — Google OAuth callback; must be reachable even during onboarding
   if (msg.text && msg.text.startsWith('/auth ') && !msg.text.startsWith('/auth2')) {
-    const code = extractGoogleCode(msg.text.slice(6));
+    const code = google.extractAuthCode(msg.text.slice(6));
     await handleGoogleAuthCode(code, msg.chat.id);
     return;
   }
@@ -641,7 +643,7 @@ bot.on('message', async (msg) => {
 
       // /auth <code> — Google OAuth callback (main account)
       if (userText.startsWith('/auth ')) {
-        const code = extractGoogleCode(userText.slice(6));
+        const code = google.extractAuthCode(userText.slice(6));
         await handleGoogleAuthCode(code, chatId);
         return;
       }
@@ -668,19 +670,20 @@ bot.on('message', async (msg) => {
           try {
             const tokens = await google.saveTokenForAccount(parts[1]);
             db.prepare("UPDATE email_accounts SET credentials = ?, bootstrapped = 0, updated_at = datetime('now') WHERE id = ?")
-              .run(JSON.stringify(tokens), accountId);
+              .run(emailCredentials.encodeCredentials(tokens), accountId);
             await bot.sendMessage(chatId, `✅ Gmail «${account.label}» (${account.email}) подключён!`);
           } catch (e) {
             await bot.sendMessage(chatId, `❌ Ошибка авторизации: ${e.message}`);
           }
         } else {
-          // /auth2 <id> — send auth URL
+          // /auth2 <id> — send auth URL (redirect confirms automatically via /auth/google/callback;
+          // the state param routes it to this account instead of overwriting the main token.json)
           try {
-            const url = google.getAuthUrl();
+            const url = google.getAuthUrl(oauthState.createAuthState('account', accountId));
             await bot.sendMessage(chatId,
               `🔐 Авторизация Gmail для «${account.label}» (${account.email})\n\n` +
-              `1. Открой ссылку ниже и войди под нужным Google-аккаунтом\n` +
-              `2. Скопируй код и отправь: \`/auth2 ${accountId} КОД\`\n\n${url}`,
+              `Нажми ссылку ниже и войди под нужным Google-аккаунтом — после редиректа я подтвержу подключение здесь сама.\n\n${url}\n\n` +
+              `_Если редирект не сработает — пришли код вручную: \`/auth2 ${accountId} КОД\`_`,
               { parse_mode: 'Markdown' }
             );
           } catch (e) {
@@ -693,6 +696,7 @@ bot.on('message', async (msg) => {
       // /reset — clear conversation history
       if (userText === '/reset') {
         history = [];
+        historyStore.clear();
         await bot.sendMessage(chatId, 'История очищена ✅');
         return;
       }
@@ -737,12 +741,21 @@ bot.on('message', async (msg) => {
       }
 
       // ── Briefing reply detection ──
+      // Token match against the first few words, not the whole string — «да,
+      // давай» or «ну го» used to miss the old exact-match check entirely and
+      // leave briefingPending stuck on. Negative replies now also clear it
+      // instead of leaving it hanging; anything else falls through to Claude
+      // with a note, and the model can call start_briefing itself.
+      let briefingNote = null;
       if (appState.briefingPending) {
         const elapsed = Date.now() - new Date(appState.briefingPendingAt).getTime();
         if (elapsed < 8 * 60 * 60 * 1000) {
-          const POSITIVE_REPLIES = ['да', 'ага', 'го', 'давай', 'готов', 'yes', 'yep', 'ok', 'ок', 'конечно', 'погнали', '+', '👍'];
           const normalized = userText.trim().toLowerCase();
-          if (POSITIVE_REPLIES.includes(normalized)) {
+          const firstTokens = normalized.split(/[\s,.!?;:]+/).filter(Boolean).slice(0, 3);
+          const isNegative = firstTokens.some(t => BRIEFING_NEGATIVE_REPLIES.has(t));
+          const isPositive = !isNegative && firstTokens.some(t => BRIEFING_POSITIVE_REPLIES.has(t));
+
+          if (isPositive) {
             appState.briefingPending = false;
             appState.briefingPendingAt = null;
             appState.silenceDaysCount = 0;
@@ -751,7 +764,17 @@ bot.on('message', async (msg) => {
             await sendMorningBriefingFull(chatId);
             return;
           }
-          // Not a positive reply — fall through to normal Claude processing
+          if (isNegative) {
+            appState.briefingPending = false;
+            appState.briefingPendingAt = null;
+            state.save(appState);
+            await bot.sendMessage(chatId, 'Хорошо, без брифинга. Скажи, когда будешь готов 👍');
+            return;
+          }
+          // Ambiguous reply — let Claude decide; it can call start_briefing.
+          briefingNote = 'Контекст: недавно был предложен утренний брифинг ("Готов к брифингу?"), и это ответ на него. ' +
+            'Если это согласие (в любой форме) — вызови инструмент start_briefing вместо обычного ответа. ' +
+            'Если это отказ или сообщение не по теме — просто ответь как обычно.';
         } else {
           // Expired
           appState.briefingPending = false;
@@ -914,6 +937,10 @@ bot.on('message', async (msg) => {
       userText = replyContext + '\n\n' + userText;
     }
 
+    if (briefingNote) {
+      userText = briefingNote + '\n\n' + userText;
+    }
+
     await bot.sendChatAction(chatId, 'typing');
 
     requestType = msg.voice ? 'voice' : 'text';
@@ -931,6 +958,7 @@ bot.on('message', async (msg) => {
         if (sentVoice && sentVoice.message_id) {
           const idx = history.findLastIndex(h => h.role === 'assistant');
           if (idx !== -1) history[idx].message_id = sentVoice.message_id;
+          saveHistorySoon();
         }
         return;
       } catch (ttsErr) {
@@ -943,6 +971,7 @@ bot.on('message', async (msg) => {
     if (sentMsg && sentMsg.message_id) {
       const idx = history.findLastIndex(h => h.role === 'assistant');
       if (idx !== -1) history[idx].message_id = sentMsg.message_id;
+      saveHistorySoon();
     }
 
   } catch (err) {
@@ -1023,6 +1052,7 @@ bot.on('photo', async (msg) => {
       const idx = history.findLastIndex(h => h.role === 'assistant');
       if (idx !== -1) history[idx].message_id = sentMsg.message_id;
     }
+    saveHistorySoon();
   } catch (err) {
     console.error('[Snezhanna] Photo error:', err.message);
     await bot.sendMessage(chatId, `${userName}, ${formatErrorForUser(err)}`).catch(() => {});
@@ -1044,14 +1074,17 @@ bot.on('message', async (msg) => {
   if (!msg.checklist_tasks_done) return;
 
   try {
-    const todayTasks = tasks.getTodayTasks();
+    // Resolve against the snapshot taken when the checklist was sent, not a
+    // fresh query — the task list may have changed since (added/completed/
+    // deleted), which would otherwise shift which task a position points to.
+    const snapshot = appState.checklistTaskIds;
+    if (!snapshot) return;
     const doneIds = msg.checklist_tasks_done;
     let completed = 0;
     for (const doneId of doneIds) {
-      // Map checklist position back to task
       const idx = doneId - 1;
-      if (idx >= 0 && idx < todayTasks.length) {
-        tasks.completeTask({ id: todayTasks[idx].id, project: todayTasks[idx].project });
+      if (idx >= 0 && idx < snapshot.length) {
+        tasks.completeTask({ id: snapshot[idx].id, project: snapshot[idx].project });
         completed++;
       }
     }
@@ -1111,6 +1144,41 @@ bot.on('callback_query', async (query) => {
       );
     } else if (data === 'update:skip') {
       // Nothing to do — already marked notified for today
+    } else if (data.startsWith('email:send:')) {
+      const id = data.slice('email:send:'.length);
+      const entry = pendingEmail.consume(id);
+      if (!entry) {
+        await bot.editMessageText('⌛ Черновик устарел — попроси меня подготовить письмо заново.', {
+          chat_id: chatId, message_id: query.message.message_id
+        });
+        return;
+      }
+      try {
+        await mailManager.sendMessage(entry.account_id, entry.to, entry.subject, entry.body, entry.in_reply_to);
+        await bot.editMessageText(`✅ Отправлено\n\nКому: ${entry.to}\nТема: ${entry.subject}`, {
+          chat_id: chatId, message_id: query.message.message_id
+        });
+      } catch (e) {
+        console.error('[Email] send confirmation error:', e.message);
+        await bot.editMessageText(`❌ Не удалось отправить: ${e.message}`, {
+          chat_id: chatId, message_id: query.message.message_id
+        });
+      }
+    } else if (data.startsWith('email:cancel:')) {
+      const id = data.slice('email:cancel:'.length);
+      const entry = pendingEmail.consume(id);
+      let draftSaved = false;
+      if (entry) {
+        try {
+          await mailManager.createDraft(entry.account_id, entry.to, entry.subject, entry.body, entry.in_reply_to);
+          draftSaved = true;
+        } catch (e) {
+          console.error('[Email] cancel->draft error:', e.message);
+        }
+      }
+      await bot.editMessageText(`❌ Отменено${draftSaved ? ' (черновик сохранён)' : ''}`, {
+        chat_id: chatId, message_id: query.message.message_id
+      });
     }
   } catch (e) {
     console.error('[Callback] callback_query error:', e.message);
@@ -1139,7 +1207,7 @@ bot.on('business_message', (msg) => {
 // ── Google OAuth ──────────────────────────────────────────────────────────────
 
 async function offerGoogleAuth(chatId) {
-  const authUrl = google.getAuthUrl();
+  const authUrl = google.getAuthUrl(oauthState.createAuthState('main'));
   await bot.sendMessage(chatId,
     `🔐 *Нужна авторизация Google*\n\n` +
     `Нужно подключить Google\\-аккаунт бота \\(не твой личный — тот, что создан специально для этого бота\\)\\.\n\n` +
@@ -1155,16 +1223,6 @@ async function offerGoogleAuth(chatId) {
       }
     }
   );
-}
-
-function extractGoogleCode(arg) {
-  const raw = arg.trim();
-  try {
-    const u = new URL(raw);
-    const c = u.searchParams.get('code');
-    if (c) return c;
-  } catch {}
-  return decodeURIComponent(raw);
 }
 
 async function notifyGoogleAuthSuccess(chatId) {
@@ -1216,27 +1274,9 @@ async function sendLongMessage(chatId, text) {
     console.error(`[SECURITY] sendLongMessage blocked for chat ${chatId}`);
     return null;
   }
-  const MAX = 4096;
-  if (text.length <= MAX) {
-    return await bot.sendMessage(chatId, text);
-  }
-  // Split at paragraph boundaries
-  const paragraphs = text.split(/\n\n/);
-  let chunk = '';
   let firstSent = null;
-  for (const para of paragraphs) {
-    if (chunk.length + para.length + 2 > MAX) {
-      if (chunk) {
-        const sent = await bot.sendMessage(chatId, chunk.trim());
-        if (!firstSent) firstSent = sent;
-      }
-      chunk = para;
-    } else {
-      chunk += (chunk ? '\n\n' : '') + para;
-    }
-  }
-  if (chunk.trim()) {
-    const sent = await bot.sendMessage(chatId, chunk.trim());
+  for (const chunk of splitMessage(text)) {
+    const sent = await bot.sendMessage(chatId, chunk);
     if (!firstSent) firstSent = sent;
   }
   return firstSent;
@@ -1575,6 +1615,9 @@ ${chatSection}`;
             title: 'Задачи на сегодня',
             tasks: todayTasks.map((t, i) => ({ id: i + 1, text: t.title }))
           });
+          // Snapshot position -> task mapping as of send time (see checklist_tasks_done handler)
+          appState.checklistTaskIds = todayTasks.map(t => ({ id: t.id, project: t.project }));
+          state.save(appState);
         }
       } catch (checklistErr) {
         console.error('[Schedule] checklist send error:', checklistErr.message);
@@ -1674,9 +1717,15 @@ ${chatSection}`;
   }, { timezone: config.timezone });
 
   // Calendar reminders — check every 10 min
-  const notifiedEvents = new Set();
+  const notifiedEvents = new Map(); // eventId -> event start timestamp (ms) — pruned below once it's passed
   cron.schedule('*/10 * * * *', async () => {
     if (!appState.chatId) return;
+
+    // Drop events that have already started — no longer need de-dup tracking
+    const nowPrune = Date.now();
+    for (const [id, startTs] of notifiedEvents) {
+      if (startTs < nowPrune) notifiedEvents.delete(id);
+    }
 
     // Calendar reminders (always, bypass silence/vacation)
     if (google.isAuthorized()) {
@@ -1688,7 +1737,7 @@ ${chatSection}`;
           const eventTime = new Date(event.start.dateTime).getTime();
           const minutesUntil = (eventTime - now) / 60000;
           if (minutesUntil >= 28 && minutesUntil <= 32 && !notifiedEvents.has(event.id)) {
-            notifiedEvents.add(event.id);
+            notifiedEvents.set(event.id, eventTime);
             const timeStr = new Date(event.start.dateTime).toLocaleTimeString('ru-RU', {
               hour: '2-digit', minute: '2-digit', timeZone: config.timezone
             });
@@ -1726,6 +1775,15 @@ ${chatSection}`;
 
   // Database backup — 03:30 daily
   cron.schedule('30 3 * * *', async () => {
+    // Prune old email_seen rows regardless of backup config — otherwise this
+    // table grows forever (one row per message ever seen, across all accounts).
+    try {
+      const pruned = db.prepare("DELETE FROM email_seen WHERE seen_at < datetime('now', '-90 days')").run();
+      if (pruned.changes > 0) console.log(`[Schedule] email_seen: pruned ${pruned.changes} row(s) older than 90 days`);
+    } catch (e) {
+      console.error('[Schedule] email_seen prune error:', e.message);
+    }
+
     if (!gdrive.isConfigured()) return;
     console.log('[Schedule] database_backup fired');
     try {
@@ -1750,6 +1808,21 @@ ${chatSection}`;
 
 async function main() {
   console.log('[Snezhanna] Starting...');
+
+  // One-time sweep: re-encrypt any legacy plaintext email_accounts.credentials
+  // left over from before TZ-04. Idempotent — encrypted rows are skipped.
+  try {
+    const secretBox = require('./lib/secret-box');
+    const legacyRows = db.prepare('SELECT id, credentials FROM email_accounts WHERE credentials IS NOT NULL').all();
+    for (const row of legacyRows) {
+      if (!secretBox.isEncrypted(row.credentials)) {
+        db.prepare('UPDATE email_accounts SET credentials = ? WHERE id = ?').run(secretBox.encrypt(row.credentials), row.id);
+        console.log(`[Startup] Encrypted plaintext credentials for email_accounts.id=${row.id}`);
+      }
+    }
+  } catch (e) {
+    console.error('[Startup] Credential encryption sweep failed:', e.message);
+  }
 
   apiStart();
   setApiContext(appState, state.save, rescheduleBriefing, rescheduleEmailPoll, bot,

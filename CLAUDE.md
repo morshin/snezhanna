@@ -13,7 +13,11 @@ node index.js          # production (also used by systemd)
 node index.js --debug  # dev mode with debug flag
 ```
 
-There are no automated tests. Verify behavior by watching journal logs.
+```bash
+npm test               # runs test/ — pure-function unit tests only (node:test, no mocks/network/Telegram)
+```
+
+The test suite is intentionally narrow — it covers extracted pure logic (history sanitization/trimming, cron interval normalization, message splitting, email categorization, OAuth code parsing, etc.), not the bot end-to-end. `scripts/update.sh` runs it after every auto-update and rolls back to the previous commit if it fails (see `lib/history-utils.js`, `lib/schedule-utils.js`, `lib/message-utils.js` for the extracted modules). Beyond that, verify behavior by watching journal logs.
 
 ## Service management
 
@@ -44,7 +48,7 @@ sudo systemctl daemon-reload
 
 **`index.js`** — Snezhanna main bot:
 - Telegram polling with single-user access control (by numeric ID or username from `TELEGRAM_ALLOWED_USER_ID`)
-- Sends all messages to Claude via `@anthropic-ai/sdk` with a rolling conversation history (window: 40 messages, keep 30)
+- Sends all messages to Claude via `@anthropic-ai/sdk` with a rolling conversation history (window: 40 messages, keep 30); the history is persisted to SQLite (`lib/history-store.js`, `conversation_state` table) with a debounced save after each turn, so it survives restarts (auto-update, Zhora, deploy) instead of resetting to empty — stored history older than 24h is discarded on load as stale
 - Prompt caching enabled (`betas: ['prompt-caching-2024-07-31']`): two cache breakpoints — CORE.md (Layer 1) and IDENTITY+settings (Layer 2) both marked with `cache_control: { type: 'ephemeral' }`; cache hits logged as `[Cache] hit: N tokens cached`
 - Anthropic native web search (`web_search_20250305`) enabled as a server-side tool — Claude can search the web for current info (rates, news, weather) without any local execution
 - Auto-fetches Google Calendar / Gmail context when keywords are detected in user messages (Russian keywords: "календар", "встреч", "сегодня", "почт", etc.)
@@ -53,7 +57,7 @@ sudo systemctl daemon-reload
 - On startup: initialises SQLite DB (`lib/db.js`, creates `data/snezhanna.db` if missing), calls `gdrive.ensureDirs()` non-blocking to create required Google Drive folder structure (`memory/`, `fitness/weekly/`, `fitness/races/`, `drafts/`, `digests/`, `backups/`), then starts the Mini App HTTP API server (`lib/api.js`) on the port from `config.mini_app.port` (default 3001)
 - Task and project storage: local SQLite (`data/snezhanna.db`) via `better-sqlite3` (synchronous). Tasks have subtasks (`parent_id`) and dependencies (`task_deps` table). New tools: `add_task_dependency`, `get_task_with_subtasks`. Daily DB backup to Google Drive `backups/snezhanna_YYYYMMDD.db` at 03:30 (keep 7).
 - Scheduled tasks via `node-cron`: morning briefing gate (08:00), workload weekly check-in (Monday 09:00), evening check-in (19:00), weekly digest (Sunday 10:00), calendar reminders every 10 min (fires at 30-min mark), deadline alerts every 10 min, email poll (interval from `settings.email_poll_interval`, default 30 min, reschedules dynamically), DB backup (03:30)
-- Conversational briefing (TZ-1): morning cron sends "Готов к брифингу?" only if `hasSomethingToSay()` returns true; waits for positive reply (up to 8 h) before sending full briefing; silence tracking (`silenceDaysCount` / `silenceLevel` 0–2) reduces frequency after 3+ ignored days; vacation mode via `/quiet [N]` command or `set_quiet_mode` tool (`quietUntil` ISO timestamp); comeback digest sent on first message after 3+ silent days; hard alerts (calendar reminders, deadline alerts, email reply-request alerts) bypass silence/vacation; evening check-in suppressed at silenceLevel ≥ 1
+- Conversational briefing (TZ-1): morning cron sends "Готов к брифингу?" only if `hasSomethingToSay()` returns true; waits for a reply (up to 8 h) before sending full briefing — the reply is token-matched (first ~3 words) against positive/negative word lists, not an exact-string match, so "да, давай" or "ну го" are recognized; a negative reply clears the pending state with a short acknowledgement; anything else falls through to Claude with a context note, and the model can call the `start_briefing` tool if it judges the reply to be acceptance; silence tracking (`silenceDaysCount` / `silenceLevel` 0–2) reduces frequency after 3+ ignored days; vacation mode via `/quiet [N]` command or `set_quiet_mode` tool (`quietUntil` ISO timestamp); comeback digest sent on first message after 3+ silent days; hard alerts (calendar reminders, deadline alerts, email reply-request alerts) bypass silence/vacation; evening check-in suppressed at silenceLevel ≥ 1
 - Workload & Wellbeing scoring: weekly life-balance score (0–10) across 4 domains (work, family, health, personal). Monday 09:00 check-in collects self-reported data, then `lib/workload.js` aggregates Calendar/Gmail/Tasks/Strava data and runs a standalone Claude scoring call. Morning briefing appends an overload coach block when score ≤ 5. On-demand via phrases like "мой скор", "как я справляюсь". History persisted in SQLite `workload_history` table (last 12 weeks)
 - Evening check-in includes a summary of all Google Drive write operations logged during the day (via `lib/disk-log.js`); log is cleared after sending
 - Release update notifications: `sendMorningBriefingFull()` calls `lib/release-check.js::checkForUpdate()` in parallel; if a newer release exists on GitHub (`morshin/snezhanna`) and hasn't been announced today, a separate message with Claude-generated summary and inline «Обновить сейчас» button is sent after the briefing; button triggers `scripts/update.sh` via `nohup`; state tracked in `user_settings` (`update_notified_tag`, `update_notified_date`)
@@ -88,7 +92,7 @@ sudo systemctl daemon-reload
 - Uses `dotenv` with absolute path to `/opt/snezhanna/.env`
 
 **`watchdog/zhora.js`** — Zhora watchdog (separate systemd service):
-- Checks every 5 minutes: snezhanna + tutor systemd status, Telegram API reachability, disk space (>85% threshold), recent error logs
+- Checks every 5 minutes: snezhanna + tutor systemd status, Telegram API reachability, disk space (>85% threshold), recent error logs; set `TUTOR_DISABLED=1` on instances that don't run the tutor bot at all, so Zhora doesn't monitor/auto-restart a `tutor` unit that's meant to stay stopped
 - Auto-restarts Snezhanna or Max if down; reports to the owner via its own Telegram bot (`WATCHDOG_BOT_TOKEN`)
 - Morning report at 07:55 Madrid time shows status of both bots
 - Commands: `/status` (all services), `/logs [snezhanna|max] [N]`, `/restart [snezhanna|max]` with confirmation, `/lang [ru|es]` (set Max's weekly language)
@@ -100,21 +104,29 @@ sudo systemctl daemon-reload
 | File | Purpose |
 |------|---------|
 | `index.js` | Main bot entrypoint |
-| `lib/google.js` | Google Calendar + Gmail + Drive OAuth2 (scopes: calendar, gmail.modify, drive); Gmail thin-wrappers delegate to `lib/gmail.js` |
+| `lib/google.js` | Google Calendar + Gmail + Drive OAuth2 (scopes: calendar, gmail.modify, drive); Gmail thin-wrappers delegate to `lib/gmail.js`; `extractAuthCode(arg)` parses a bare code or full redirect URL for the `/auth` emergency fallback |
+| `lib/oauth-state.js` | Opaque single-use `state` tokens for the Google OAuth redirect flow — `createAuthState('main' \| 'account', accountId?)` / `consumeAuthState(state)`; routes the shared `/auth/google/callback` to the right purpose and doubles as CSRF protection |
 | `lib/gdrive.js` | Google Drive abstraction: folder/file CRUD, search, binary uploads, backup pruning, `ensureDirs()` |
 | `lib/gmail.js` | Gmail API adapter (credentials-based, no file I/O); unified message format; functions: `getMessages`, `getMessage`, `createDraft`, `sendMessage`, `markAsRead`, `getAttachment` |
 | `lib/imap.js` | IMAP/SMTP adapter using `imap`, `mailparser`, `nodemailer`; auto-detects Office 365; functions: `getMessages`, `getMessage`, `createDraft` (IMAP APPEND), `sendMessage` (nodemailer), `markAsRead` |
 | `lib/mail-manager.js` | Multi-account email coordinator; `pollAll()` dispatches to gmail/imap adapters, bootstraps new accounts (seeds seen IDs without digest on first poll), categorizes messages, detects subprojects; `buildEmailDigest()` formats per-account digest; seen tracking in SQLite `email_seen` table |
+| `lib/secret-box.js` | AES-256-GCM encrypt/decrypt for secrets stored in SQLite (`CREDENTIALS_KEY` env var); `enc:v1:` prefix marks encrypted values, unprefixed values pass through as legacy plaintext on decrypt |
+| `lib/email-credentials.js` | Single choke point for reading/writing `email_accounts.credentials` — every caller goes through `readCredentials(account)` / `encodeCredentials(obj)` instead of `JSON.parse`/`JSON.stringify` directly, so `lib/secret-box.js` encryption stays in one place |
+| `lib/pending-email.js` | In-memory registry of emails prepared by `send_email` but not yet sent (15-min TTL); `register()`/`consume()`; the actual `mailManager.sendMessage()` call happens only in index.js's `email:send:<id>` callback_query handler (physical Telegram button click), never from the tool-call path — code-enforced, not model-enforced |
 | `lib/whisper.js` | OpenAI Whisper transcription + TTS (language param: `'ru'` default, `'es'` for Max) |
 | `lib/vision.js` | Shared photo handler: download from Telegram, base64 encode, build Claude image blocks |
 | `lib/reply-chain.js` | Shared reply context builder: extracts `reply_to_message` / `quote` from Telegram messages, walks reply chains via `message_id` in history, formats context block prepended to user messages |
 | `lib/state.js` | Persist chatId, businessConnectionId, awaitingWorkloadCheckin, briefing/silence/vacation state, and onboarding progress (`onboarding_completed`, `onboarding_step`) to `.nanobot/state.json` (path overrideable via `STATE_FILE` env var) |
+| `lib/history-store.js` | Persists the main conversation `history` array to SQLite (`conversation_state` table, single JSON blob row) so it survives restarts; `load()` (discards if older than 24h or corrupt/oversized), `save(history)` (debounced via `saveHistorySoon()` in index.js, flushed on SIGTERM/SIGINT), `clear()` (called by `/reset`) |
+| `lib/history-utils.js` | Pure history-shaping helpers extracted from index.js for testability: `sanitizeHistory()` (drops orphaned tool_use/tool_result blocks), `trimHistory()` (trims to the configured window without starting on assistant/tool_result) |
+| `lib/schedule-utils.js` | Pure scheduling helpers extracted from index.js: `normalizePollInterval(raw)` (the single choke point that turns a raw `email_poll_interval` setting into a safe cron plan — disables on 0/invalid, hourly on ≥60, clamps below 5), `isWithinHours(nowStr, start, end)` (work-hours boundary check, handles overnight ranges) |
+| `lib/message-utils.js` | Pure `splitMessage(text, limit)` extracted from index.js's `sendLongMessage` — splits on paragraph, then line, then hard-cuts; never emits a chunk over Telegram's 4096-char limit |
 | `lib/briefing.js` | `hasSomethingToSay()` (value check for morning gate), `computeSilenceLevel()`, `looksLikeReplyRequest()` (email hard-alert heuristic) |
 | `lib/workload.js` | Workload & Wellbeing scoring: data collection, Claude scoring call, history persisted in SQLite `workload_history` table, weekly report and overload coach block |
 | `lib/workload-scoring-prompt.md` | System prompt for the workload scoring Claude call (JSON output schema, domain weights, tone rules) |
 | `lib/briefing-overload-prompt.md` | System prompt for the morning briefing overload coach block |
 | `docs/snezhanna-workload-scoring-tz.md` | Technical specification for the Workload & Wellbeing Scoring feature |
-| `lib/db.js` | better-sqlite3 init, WAL mode, schema (tasks, projects, project_log, project_notes, project_docs, task_deps, project_params, project_history, contacts, project_contacts, workload_history, memory, file_index, email_accounts, email_seen); exports `{ db, getProject, getProjectById, listProjects, upsertProjectParam, getProjectParam, backup }` |
+| `lib/db.js` | better-sqlite3 init, WAL mode, schema (tasks, projects, project_log, project_notes, project_docs, task_deps, project_params, project_history, contacts, project_contacts, workload_history, memory, file_index, email_accounts, email_seen, conversation_state); exports `{ db, getProject, getProjectById, listProjects, upsertProjectParam, getProjectParam, backup }` |
 | `lib/yadisk-dirs.js` | Project CRUD backed by SQLite (`create_project`, `list_projects`, `read_project_file`, `write_project_file`) and project docs (`list_project_docs`, `read_project_doc`, `write_project_doc`); `saveFile()` uploads to Google Drive via `lib/gdrive.js` |
 | `lib/yadisk.js` | `search_files` and `read_file` tools — delegates to `lib/gdrive.js` for Google Drive search and content fetch |
 | `lib/memory.js` | Memory CRUD backed by SQLite `memory` table |
@@ -126,6 +138,7 @@ sudo systemctl daemon-reload
 | `scripts/migrate-yadisk-to-gdrive.js` | One-time migration: fitness/races, strava weekly data from Yandex.Disk → Google Drive; `--dry-run` available |
 | `data/snezhanna.db` | SQLite database (gitignored) — tasks, projects, docs, logs |
 | `data/analytics/` | Local token usage logs (gitignored) |
+| `test/` | `node:test` unit tests for extracted pure logic (`npm test`); `test/helpers/temp-db.js` points DB-touching tests at a throwaway SQLite file via the `DATABASE_PATH` env override in `lib/db.js`, so tests never touch the live database |
 | `lib/settings.js` | Key-value user settings in SQLite `user_settings`; `get(key)`, `set(key,val)`, `getAll()`, `getSettingsBlock()` (builds name/formality/style/character_notes block; `preferred_name` parsed as comma-separated variants), `getIdentity(default)` (returns DB override or default), `getIdentityWithSettings(default)` (merges IDENTITY text + settings block for Layer 2) |
 | `lib/api.js` | HTTP API server for Mini App; validates Telegram initData, serves static files from `mini-app/`, exposes task CRUD + calendar + settings/chats/projects/contacts/email-accounts CRUD + `GET /api/github/milestones` + `GET /api/system/status` + `POST /api/system/restart` |
 | `lib/onboarding.js` | First-run onboarding wizard state machine; exports `start`, `handleMessage`, `handleCallback`, `resumeAfterGoogleAuth`; steps: check→name→identity→style→briefing→briefing_time→checkin→weekends→email→github→strava→chats |
@@ -174,6 +187,7 @@ The OAuth client in Google Cloud Console must be **Web application** type (not D
 6. Token file path overrideable via `GOOGLE_TOKEN_FILE` env var (for multi-instance deploys)
 7. The redirect URI is derived from `config.mini_app.url` (set in `config/nanobot.local.json`); must also be registered in Google Console → OAuth client → Authorized redirect URIs
 8. `/auth <code-or-url>` command remains available as emergency fallback (accepts bare code or full redirect URL)
+9. **Multi-account routing**: the callback is shared by the main-account flow above and per-mailbox Gmail linking (`/auth2 <id>`, Mini App "connect Gmail"). Every `getAuthUrl()` call carries an opaque one-time `state` token from `lib/oauth-state.js` (`createAuthState('main')` or `createAuthState('account', accountId)`); the callback consumes it (`consumeAuthState`) to decide whether to overwrite `token.json` (main) or update that `email_accounts` row's credentials (account) — this also doubles as CSRF protection, since the callback rejects any request with a missing/unknown/expired `state`. See `docs/AUDIT-2026-07-07/tz-03-multi-account-oauth.md`.
 
 ### Google Drive structure
 
@@ -229,6 +243,7 @@ WATCHDOG_BOT_TOKEN       # Zhora's Telegram bot
 OPENAI_API_KEY           # Whisper transcription + TTS
 GOOGLE_CLIENT_ID         # Google OAuth2 (Calendar + Gmail + Drive)
 GOOGLE_CLIENT_SECRET     # Google OAuth2
+CREDENTIALS_KEY          # 64-char hex (32 bytes) — encrypts email_accounts.credentials at rest (lib/secret-box.js); generate with `openssl rand -hex 32`; never rotate once set
 TUTOR_BOT_TOKEN          # Max tutor bot (from @BotFather)
 TUTOR_ALLOWED_USER_ID    # Son's numeric Telegram ID
 KIDS_DATA_DIR            # local kids data dir (default: /opt/snezhanna/data/kids)

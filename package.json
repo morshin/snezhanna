@@ -22,6 +22,7 @@
   },
   "scripts": {
     "start": "node index.js",
-    "dev": "node index.js --debug"
+    "dev": "node index.js --debug",
+    "test": "node --test"
   }
 }

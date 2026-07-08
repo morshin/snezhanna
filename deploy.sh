@@ -442,9 +442,21 @@ set_env "GOOGLE_CLIENT_SECRET"     "$GOOGLE_CLIENT_SECRET"
 [ -n "$OPENAI_API_KEY" ] && set_env "OPENAI_API_KEY" "$OPENAI_API_KEY"
 [ -n "$GITHUB_TOKEN" ] && set_env "GITHUB_TOKEN" "$GITHUB_TOKEN"
 
+# CREDENTIALS_KEY encrypts email_accounts.credentials — generate once and never
+# rotate on re-runs, or already-encrypted rows become unreadable.
+if ! grep -q '^CREDENTIALS_KEY=.\+' "$ENV_FILE"; then
+  set_env "CREDENTIALS_KEY" "$(openssl rand -hex 32)"
+fi
+
 chmod 600 "$ENV_FILE"
 chown "$INSTANCE_NAME:$INSTANCE_NAME" "$ENV_FILE"
 ok ".env written"
+
+# Tighten perms on other secret files if they already exist (token.json/DB are
+# normally created by the app itself with 0600, but re-deploys of an older
+# instance may predate that)
+[ -f "$INSTANCE_DIR/token.json" ] && chmod 600 "$INSTANCE_DIR/token.json"
+[ -f "$INSTANCE_DIR/data/snezhanna.db" ] && chmod 600 "$INSTANCE_DIR/data/snezhanna.db"
 
 # ── IDENTITY.md ───────────────────────────────────────────────────────────────
 

@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS email_accounts (
   account_type  TEXT NOT NULL DEFAULT 'personal',  -- 'personal' | 'corporate'
   enabled       INTEGER NOT NULL DEFAULT 1,
   bootstrapped  INTEGER NOT NULL DEFAULT 0,  -- 1 after first poll (no digest on first run)
-  credentials   TEXT,                   -- JSON string: Gmail token OR IMAP config
+  credentials   TEXT,                   -- JSON string: Gmail token OR IMAP config (encrypted at rest since TZ-04, see below)
   created_at    TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at    TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -63,9 +63,20 @@ Remove those two fields from `DEFAULT_STATE` in `lib/state.js` after migration.
   "port": 993,
   "tls": true,
   "user": "user@company.com",
-  "password": "..."
+  "password": "...",
+  "allow_invalid_tls": false
 }
 ```
+
+> **Extended** (audit TZ-04, 2026-07): the `credentials` column is now encrypted
+> at rest (AES-256-GCM, `lib/secret-box.js`, key in `CREDENTIALS_KEY`) — every
+> reader/writer goes through `lib/email-credentials.js` instead of
+> `JSON.parse`/`JSON.stringify` directly. Legacy plaintext rows are read
+> transparently and re-encrypted on next write (or by the one-time startup
+> sweep in `index.js`). Also: IMAP/SMTP TLS certificate verification is on by
+> default; `allow_invalid_tls: true` opts a single account out (self-signed
+> cert servers only — was previously a hardcoded `rejectUnauthorized: false`
+> for every account). See `docs/AUDIT-2026-07-07/tz-04-email-credentials-security.md`.
 
 ---
 
@@ -345,6 +356,14 @@ function buildEmailDigest(account, messages) {
 
 ### New tool: `send_email`
 
+> **Superseded** (audit TZ-02, 2026-07): the `confirmed` boolean flag below was a
+> model-enforced confirmation and is no longer how this works. `send_email` now
+> always registers a pending send (`lib/pending-email.js`) and shows a Telegram
+> button; the actual `mailManager.sendMessage()` call only happens from the
+> `email:send:<id>` callback_query handler in `index.js`, requiring a physical
+> button click. See `docs/AUDIT-2026-07-07/tz-02-send-email-confirm-button.md`.
+> The schema/handler below are kept for history.
+
 ```js
 {
   name: 'send_email',
@@ -454,6 +473,13 @@ async function saveTokenForAccount(code)
 // Same as saveToken() but returns token object instead of writing to file
 // The caller (api.js) stores it in email_accounts.credentials
 ```
+
+> **Extended** (audit TZ-03, 2026-07): the manual copy-paste flow above still works
+> (`emailAccountAuthCode` / `/auth2 <id> <code>`), but there is now also an automatic
+> redirect path — `getAuthUrl()` takes an opaque `state` from `lib/oauth-state.js`
+> so the shared `/auth/google/callback` can tell this account-linking flow apart
+> from the main-account flow instead of overwriting `token.json`. See
+> `docs/AUDIT-2026-07-07/tz-03-multi-account-oauth.md`.
 
 ---
 

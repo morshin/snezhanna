@@ -9,9 +9,11 @@ cd "$INSTANCE_DIR"
 
 DEV_MODE=false
 POST_UPDATE=false
+PREV_REF=""
 for arg in "$@"; do
   [[ "$arg" == "--dev" ]]         && DEV_MODE=true
   [[ "$arg" == "--post-update" ]] && POST_UPDATE=true
+  [[ "$arg" == --prev-ref=* ]]    && PREV_REF="${arg#--prev-ref=}"
 done
 
 echo "Updating $INSTANCE_NAME..."
@@ -27,6 +29,10 @@ fi
 
 if [ "$POST_UPDATE" = false ]; then
   # ── Git phase ──────────────────────────────────────────────────────────────
+
+  # Record the commit we're updating FROM, so the test gate below can roll
+  # back to a known-good state if the new version fails its own test suite.
+  PREV_REF=$($RUN git rev-parse HEAD)
 
   # Back up nanobot.json BEFORE any git operations — migrations need it even
   # after git checkout removes it from the repo (v1.3.17+).
@@ -67,13 +73,36 @@ if [ "$POST_UPDATE" = false ]; then
 
   # Re-exec from the freshly checked-out script — bash was reading the old inode;
   # exec replaces the process so all post-update steps run from the new version.
-  exec bash "$INSTANCE_DIR/scripts/update.sh" --post-update ${DEV_MODE:+--dev}
+  exec bash "$INSTANCE_DIR/scripts/update.sh" --post-update ${DEV_MODE:+--dev} "--prev-ref=$PREV_REF"
 fi
 
 # ── Post-update phase (running from new script inode after exec) ──────────────
 REF=$($RUN git describe --tags --exact-match HEAD 2>/dev/null || $RUN git rev-parse --short HEAD)
 
 $RUN npm install --production --ignore-scripts -q
+
+# ── Test gate ──────────────────────────────────────────────────────────────
+# Protects tenants from a bad release reaching every instance at once via
+# auto-update. `node:test` ships in Node core, so this runs even with the
+# --production install above. On failure: roll back to the commit we were on
+# before this update, reinstall its deps, and restart into the known-good
+# version instead of the broken one — the existing update_pending_from check
+# in index.js (post-restart) will then correctly report "update failed,
+# version unchanged" to the owner via Telegram.
+if [ -d test ]; then
+  echo "Running test suite..."
+  if ! $RUN npm test --silent; then
+    echo "❌ Tests failed on $REF — rolling back to $PREV_REF"
+    if [ -n "$PREV_REF" ]; then
+      $RUN git checkout -q "$PREV_REF"
+      $RUN npm install --production --ignore-scripts -q
+    fi
+    sudo systemctl restart "$INSTANCE_NAME"
+    echo "Rolled back to $PREV_REF and restarted. Update to $REF aborted."
+    exit 1
+  fi
+  echo "Tests passed"
+fi
 
 # Run pending migrations (idempotent; failures are logged but don't abort the update)
 $RUN node scripts/run-migrations.js || echo "⚠  Migration runner exited with errors — check output above"

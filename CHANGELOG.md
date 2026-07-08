@@ -9,6 +9,24 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), [Semantic Vers
 <!-- Format: - <One-sentence description> (#<issue or branch ref>) -->
 <!-- Categories: Added | Changed | Fixed | Security | Removed -->
 
+### Fixed
+- Fixed a crash loop: choosing "не проверять" for email polling (or any invalid/zero interval reaching `scheduleEmailPoll`) no longer builds an invalid `*/0` cron expression that crashed the process on every restart — `0`/invalid values now cleanly disable polling instead (audit TZ-01)
+- `get_emails` without `account_id` now aggregates unread messages from every enabled account instead of silently only returning the first one (audit TZ-07)
+- Evening checklist completion now resolves against a snapshot of task IDs taken when the checklist was sent, not a fresh task query at click time — fixes ticking the wrong item if the task list changed in between (audit TZ-07)
+- `sendToUser` no longer fails on messages over 4096 chars whenever any option (e.g. `disable_notification`) was set — it now always splits via the same `splitMessage` used by `sendLongMessage` (audit TZ-07)
+- Zhora's tutor-bot monitoring is now controlled by a `TUTOR_DISABLED` env var instead of a hardcoded `disabled: true`, so instances that actually run Max get it monitored/auto-restarted like Snezhanna (audit TZ-07)
+- Morning briefing reply detection now token-matches the first few words instead of the whole message, so "да, давай" or "ну го" are recognized (previously only an exact string match worked); a negative reply now clears the pending state instead of leaving it stuck; anything else falls through to Claude with context, which can call the new `start_briefing` tool if it judges the reply to be acceptance (audit TZ-07)
+- Fixed three slow resource leaks: the calendar-reminder de-dup set now prunes past events instead of growing forever, `email_seen` rows older than 90 days are pruned daily, and refreshed Google OAuth access tokens are now persisted back to `token.json` instead of being discarded after each call (audit TZ-07)
+
+### Added
+- Minimal `node:test` unit test suite (`npm test`, `test/`) covering pure logic extracted from index.js — history sanitization/trimming (`lib/history-utils.js`), email-poll cron interval normalization and work-hours checks (`lib/schedule-utils.js`), Telegram message splitting (`lib/message-utils.js`, also fixes a bug where a single paragraph over 4096 chars shipped unsplit and failed at the Telegram API), OAuth code parsing (`lib/google.js::extractAuthCode`), and email categorization (`lib/mail-manager.js::categorize`, `lib/imap.js::needsReply`); `scripts/update.sh` now runs the suite after every auto-update and rolls back to the previous commit + restarts if it fails, instead of shipping a broken release to every instance (audit TZ-06)
+- Conversation history now persists across restarts (`lib/history-store.js`, SQLite `conversation_state` table) — auto-updates, Zhora restarts, and deploys no longer wipe the bot's memory of the current conversation; stored history older than 24h is discarded as stale, and `/reset` clears the persisted copy too (audit TZ-05)
+
+### Security
+- `send_email` no longer sends on a model-set `confirmed` flag — it now always shows a Telegram confirmation message with "Send"/"Cancel" buttons, and the actual send only happens from the button's callback handler; a prompt-injection attempt can no longer cause an email to go out without a physical tap (audit TZ-02)
+- The Google OAuth redirect callback now requires a one-time `state` token (`lib/oauth-state.js`) — fixes linking a second Gmail account silently overwriting the main `token.json`, and rejects any callback request without a state we issued ourselves (CSRF) (audit TZ-03)
+- `email_accounts.credentials` (IMAP passwords, per-account Gmail OAuth tokens) is now encrypted at rest with AES-256-GCM (`CREDENTIALS_KEY` env var) instead of stored as plaintext that ended up in daily Drive DB backups; legacy plaintext rows are re-encrypted automatically on startup; IMAP/SMTP TLS certificate verification is now on by default (was hardcoded off) with a per-account `allow_invalid_tls` opt-out — also fixes a real interop bug where the `imap` package's missing SNI (`servername`) made even valid certs (e.g. `imap.gmail.com`) fail verification; `token.json`, the SQLite DB, and `.env` are now kept at `0600` (self-healed on every startup) (audit TZ-04)
+
 ## [1.4.4] — 2026-06-29
 
 ### Added

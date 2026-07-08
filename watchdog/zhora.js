@@ -93,7 +93,7 @@ async function send(text) {
 
 const SERVICES = [
   { name: 'Снежанна', unit: 'snezhanna' },
-  { name: 'Макс',     unit: 'tutor',     disabled: true },
+  { name: 'Макс',     unit: 'tutor',     disabled: process.env.TUTOR_DISABLED === '1' },
 ];
 
 // ── Checks ────────────────────────────────────────────────────────────────────
