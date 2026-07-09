@@ -562,9 +562,14 @@ async function pollLoop() {
         const msg = update.message;
         if (!msg || !msg.text) continue;
 
-        // Issue reports from the designated relay group (any sender)
+        // Issue reports from the designated relay group — only instance bots
+        // and the owner may create issues, not arbitrary group members
         if (REPORT_CHAT_ID && String(msg.chat.id) === String(REPORT_CHAT_ID)
             && msg.text.startsWith('/report_issue ')) {
+          if (!(msg.from && msg.from.is_bot === true) && !isAllowed(msg)) {
+            console.warn('[Zhora] /report_issue from unauthorized sender ignored:', msg.from && msg.from.id);
+            continue;
+          }
           handleIssueReport(msg).catch(e =>
             console.error('[Zhora] handleIssueReport error:', e.message)
           );

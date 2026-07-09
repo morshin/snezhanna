@@ -151,6 +151,19 @@ if [ -f .env.example ] && [ -f .env ]; then
   fi
 fi
 
+# CREDENTIALS_KEY encrypts email_accounts.credentials — deploy.sh generates it on
+# fresh installs, but instances updating to v1.5.0+ arrive here with the key
+# missing or empty (the merge above only copies the blank line from .env.example).
+# Generate once; never rotate, or already-encrypted rows become unreadable.
+if [ -f .env ] && ! grep -q '^CREDENTIALS_KEY=.\+' .env; then
+  if grep -q '^CREDENTIALS_KEY=' .env; then
+    sed -i "s|^CREDENTIALS_KEY=.*|CREDENTIALS_KEY=$(openssl rand -hex 32)|" .env
+  else
+    echo "CREDENTIALS_KEY=$(openssl rand -hex 32)" >> .env
+  fi
+  echo "Generated CREDENTIALS_KEY (encrypts stored email credentials)"
+fi
+
 # Merge new fields from nanobot.json.example into nanobot.json (add missing only, never overwrite)
 if [ -f config/nanobot.json.example ] && [ -f config/nanobot.json ]; then
   MERGED=$($RUN node -e "

@@ -9,6 +9,18 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), [Semantic Vers
 <!-- Format: - <One-sentence description> (#<issue or branch ref>) -->
 <!-- Categories: Added | Changed | Fixed | Security | Removed -->
 
+### Added
+- Incoming email is now categorized by a cheap Claude Haiku one-shot classifier (`lib/email-classifier.js`) instead of regex keyword matching — one API call per poll batch assigns `reply_needed`/`event`/`task`/`update`/`info` per message and drives the reply-needed hard alerts; on any classifier failure (API error, unparseable output) the poll falls back to the old regex `categorize()` so mail never breaks; email text is treated as data (instructions inside emails are ignored by the classifier prompt)
+
+### Fixed
+- `scripts/update.sh` now generates `CREDENTIALS_KEY` when it is missing or empty after the `.env` merge — previously only `deploy.sh` generated it, so existing instances auto-updating to v1.5.0+ ended up with an empty key and every new email-credentials write (`/auth2`, Mini App) failed
+- `send_email` now returns an explicit error (suggesting `create_draft`) when the confirmation button cannot be shown (bot not ready / unknown chatId), instead of registering a pending email nobody can confirm
+- `lib/pending-email.js` and `lib/oauth-state.js` now prune expired entries on every register/create instead of only on consume, so abandoned confirmations/auth flows no longer linger in memory until restart
+
+### Security
+- Mini App static file serving now checks the path prefix with a path separator, so a sibling directory like `mini-app-x` can no longer be served (`lib/api.js`)
+- Zhora's `/report_issue` relay now only accepts reports from bots (Snezhanna instances) or the owner — arbitrary members of the relay group can no longer create GitHub issues
+
 ## [1.5.0] — 2026-07-08
 
 ### Fixed
