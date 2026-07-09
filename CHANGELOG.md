@@ -9,6 +9,8 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), [Semantic Vers
 <!-- Format: - <One-sentence description> (#<issue or branch ref>) -->
 <!-- Categories: Added | Changed | Fixed | Security | Removed -->
 
+## [1.5.1] — 2026-07-09
+
 ### Added
 - Incoming email is now categorized by a cheap Claude Haiku one-shot classifier (`lib/email-classifier.js`) instead of regex keyword matching — one API call per poll batch assigns `reply_needed`/`event`/`task`/`update`/`info` per message and drives the reply-needed hard alerts; on any classifier failure (API error, unparseable output) the poll falls back to the old regex `categorize()` so mail never breaks; email text is treated as data (instructions inside emails are ignored by the classifier prompt)
 
