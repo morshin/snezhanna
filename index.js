@@ -25,6 +25,7 @@ const diskLog = require('./lib/disk-log');
 const tasks = require('./lib/tasks');
 const tasksMerge = require('./lib/tasks-merge');
 const chatMonitor = require('./lib/chat-monitor');
+const archive = require('./lib/archive');
 const strava = require('./lib/strava');
 const workload = require('./lib/workload');
 const { logTokens } = require('./lib/token-log');
@@ -199,6 +200,13 @@ async function _askClaude(userMessage, requestType = 'text', meta = {}) {
   const historyBeforeCall = [...history];
 
   history.push({ role: 'user', content: userMessage, ...meta });
+  archive.addEntry({
+    source_type: 'owner_chat',
+    chat_id: appState.chatId || null,
+    from_name: userName,
+    content: userMessage,
+    timestamp: new Date().toISOString()
+  });
 
   // Trim history, but never orphan a tool_result or start on an assistant message
   history = trimHistory(history, config.history.max_messages, config.history.keep_last);
@@ -316,6 +324,15 @@ async function _askClaude(userMessage, requestType = 'text', meta = {}) {
       const textBlocks = response.content.filter(b => b.type === 'text');
       const reply = textBlocks.map(b => b.text).join('\n') || '';
       history.push({ role: 'assistant', content: reply });
+      if (reply.trim()) {
+        archive.addEntry({
+          source_type: 'owner_chat',
+          chat_id: appState.chatId || null,
+          from_name: assistantName,
+          content: reply,
+          timestamp: new Date().toISOString()
+        });
+      }
       saveHistorySoon();
       return reply;
     }

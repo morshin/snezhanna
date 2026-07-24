@@ -114,6 +114,7 @@ snezhanna/
   ├── lib/
   │   ├── attachments.js    # Email attachment parsing (PDF/XLSX/DOCX)
   │   ├── api.js            # HTTP API server for Mini App (task/calendar/settings/chats/projects/contacts CRUD + GET /api/system/status + POST /api/system/restart)
+  │   ├── archive.js        # Long-term searchable archive: SQLite archive + archive_fts (FTS5); addEntry/search, powers search_archive tool
   │   ├── chat-monitor.js   # Telegram chat monitor — reads from SQLite monitored_chats; addChat/removeChat
   │   ├── db.js             # SQLite init (better-sqlite3), all table schemas, helper exports
   │   ├── disk-log.js       # In-memory Google Drive write operation log

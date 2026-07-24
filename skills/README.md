@@ -51,6 +51,11 @@ Full-text search, content reading, saving new files (default destination `inbox/
 
 Curated notes by category — health, kids, finance, bureaucracy, decisions — read and updated across sessions (SQLite-backed). Details: [memory.md](memory.md).
 
+### 🗄 Long-term archive & search
+`search_archive`
+
+Every owner↔bot turn, every monitored-chat message, and every newly-seen email (full body) is written indefinitely to a SQLite `archive` table with an FTS5 full-text index (`lib/archive.js`). `search_archive` lets Claude answer "what did we discuss about X a couple of months ago" or "find in the correspondence with Y about project Z" — free-text keyword search (sanitized into a safe FTS5 query, tokens prefix-matched), optionally filtered by source (`owner_chat` / `monitored_chat` / `email`), chat/mailbox name, project, or date range. This is keyword recall, not semantic search — no embeddings involved.
+
 ### ✅ Tasks
 `add_task`, `list_tasks`, `update_task`, `complete_task`, `delete_task`, `add_task_dependency`, `get_task_with_subtasks`
 
