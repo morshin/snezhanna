@@ -9,9 +9,13 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), [Semantic Vers
 <!-- Format: - <One-sentence description> (#<issue or branch ref>) -->
 <!-- Categories: Added | Changed | Fixed | Security | Removed -->
 
+## [1.6.0] — 2026-07-24
+
 ### Added
 - Long-term searchable archive (`lib/archive.js`, SQLite `archive` table + FTS5 index): every owner↔bot conversation turn, monitored-chat message, and newly-seen email (full body) is now stored indefinitely and full-text searchable via the new `search_archive` tool, so Claude can answer "what did we discuss about X a couple of months ago" or "find in the correspondence with Y about project Z"; `query` is optional — omitting it browses the most recent entries by filter (source/chat/date) instead of requiring a keyword, so "show me the latest messages in chat X" doesn't have to be forced through a doomed keyword search
-- Fixed `search_archive`'s `date_to`/`date_from` filters silently dropping same-day results: a bare `YYYY-MM-DD` bound was compared lexically against full ISO timestamps (`2026-07-24` sorts before `2026-07-24T11:17:18.000Z`), so a `date_to` of "today" excluded the entire current day — bare dates are now padded to inclusive day boundaries before comparison
+
+### Fixed
+- `search_archive`'s `date_to`/`date_from` filters silently dropped same-day results: a bare `YYYY-MM-DD` bound was compared lexically against full ISO timestamps (`2026-07-24` sorts before `2026-07-24T11:17:18.000Z`), so a `date_to` of "today" excluded the entire current day — bare dates are now padded to inclusive day boundaries before comparison
 
 ### Changed
 - `lib/gmail.js::getMessage` now takes an optional `{ markRead: false }` option so fetching a message's full body for archiving no longer marks the owner's unread email as read
