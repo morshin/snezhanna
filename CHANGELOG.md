@@ -9,6 +9,18 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), [Semantic Vers
 <!-- Format: - <One-sentence description> (#<issue or branch ref>) -->
 <!-- Categories: Added | Changed | Fixed | Security | Removed -->
 
+## [1.5.2] — 2026-07-24
+
+### Fixed
+- Fixed a crash on almost every incoming message (`Error: briefingNote is not defined`) — the variable was declared with `let` inside the `if (msg.text)` block but read after that block closed, so it was out of scope for any message that didn't return early (all normal text replies, plus every voice/document message); moved the declaration to function scope
+
+### Changed
+- Zhora's disk-space alert no longer repeats every 5 minutes once usage crosses the 85% threshold — it fires once, then again only if usage climbs at least 5pp further, and sends an all-clear message once usage drops back down
+
+### Added
+- `skills/README.md` (English) and `skills/README.ru.md` (Russian) — full capability reference across all skills, documentation only, not loaded at runtime
+- `AUDIT-2026-07.md` — product/security audit notes
+
 ## [1.5.1] — 2026-07-09
 
 ### Added

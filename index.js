@@ -633,6 +633,7 @@ bot.on('message', async (msg) => {
   const chatId = msg.chat.id;
   let userText = '';
   let requestType = 'text';
+  let briefingNote = null;
   const msgMeta = { message_id: msg.message_id };
   if (msg.reply_to_message) msgMeta.reply_to_message_id = msg.reply_to_message.message_id;
 
@@ -746,7 +747,6 @@ bot.on('message', async (msg) => {
       // leave briefingPending stuck on. Negative replies now also clear it
       // instead of leaving it hanging; anything else falls through to Claude
       // with a note, and the model can call start_briefing itself.
-      let briefingNote = null;
       if (appState.briefingPending) {
         const elapsed = Date.now() - new Date(appState.briefingPendingAt).getTime();
         if (elapsed < 8 * 60 * 60 * 1000) {

@@ -1,6 +1,6 @@
 {
   "name": "snezhanna",
-  "version": "1.5.1",
+  "version": "1.5.2",
   "description": "Personal AI assistant Snezhanna",
   "private": true,
   "main": "index.js",

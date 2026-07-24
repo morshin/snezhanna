@@ -188,12 +188,29 @@ async function checkDrive() {
   return true;
 }
 
+let diskWasFull = false;
+let diskLastAlertPct = 0;
+
 async function checkDiskSpace() {
   const { stdout } = await sh("df / --output=pcent | tail -1 | tr -d ' %'");
   const used = parseInt(stdout, 10);
-  if (!isNaN(used) && used > 85) {
-    await send(`⚠️ *Жора:* Диск сервера заполнен на *${used}%*! Скоро закончится место.`);
+  if (isNaN(used)) return true;
+
+  if (used > 85) {
+    // Alert once when crossing the threshold, then again only if usage climbs
+    // at least 5pp further — avoids repeating the same message every 5 min.
+    if (!diskWasFull || used >= diskLastAlertPct + 5) {
+      diskWasFull = true;
+      diskLastAlertPct = used;
+      await send(`⚠️ *Жора:* Диск сервера заполнен на *${used}%*! Скоро закончится место.`);
+    }
     return false;
+  }
+
+  if (diskWasFull) {
+    diskWasFull = false;
+    diskLastAlertPct = 0;
+    await send(`✅ *Жора:* Место на диске освобождено, сейчас занято ${used}%.`);
   }
   return true;
 }

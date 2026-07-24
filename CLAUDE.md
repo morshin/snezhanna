@@ -157,7 +157,7 @@ sudo systemctl daemon-reload
 | `systemd/snezhanna.service.template` | Systemd service template for new instances (parameterized WorkingDirectory + EnvironmentFile) |
 | `lib/skill-context.js` | Per-skill behavioral instructions: `get(domain)`, `set(domain, text)`, `getAll()`, `listDomains()`; stored in `user_settings` with keys `skill_context:{domain}`; domains: global, email_poll, morning_briefing, evening_checkin, calendar_reminder |
 | `lib/skills.js` | Auto-generates the "## Мои актуальные возможности" block injected as Layer 3 of the system prompt; `buildSkillsBlock(tools, skillContexts)` groups tools by category, annotates each with `⚙️` instructions from `skillContexts`, appends self-check meta-instruction; stays in sync with `lib/tools.js` via `/update-docs` |
-| `skills/*.md` | Capability descriptions (documentation only, not loaded at runtime) |
+| `skills/*.md` | Capability descriptions (documentation only, not loaded at runtime); `skills/README.md` is the full capability reference across all skills |
 | `tutor/index.js` | Max tutor bot entrypoint |
 | `tutor/lib/storage.js` | File I/O for `KIDS_DATA_DIR` (default: `/opt/snezhanna/data/kids`); quest CRUD; prize code pool CRUD; HMAC-signed balance |
 | `tutor/lib/session.js` | In-memory tutoring session state |
