@@ -52,7 +52,8 @@ function resolveIdentityPlaceholders(raw) {
   const effectiveName = settings.get('preferred_name') || config.user?.name || 'шеф';
   return raw
     .replace(/\{\{USER_NAME\}\}/g, effectiveName)
-    .replace(/\{\{ASSISTANT_NAME\}\}/g, assistantName);
+    .replace(/\{\{ASSISTANT_NAME\}\}/g, assistantName)
+    .replace(/\{\{TIMEZONE\}\}/g, config.timezone);
 }
 
 const coreIdentity = resolveIdentityPlaceholders(
@@ -1818,7 +1819,7 @@ ${chatSection}`;
     }
   }, { timezone: config.timezone });
 
-  console.log('[Snezhanna] Schedules initialized (timezone: Europe/Madrid)');
+  console.log(`[Snezhanna] Schedules initialized (timezone: ${config.timezone})`);
 }
 
 // ── Startup ───────────────────────────────────────────────────────────────────

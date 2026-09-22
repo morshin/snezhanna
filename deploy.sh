@@ -404,6 +404,16 @@ ok "npm install done"
 
 # ── nanobot.json ──────────────────────────────────────────────────────────────
 
+# This instance has never been configured before iff nanobot.json isn't there
+# yet — true both for a brand-new clone and for "new instance on same VPS"
+# (which also starts from a fresh `git clone`). Capture that now, before the
+# next block creates the file, so later steps can tell "genuinely new
+# instance" apart from "re-running deploy.sh against an already-configured
+# one" — git always ships identity/IDENTITY.md (it's the maintainer's own,
+# tracked file), so file-existence alone can't be used to detect that case.
+FRESH_INSTANCE=false
+[ -f "$INSTANCE_DIR/config/nanobot.json" ] || FRESH_INSTANCE=true
+
 step "Configuration files"
 if [ ! -f "$INSTANCE_DIR/config/nanobot.json" ]; then
   cp "$INSTANCE_DIR/config/nanobot.json.example" "$INSTANCE_DIR/config/nanobot.json"
@@ -468,14 +478,19 @@ ok ".env written"
 [ -f "$INSTANCE_DIR/data/snezhanna.db" ] && chmod 600 "$INSTANCE_DIR/data/snezhanna.db"
 
 # ── IDENTITY.md ───────────────────────────────────────────────────────────────
+# A fresh clone always brings identity/IDENTITY.md — it's a tracked file, the
+# maintainer's own personality/tone default, not a placeholder. Force it back
+# to the neutral template for a genuinely new instance so every new bot
+# doesn't inherit someone else's persona (and stale {{TIMEZONE}}-less prose)
+# by accident. Never touches an already-configured instance.
 
-if [ ! -f "$INSTANCE_DIR/identity/IDENTITY.md" ]; then
+if [ "$FRESH_INSTANCE" = true ]; then
   sudo -u "$INSTANCE_NAME" cp \
     "$INSTANCE_DIR/identity/IDENTITY.template.md" \
     "$INSTANCE_DIR/identity/IDENTITY.md"
-  ok "identity/IDENTITY.md created from template"
+  ok "identity/IDENTITY.md reset to neutral template"
 else
-  skip "identity/IDENTITY.md already exists"
+  skip "identity/IDENTITY.md already exists (existing instance)"
 fi
 
 # ── systemd service ───────────────────────────────────────────────────────────
