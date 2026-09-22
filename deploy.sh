@@ -139,6 +139,15 @@ ok "git $(git --version | grep -oP '[\d.]+')"
 check_node
 ok "node v$(node_major)"
 
+# npm install needs to compile better-sqlite3 from source whenever no
+# prebuilt binary matches this Node ABI/platform — without a compiler this
+# fails deep inside npm install with no obvious hint, well after this point.
+if ! command -v make &>/dev/null || ! command -v g++ &>/dev/null; then
+  echo "  Installing build tools (needed to compile native npm dependencies)..."
+  apt-get install -y build-essential python3 -q
+fi
+ok "build tools (make/g++/python3)"
+
 # ── Clone (bootstrap mode only) ───────────────────────────────────────────────
 
 if [ "$IN_REPO" = false ]; then
