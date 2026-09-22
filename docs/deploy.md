@@ -11,7 +11,7 @@ One script handles both scenarios — a fresh server and adding another instance
 - **Google account for the bot**: create a dedicated Gmail account the bot will use (e.g. `mybot-assistant@gmail.com`) — not the operator's personal account
 - **Google OAuth credentials**: Google Cloud Console → create a **Web application** OAuth 2.0 Client → copy `Client ID` and `Client Secret`
   - For a second instance on the same VPS: reuse the same Google Cloud Project (add a new redirect URI per instance)
-- **Domain with HTTPS**: required for both Mini App and Google OAuth callback (see [Mini App HTTPS](#mini-app-https))
+- **Domain with HTTPS**: required for both Mini App and Google OAuth callback (see [Mini App HTTPS](#mini-app-https)). Planning multiple bots on one server? Point a wildcard DNS record (`*.example.com`) at the server once, and every instance just picks an unused subdomain — see [New instance on the same VPS](#new-instance-on-the-same-vps)
 - **Anthropic API key**: platform.anthropic.com
 - **OpenAI API key** _(optional — only needed for voice messages)_
 
@@ -42,7 +42,9 @@ sudo git clone https://github.com/morshin/snezhanna /opt/ira
 sudo bash /opt/ira/deploy.sh
 ```
 
-Same prompts, same result.
+Same prompts, same result. Each instance gets its own system user, its own `/opt/<name>` directory, its own port, its own SQLite DB, and its own systemd unit with `MemoryMax`/`CPUQuota` caps (`systemd/snezhanna.service.template`) — instances can't see each other's data and one runaway instance can't starve the rest. The Mini App API also only binds to `127.0.0.1`; it's reachable from outside only through the nginx vhost for that instance's domain, not directly on its port.
+
+Set up **wildcard DNS once** — `*.example.com → <server IP>` — and every new instance just picks an unused subdomain (`ira.example.com`, `eugenio.example.com`, ...) at the deploy prompt; there's no per-bot DNS step after that.
 
 ---
 
@@ -89,7 +91,7 @@ HTTPS is required for both Telegram Mini App and Google OAuth callback.
 
 **Option A — domain + Let's Encrypt** (handled by the deploy script automatically when a domain is provided):
 
-The script installs nginx, obtains a Let's Encrypt certificate, and writes `config/nanobot.local.json` with `mini_app.url`. Google OAuth callback works automatically.
+The script installs nginx, obtains a Let's Encrypt certificate, and writes `config/nanobot.local.json` with `mini_app.url`. Google OAuth callback works automatically. It also calls Telegram's `setChatMenuButton` API to point the bot's Menu Button at the new Mini App URL — no manual BotFather step needed for this path.
 
 **Option B — Cloudflare Tunnel** (no domain/certificate setup needed):
 
@@ -111,11 +113,19 @@ Then set `mini_app.url` manually in `config/nanobot.local.json`:
 
 And restart the service: `sudo systemctl restart <name>`
 
-**Setting up the Mini App button in BotFather:**
+**Setting up the Mini App button manually** (only needed for Option B, or if the automatic call in Option A failed — the deploy script tells you if it did):
 
 1. @BotFather → `/mybots` → select your bot
 2. **Bot Settings → Menu Button → Configure Menu Button**
 3. Enter your HTTPS URL and button text
+
+Or equivalently, via the Bot API directly:
+
+```bash
+curl -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/setChatMenuButton" \
+  -H 'Content-Type: application/json' \
+  -d '{"menu_button":{"type":"web_app","text":"Menu","web_app":{"url":"https://alice.example.com"}}}'
+```
 
 ---
 

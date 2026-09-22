@@ -22,5 +22,11 @@ StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=INSTANCE_NAME
 
+# Resource caps — keep one runaway instance from starving the others on a
+# shared multi-bot host. Raise MemoryMax if an instance needs more headroom.
+MemoryMax=512M
+CPUQuota=100%
+TasksMax=256
+
 [Install]
 WantedBy=multi-user.target

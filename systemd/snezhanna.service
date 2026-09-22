@@ -16,5 +16,11 @@ StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=snezhanna
 
+# Resource caps — keep one runaway instance from starving the others on a
+# shared multi-bot host. Raise MemoryMax if this instance needs more headroom.
+MemoryMax=512M
+CPUQuota=100%
+TasksMax=256
+
 [Install]
 WantedBy=multi-user.target

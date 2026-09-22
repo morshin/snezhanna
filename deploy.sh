@@ -636,6 +636,27 @@ LOCALEOF
   fi
 fi
 
+# ── Telegram menu button ─────────────────────────────────────────────────────
+# BotFather itself can't be automated (no API to create/configure bots there),
+# but setChatMenuButton *is* a normal Bot API call — it's the same "Menu
+# Button" the BotFather UI would set, so once the Mini App URL is live there's
+# no manual @BotFather step left.
+
+MENU_BUTTON_SET=false
+if [ "$AUTO_REDIRECT" = true ]; then
+  step "Telegram menu button"
+  BUTTON_TEXT=$(printf '%s' "$ASSISTANT_NAME" | cut -c1-16)
+  RESP=$(curl -sf --max-time 10 "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/setChatMenuButton" \
+    -H 'Content-Type: application/json' \
+    -d "{\"menu_button\":{\"type\":\"web_app\",\"text\":\"$BUTTON_TEXT\",\"web_app\":{\"url\":\"$MINI_APP_URL\"}}}" 2>/dev/null || true)
+  if printf '%s' "$RESP" | grep -q '"ok":true'; then
+    ok "Menu button set to $MINI_APP_URL"
+    MENU_BUTTON_SET=true
+  else
+    yellow "Could not set menu button automatically — set it in @BotFather: /mybots → bot → Menu Button"
+  fi
+fi
+
 # ── Done ──────────────────────────────────────────────────────────────────────
 
 echo
@@ -667,8 +688,13 @@ bold "║  After auth → onboarding wizard starts automatically     ║"
 bold "║                                                          ║"
 if [ -n "$MINI_APP_URL" ]; then
 printf "║  Mini App ready: %-40s ║\n" "$MINI_APP_URL"
+if [ "$MENU_BUTTON_SET" = true ]; then
+bold "║  Menu button set automatically — nothing to do in        ║"
+bold "║    @BotFather                                            ║"
+else
 bold "║  In @BotFather: /mybots → bot →                          ║"
 bold "║    Menu Button → Configure → paste URL above             ║"
+fi
 bold "║                                                          ║"
 else
 bold "║  Mini App: set up nginx + HTTPS when ready, then         ║"

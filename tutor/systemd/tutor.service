@@ -13,5 +13,9 @@ RestartSec=30
 StandardOutput=journal
 StandardError=journal
 
+MemoryMax=512M
+CPUQuota=100%
+TasksMax=256
+
 [Install]
 WantedBy=multi-user.target
